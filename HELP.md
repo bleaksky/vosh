@@ -576,7 +576,7 @@ A swatch with a color that a fix changed has a warning ring with the same two ch
 
 When a fix removes a trigger you changed, the notice says `A preset fix removed a trigger you edited`. Vosh tells you about each fix one time.
 
-The `Room, time and weather colors` preset colors a room look, the clock, and the weather. The exits line turns green. The armies, things, and people that the room lists turn yellow. The day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target is easy to see in the room.
+The `Room, time, and weather colors` preset colors a room look, the clock, and the weather. The exits line turns green. The armies, things, and people that the room lists turn yellow. The day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target is easy to see in the room.
 
 That red is the `room.target` trigger. To keep your target yellow, turn off its `Enabled` in Triggers. Or choose another color for `Your target` on the card of the preset. Each of these colors is a terminal color from your theme, so the colors change when you change the theme.
 
@@ -1059,7 +1059,7 @@ Set a target with `tar`, and Vosh keeps it in the status line. A quick key pairs
 
 - Type `tar` to list the people in the room. Type `tar 2` or `tar drag` to choose one by number or by part of the name. `tarn` and `tarp` go to the next or previous person. `tarclear` clears the target.
 - Read the status line under the command line. When a target is set, it shows `Target` and the name. While you fight that target with the panel hidden, the line names it one time, with its health in yellow.
-- Look at the room. When the `Room, time and weather colors` preset is on, the line of your target turns bright red while the room lists them.
+- Look at the room. When the `Room, time, and weather colors` preset is on, the line of your target turns bright red while the room lists them.
 - Read the vitals at the foot of the panel. In a fight, your opponent gets a row on top with its health.
 - To set a quick key, type `#qkey <name> <verb>`, such as `#qkey gg backstab`. Then type `gg` as the first word of a command. Vosh sends `backstab` and your target. Vosh doesn't echo it, because the backend echoes the expansion instead.
 - Type `#qkeys` to list the quick keys. Type `#qkey clear <name>` to clear one.

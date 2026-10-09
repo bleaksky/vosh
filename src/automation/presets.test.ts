@@ -97,7 +97,7 @@ describe('the Tells you send preset', () => {
 // comes from. The patterns are Rust regex and use only what JavaScript
 // reads the same way. The Rust tests run the same triggers, from
 // preset.json, through the session's own steps.
-describe('the Room, time and weather colors preset', () => {
+describe('the Room, time, and weather colors preset', () => {
   const preset = presetById('room_and_time');
   const triggers = preset ? presetTriggers(preset) : [];
   const named = (name: string) => {
@@ -117,13 +117,13 @@ describe('the Room, time and weather colors preset', () => {
     return null;
   };
 
-  it('is on from the start, under Rooms, time and weather', () => {
-    expect(preset?.name).toBe('Room, time and weather colors');
+  it('is on from the start, under Rooms, time, and weather', () => {
+    expect(preset?.name).toBe('Room, time, and weather colors');
     expect(preset?.description).toBe(
       'Colors the exits green, what is in the room yellow, your target in the room bright red, the time of day blue, a change in the weather pale blue, and the WiZNET tag magenta.',
     );
     expect(defaultEnabledIds()).toContain('room_and_time');
-    expect(preset && PRESET_CATEGORIES[preset.category]).toBe('Rooms, time and weather');
+    expect(preset && PRESET_CATEGORIES[preset.category]).toBe('Rooms, time, and weather');
     expect(triggers.every((t) => t.preset === 'room_and_time')).toBe(true);
   });
 

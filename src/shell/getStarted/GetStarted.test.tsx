@@ -375,7 +375,7 @@ describe('Get started', () => {
     expect(text).toContain('BackColor what the game prints1 on');
     expect(text).toContain('Each switch saves to this profile at once.');
     expect(text).toContain('Suggested for The Forsaken LandsTurn on all five');
-    const names = ['Room, time and weather colors', 'Your damage verbs', 'Damage to you'];
+    const names = ['Room, time, and weather colors', 'Your damage verbs', 'Damage to you'];
     for (const name of names) expect(text).toContain(name);
     expect(text).toContain('Cures and heals');
     expect(text).toContain('Gold, experience, and levels');
@@ -384,7 +384,7 @@ describe('Get started', () => {
     const sets = () => bus.calls.filter(([cmd]) => cmd === 'presets_enabled_set');
     expect(sets()).toHaveLength(1);
     expect(sets()[0][1]).toMatchObject({ changes: [{ id: 'combat_incoming', on: true }] });
-    await view.flip('Room, time and weather colors');
+    await view.flip('Room, time, and weather colors');
     expect(sets()).toHaveLength(2);
     expect(sets()[1][1]).toMatchObject({ changes: [{ id: 'room_and_time', on: false }] });
   });

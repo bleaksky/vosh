@@ -130,7 +130,7 @@ export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
   loot: 'Loot and progress',
   labels: 'Potion and herb labels',
   chat: 'Chat',
-  world: 'Rooms, time and weather',
+  world: 'Rooms, time, and weather',
   movement: 'Movement',
 };
 
@@ -888,7 +888,7 @@ export const PRESETS: Preset[] = [
   {
     id: 'room_and_time',
     category: 'world',
-    name: 'Room, time and weather colors',
+    name: 'Room, time, and weather colors',
     description:
       'Colors the exits green, what is in the room yellow, your target in the room bright ' +
       'red, the time of day blue, a change in the weather pale blue, and the WiZNET tag ' +

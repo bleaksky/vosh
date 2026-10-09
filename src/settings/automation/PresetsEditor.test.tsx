@@ -634,7 +634,7 @@ describe('the Presets page of First Run board 4', () => {
       'Your damage verbs',
       'Damage to you',
       'Gold, experience, and levels',
-      'Room, time and weather colors',
+      'Room, time, and weather colors',
     ]) {
       expect(editor.row(name).suggested, name).toBe(true);
     }
@@ -724,7 +724,7 @@ describe('the Colors block', () => {
 
   it('gives a color in a Highlight the theme sixteen and a template any color', async () => {
     const editor = await mountEditor(['none'], [], {});
-    await editor.pick('Room, time and weather colors');
+    await editor.pick('Room, time, and weather colors');
     expect(editor.swatches()).toEqual([
       'Exits [green]',
       'What is in the room [yellow]',

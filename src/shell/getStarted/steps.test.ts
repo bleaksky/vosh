@@ -54,7 +54,7 @@ describe('suggestedPresets', () => {
       'Cures and heals',
       'Damage to you',
       'Gold, experience, and levels',
-      'Room, time and weather colors',
+      'Room, time, and weather colors',
       'Your damage verbs',
     ]);
     expect(suggestedPresets(OTHER.host)).toEqual([]);

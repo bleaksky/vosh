@@ -1,4 +1,4 @@
-//! Room triggers and the Room, time and weather colors preset, played
+//! Room triggers and the Room, time, and weather colors preset, played
 //! through the session's own steps.
 //!
 //! Inside `session`, so it drives the same private steps the socket
@@ -25,7 +25,7 @@ enum LookEvent {
         /// The line of the person the case targets.
         #[serde(default)]
         target: bool,
-        /// The color the Room, time and weather colors preset gives a line
+        /// The color the Room, time, and weather colors preset gives a line
         /// that is not a room line, if any.
         #[serde(default)]
         preset: Option<String>,
@@ -80,7 +80,7 @@ fn preset_lines() -> Vec<PresetLine> {
         .lines
 }
 
-/// The triggers of the Room, time and weather colors preset, from preset.json.
+/// The triggers of the Room, time, and weather colors preset, from preset.json.
 fn preset_triggers() -> Vec<vosh_automation::trigger::Trigger> {
     #[derive(serde::Deserialize)]
     struct PresetFile {
@@ -92,7 +92,7 @@ fn preset_triggers() -> Vec<vosh_automation::trigger::Trigger> {
         .triggers
 }
 
-/// A profile with the Room, time and weather colors preset installed.
+/// A profile with the Room, time, and weather colors preset installed.
 fn preset_profile() -> Profile {
     let mut p = Profile::default();
     for trigger in preset_triggers() {

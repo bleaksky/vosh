@@ -1,4 +1,4 @@
-//! The Room, time and weather colors preset through the real session
+//! The Room, time, and weather colors preset through the real session
 //! against the fake game, after a walk, a look and an immortal's goto,
 //! with the room packets before the text, as Aabahran sent them before
 //! d50e4a24, and after the people, as it sends them since, in the same

@@ -203,7 +203,7 @@ describe('searchSettingsRows', () => {
       anchor: 'presets:disarm_buff_fade',
     });
     const swatches = labels('swatch');
-    expect(swatches).toContain('Room, time and weather colors');
+    expect(swatches).toContain('Room, time, and weather colors');
     expect(swatches).not.toContain('Numpad movement');
     expect(swatches).not.toContain('Tells you send');
     expect(labels('reset to preset')).toContain('Numpad movement');

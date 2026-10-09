@@ -32,7 +32,7 @@ Where the lines come from.
 
 ## lines.json
 
-Single lines for the Room, time and weather colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/automation/presets.test.ts` runs the preset's patterns on each one, `src-tauri/src/session/tests/room.rs` runs each through the session's own steps, and `crates/automation/src/trigger/engine.rs` highlights each word of each line in place, draws each weather line on every ground in `fixtures/readable/grounds.json`, and holds each near miss to the bytes the game sent.
+Single lines for the Room, time, and weather colors preset. `trigger` names the trigger that colors a line and `match` the text its color covers. A line with no `trigger` is a near miss that no trigger of the preset may touch. `src/automation/presets.test.ts` runs the preset's patterns on each one, `src-tauri/src/session/tests/room.rs` runs each through the session's own steps, and `crates/automation/src/trigger/engine.rs` highlights each word of each line in place, draws each weather line on every ground in `fixtures/readable/grounds.json`, and holds each near miss to the bytes the game sent.
 
 - The exits lines are `do_exits` with `auto`. Room 5233, The Eastern Square, has exits `D0` to `D3`. Room 5279 has `D2`. Room 5200, Rock Bottom, has `D4` and a door at `D5` that resets closed, which the line shows in parentheses. The same room shows `(+down)` when you see a trap on that door, the `+` in `` `! `` bold red. A room with no exit you can see reads `[Exits: none]`, the same text the builder tutorial mob in area/higher.are echoes.
 - The eleven time of day lines are `weather_update` in update.c, the five usual ones and the six it sends in eternal darkness.
@@ -48,4 +48,4 @@ Single lines for the Room, time and weather colors preset. `trigger` names the t
 
 ## preset.json
 
-The triggers of the Room, time and weather colors preset, exactly as `presetTriggers` in `src/automation/presets.ts` makes them. `src/automation/presets.test.ts` holds the two equal, so a change to the preset changes this file in the same commit, and the Rust tests install these triggers.
+The triggers of the Room, time, and weather colors preset, exactly as `presetTriggers` in `src/automation/presets.ts` makes them. `src/automation/presets.test.ts` holds the two equal, so a change to the preset changes this file in the same commit, and the Rust tests install these triggers.
