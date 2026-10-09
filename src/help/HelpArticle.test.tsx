@@ -45,7 +45,7 @@ describe('a help topic', () => {
       (b) => b.kind === 'table',
     );
     expect(body.match(/<tr>/g)).toHaveLength(table?.kind === 'table' ? table.rows.length : 0);
-    expect(body.match(/<tr>/g)).toHaveLength(25);
+    expect(body.match(/<tr>/g)).toHaveLength(28);
     // The code column is a row of mono codes, not chips.
     expect(body).toContain(
       '<span class="hp-codes"><code>%hp</code><code>%mana</code><code>%move</code></span>',

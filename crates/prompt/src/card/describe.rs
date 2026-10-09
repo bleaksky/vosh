@@ -12,7 +12,8 @@
 //! A piece's look is the SGR state at its first cell with every condition
 //! holding, as [`crate::card::edit`] reads it, so the rows show what an
 //! edit keeps. A bar draws its cells in its own color, so its Color row
-//! reads the bar's color.
+//! reads the bar's color. A change of a vital in its sign color takes no
+//! color or dim from the pieces before it, so its rows read only its own.
 
 use serde::Serialize;
 
@@ -138,7 +139,7 @@ pub fn describe(template: &Template, values: &dyn Values, preview: bool) -> Desc
         .enumerate()
         .map(|(index, piece)| {
             let edited = &doc.pieces[index];
-            let look = &looks[index];
+            let look = &edited.shown(&looks[index]);
             let shown = edited.value().map(shown_as);
             let (field, format, width) = match &shown {
                 Some((field, format, width)) => (Some(field.clone()), Some(*format), *width),
@@ -341,6 +342,11 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
             (F::On, "Mark when on", true),
             (F::Off, "Mark when off", true),
         ],
+        Kind::Change => &[
+            (F::Value, "Nothing at zero", true),
+            (F::Zero, "0 at zero", true),
+            (F::PlusMinus, "±0 at zero", true),
+        ],
         Kind::Member => &[
             (F::Percent, "Percent", true),
             (F::Bar, "Bar", true),
@@ -378,6 +384,8 @@ fn format_label(format: FormatName) -> &'static str {
         FormatName::Names => "Names",
         FormatName::On => "Mark when on",
         FormatName::Off => "Mark when off",
+        FormatName::Zero => "0 at zero",
+        FormatName::PlusMinus => "±0 at zero",
     }
 }
 
@@ -412,6 +420,8 @@ fn shown_as(value: &crate::design::ValueRef) -> (FieldRef, FormatName, Option<u8
         Format::Names => (FormatName::Names, None),
         Format::On => (FormatName::On, None),
         Format::Off => (FormatName::Off, None),
+        Format::Zero => (FormatName::Zero, None),
+        Format::PlusMinus => (FormatName::PlusMinus, None),
     };
     (field.clone(), format, width)
 }

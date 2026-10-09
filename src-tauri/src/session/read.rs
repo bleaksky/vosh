@@ -462,6 +462,9 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         let vars = c.prompt.take_prompt_vars(prompt_vars);
         let panes = lua_panes.then(|| c.lua_panes.take_changes()).flatten();
         let snoops = snoop.then(|| c.snoops.take_changes());
+        // A pulse no prompt ended, and a tick that waits, take their
+        // reading of your vitals.
+        c.prompt.vars.read_ended();
         let hidden = c.prompt.vars.take_hidden_change();
         // Low health follows what the vitals panes read once the read's
         // packets and prompt values landed, whether its alert is on or

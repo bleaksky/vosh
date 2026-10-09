@@ -3,14 +3,15 @@
 //! as template text.
 
 use super::{
-    color_spec, content_for, error, gauge_of, parse_field, style_of, ColorChoice, EditError,
-    EditOp, FormatChoice, FormatName, When, BAR_STEPS,
+    color_spec, content_for, error, gauge_of, kind_of, parse_field, style_of, ColorChoice,
+    EditError, EditOp, FormatChoice, FormatName, When, BAR_STEPS,
 };
 use crate::design::{
     bg, code, color, fg, restore, runs_on, transition, underline_color, write_token, BarColor,
-    Code, ColorSpec, FieldRef, Format, Item, Layer, Look, PieceKind, Scale, Style, Template,
+    Code, ColorSpec, FieldRef, Format, Item, Layer, Look, Own, PieceKind, Scale, Style, Template,
     TokenKind, ValueRef,
 };
+use crate::values::Kind;
 
 /// A piece of the design being edited.
 #[derive(Debug, Clone)]
@@ -44,6 +45,38 @@ impl Piece {
             TokenKind::Value(value) => Some(value),
             _ => None,
         })
+    }
+
+    /// The piece is a change of a vital, such as `%hp_change`.
+    fn change(&self) -> bool {
+        self.kind == PieceKind::Value
+            && self.value().is_some_and(|value| {
+                matches!(
+                    value.format,
+                    Format::Value | Format::Zero | Format::PlusMinus
+                ) && kind_of(&value.field) == Some(Kind::Change)
+            })
+    }
+
+    /// The piece is a change of a vital that draws in its sign color,
+    /// green for a gain and red for a loss, since its own codes set no
+    /// text color. A color or dim it takes from the pieces before it does
+    /// not apply then, and a restore written onto it would read as its
+    /// own.
+    fn sign_colored(&self) -> bool {
+        self.change() && !Own::of(&self.codes).fg
+    }
+
+    /// The look the piece draws in, from `at`, its look at its first
+    /// cell. A change in its sign color has no text color and is dim
+    /// only when its own codes dim it, as the renderer draws it.
+    pub(crate) fn shown(&self, at: &Look) -> Look {
+        let mut look = at.clone();
+        if self.sign_colored() {
+            look.fg = None;
+            look.dim = Own::of(&self.codes).dim;
+        }
+        look
     }
 
     /// The field of a fight condition, and whether it is `%{if:fight}`.
@@ -332,6 +365,9 @@ impl Doc {
         let now = state.after(&piece.codes);
         let want = color(&spec);
         let current = match layer {
+            // With no text color of its own left, a change draws its
+            // sign color, whatever color comes before it.
+            Layer::Fg if piece.change() => None,
             Layer::Fg => now.fg,
             Layer::Bg => now.bg,
             Layer::Underline => now.underline_color,
@@ -355,14 +391,27 @@ impl Doc {
         let (before, at) = self.walk();
         let state = before[index].clone();
         let mut target = at[index].clone();
+        let shown = piece.shown(&target);
         let underline = matches!(style, Style::Underline(_));
         // Off is off for an underline of any kind.
         let has = if underline && !on {
-            target.underline.is_some()
+            shown.underline.is_some()
         } else {
-            target.style(style)
+            shown.style(style)
         };
         if has == on {
+            return Ok(uid);
+        }
+        // A change in its sign color is dim only by its own codes.
+        if style == Style::Dim && piece.sign_colored() {
+            let piece = &mut self.pieces[index];
+            if on {
+                piece.codes.push(code(Code::Style(style)));
+            } else {
+                piece
+                    .codes
+                    .retain(|item| item.kind != TokenKind::Code(Code::Style(style)));
+            }
             return Ok(uid);
         }
         target.set_style(style, on);
@@ -646,6 +695,10 @@ impl Doc {
 
     /// Give every piece from before the edit the look it had, but the one
     /// the edit changed on purpose, by writing codes right before it.
+    /// A change of a vital in its sign color would read those codes as a
+    /// color or dim of its own, so it keeps the look before it, and the
+    /// codes go on the piece after it, or at the end of the design when
+    /// none follows.
     /// A line break keeps the look it had too, so a color never runs on
     /// into the next row where it did not before. So does a condition and
     /// its end: codes that put a look back after a piece inside a
@@ -655,6 +708,9 @@ impl Doc {
     /// it did whether the condition holds or not.
     pub(super) fn repair(&mut self, before: &Looks, edited: Option<usize>) {
         let mut state = Look::default();
+        // The look a change in its sign color left owed, for the end of
+        // the design when no piece follows it.
+        let mut owed: Option<Look> = None;
         let pieces = std::mem::take(&mut self.pieces);
         let mut out = Vec::with_capacity(pieces.len());
         for mut piece in pieces {
@@ -663,6 +719,12 @@ impl Doc {
                     let want_in = &before.before[origin];
                     let want_at = &before.at[origin];
                     if state.after(&piece.codes) != *want_at {
+                        if piece.sign_colored() {
+                            state = state.after(&piece.codes);
+                            owed = Some(want_at.clone());
+                            out.push(piece);
+                            continue;
+                        }
                         let fix = restore(&state, want_in, want_at, &piece.codes);
                         piece.codes.splice(0..0, fix);
                     }
@@ -674,8 +736,16 @@ impl Doc {
                 }
                 _ => {}
             }
+            owed = match owed {
+                Some(look) if !piece.shows() && !piece.marker() => Some(look.after(&piece.codes)),
+                _ => None,
+            };
             state = state.after(&piece.codes);
             out.push(piece);
+        }
+        if let Some(look) = owed.filter(|look| *look != state) {
+            let fix = transition(&state, &look);
+            out.push(self.new_piece(PieceKind::Codes, fix, Vec::new()));
         }
         self.pieces = out;
     }

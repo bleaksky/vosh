@@ -1570,6 +1570,9 @@ Until you change it, your design follows the game. Vosh writes it from your PROM
 | `%{gold:thousands}`                            | Gold in thousands with one decimal, as 12.3K.                                       |
 | `%{hour:ampm}`                                 | The game hour as 3PM, with 12AM for midnight and 12PM for noon.                     |
 | `%{tick:since}`                                | The seconds since the last tick, as 16s.                                            |
+| `%hp_change` `%mana_change` `%move_change`     | How much Health, Mana or Moves changed since your last prompt, as +34 or -12.       |
+| `%hp_tick` `%mana_tick` `%move_tick`           | How much it changed over the last tick. It stays until the next tick.               |
+| `%{hp_change:zero}` `%{hp_tick:plusminus}`     | Shows 0 or ±0 when nothing changed. Without them, no change shows nothing.          |
 | `%c_green` `%c_hp`                             | A theme color, or Health's color by how full it is.                                 |
 | `%{c:hp:steps}`                                | Colors by how full Health is in eleven steps from red to green, one for each tenth. |
 | `%{c:#80c8ff}` `%{c:128,200,255}`              | Any color you choose, as hex or as red, green and blue.                             |
@@ -1586,6 +1589,8 @@ Until you change it, your design follows the game. Vosh writes it from your PROM
 | `%{if:fight}` `%{ifnot:fight}` `%{end}`        | Shows what sits between them only in a fight, or only out of one.                   |
 | `%{raw}`                                       | Your prompt exactly as the game sent it.                                            |
 | `%%`                                           | A percent sign.                                                                     |
+
+A gain shows in the green of your theme and a loss in its red, at full brightness. A color you give the value itself comes first, and so does dim that you give it. A color or dim from the parts before the value doesn't change it, and the parts after it keep their look. A change shows nothing until Vosh has two prompts to compare, or two ticks. It starts again when you connect or switch profiles. `%{if:hp_change}` shows what sits before `%{end}` only when Health changed.
 
 Every value in `Insert value…` has codes of its own. The picker shows them beside each form. Your tick, the time, and the date keep counting while your prompt is idle. Vosh draws the prompt again each second they change. It waits while you select text or read back.
 

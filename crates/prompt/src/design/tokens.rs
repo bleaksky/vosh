@@ -234,6 +234,11 @@ pub enum Format {
     On,
     /// The label when the flag does not hold, nothing otherwise.
     Off,
+    /// A change that draws `0` when it is zero, where the value format
+    /// draws nothing.
+    Zero,
+    /// A change that draws `±0` when it is zero.
+    PlusMinus,
 }
 
 /// A value in a format.
@@ -704,6 +709,8 @@ fn parse_format(segs: &[&str]) -> Option<Format> {
         "names" => no_args(Format::Names),
         "on" => no_args(Format::On),
         "off" => no_args(Format::Off),
+        "zero" => no_args(Format::Zero),
+        "plusminus" => no_args(Format::PlusMinus),
         "trunc" => match args.as_slice() {
             [n] => n.parse::<usize>().ok().map(Format::Trunc),
             _ => None,

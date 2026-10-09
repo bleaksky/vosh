@@ -10,6 +10,7 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use super::catalog::Pair;
+use super::changes::change_of;
 use super::Vars;
 use crate::aabahran::codes::Position;
 use crate::values::format::lang_game;
@@ -71,7 +72,7 @@ impl Serialize for Hidden {
 impl Vars {
     /// True when the name reads a value the game hides.
     pub(super) fn name_hidden(&self, name: &str) -> bool {
-        if let Some(pair) = Pair::of(name) {
+        if let Some(pair) = Pair::of(name).or_else(|| change_of(name).map(|(pair, _)| pair)) {
             return self.hidden.pair(pair);
         }
         match name {

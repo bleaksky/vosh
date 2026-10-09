@@ -27,7 +27,7 @@ pub use sgr::{Color, SgrState};
 use serde::Serialize;
 
 use crate::design::{
-    BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind, Scale, Template, TokenKind,
+    BarColor, Code, ColorSpec, FieldRef, Format, Layer, Own, PieceKind, Scale, Template, TokenKind,
     ValueRef,
 };
 use crate::values::format::{
@@ -148,6 +148,8 @@ struct Writer {
     /// For each row, whether a piece on it reads a field the caller
     /// asked about, see [`render_reading`].
     marks: Vec<bool>,
+    /// What the piece being written sets with its own codes.
+    own: Own,
 }
 
 impl Writer {
@@ -163,6 +165,7 @@ impl Writer {
             cols,
             push: None,
             marks: vec![false],
+            own: Own::default(),
         }
     }
 
@@ -416,10 +419,12 @@ fn draw(
                 let holds = match &tokens[piece.content.start].kind {
                     TokenKind::If(field) | TokenKind::IfNot(field) => {
                         active && {
-                            let has = matches!(
-                                values.resolve(field),
-                                Resolved::Value(_) | Resolved::Hidden
-                            );
+                            // A change of 0 is no change.
+                            let has = match values.resolve(field) {
+                                Resolved::Value(Value::Change(0)) => false,
+                                Resolved::Value(_) | Resolved::Hidden => true,
+                                _ => false,
+                            };
                             has == (piece.kind == PieceKind::If)
                         }
                     }
@@ -443,6 +448,7 @@ fn draw(
         if reads(piece.codes.start..piece.content.end) {
             w.mark();
         }
+        w.own = Own::default();
         for code in piece.codes.clone() {
             write_code(&mut w, template, code, values);
         }
@@ -521,14 +527,23 @@ fn write_code(w: &mut Writer, template: &Template, token: usize, values: &dyn Va
         return;
     };
     let (spec, layer) = match code {
-        Code::Reset => return w.sgr("0"),
-        Code::Style(style) => return w.sgr(style.sgr()),
+        Code::Reset => {
+            w.own.take(code);
+            return w.sgr("0");
+        }
+        Code::Style(style) => {
+            w.own.take(code);
+            return w.sgr(style.sgr());
+        }
         Code::Fg(spec) => (spec, Layer::Fg),
         Code::Bg(spec) => (spec, Layer::Bg),
         Code::UnderlineColor(spec) => (spec, Layer::Underline),
     };
     match color_params(spec, layer, values) {
-        Some(params) => w.sgr(&params),
+        Some(params) => {
+            w.own.take(code);
+            w.sgr(&params);
+        }
         None => w.text(template.token_text(token), false),
     }
 }
@@ -641,6 +656,12 @@ fn write_formatted(
             w.text(&format!("({word} {level})"), false);
             w.restore(before);
         }
+        (Format::Value | Format::Zero | Format::PlusMinus, Value::Change(n)) => {
+            let Some(text) = value.text(format, label) else {
+                return false;
+            };
+            write_change(w, *n, &text);
+        }
         (Format::Value | Format::Game, Value::Styled(raw)) => {
             let before = w.state;
             w.text(raw, true);
@@ -652,6 +673,31 @@ fn write_formatted(
         },
     }
     true
+}
+
+/// A change of a vital, in the theme's green for a gain and red for a
+/// loss at normal intensity. A text color the value's own piece sets
+/// wins, and so does dim when the piece sets it. A color or dim the
+/// pieces before it leave does not count, and the look comes back after
+/// it. A zero takes the look around it.
+fn write_change(w: &mut Writer, n: i64, text: &str) {
+    let before = w.state;
+    let sign = match n.signum() {
+        1 => Some(Color::Ansi(2)),
+        -1 => Some(Color::Ansi(1)),
+        _ => None,
+    };
+    match sign.filter(|_| !w.own.fg && !text.is_empty()) {
+        Some(color) => {
+            let mut look = before;
+            look.fg = color;
+            look.dim = w.own.dim;
+            w.restore(look);
+            w.text(text, false);
+            w.restore(before);
+        }
+        None => w.text(text, false),
+    }
 }
 
 fn write_bar(w: &mut Writer, value: &Value, width: usize, color: &BarColor, values: &dyn Values) {

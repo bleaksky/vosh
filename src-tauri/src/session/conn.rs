@@ -860,7 +860,14 @@ async fn handle_tick<R: tauri::Runtime>(
     let step = {
         let p = session.lock_profile().await;
         let mut c = session.connection.lock();
-        c.tick.poll(&p.tick, Instant::now())
+        let step = c.tick.poll(&p.tick, Instant::now());
+        // The local timer fired outside any read, so the vitals over the
+        // tick take their reading at once.
+        if step.payload.fired {
+            c.prompt.vars.tick_turned(false);
+            c.prompt.vars.read_ended();
+        }
+        step
     };
     if !step.payload.enabled && !step.payload.fired {
         return Ok(());

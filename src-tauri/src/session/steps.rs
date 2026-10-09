@@ -90,9 +90,20 @@ fn line_pass(
 /// The tick step when `plain` matches the tick's Reset on pattern.
 fn tick_reset(p: &Profile, c: &mut Connection, plain: &str, now: Instant) -> Option<TickStep> {
     if p.tick.check_reset_match(plain) {
-        c.tick.on_game_tick(&p.tick, now)
+        let step = c.tick.on_game_tick(&p.tick, now);
+        game_ticked(c, step.as_ref());
+        step
     } else {
         None
+    }
+}
+
+/// The game's tick turned when `step` is some, so your vitals over the
+/// tick take a reading once the pulse ends. A game tick that comes right
+/// after the local timer fired for it is that same tick.
+pub(super) fn game_ticked(c: &mut Connection, step: Option<&TickStep>) {
+    if let Some(step) = step {
+        c.prompt.vars.tick_turned(!step.payload.fired);
     }
 }
 
@@ -629,6 +640,9 @@ fn prompt_block(
     // Pinned, the prompt leaves the text for the band above the command
     // line. It is logged and kept exactly as it is in the text.
     let pinned = c.prompt.show() == vosh_prompt::PromptShow::Pinned;
+    // The prompt ends the pulse, so the changes of your vitals it draws
+    // take their reading now.
+    c.prompt.vars.prompt_ended();
     // The away prompt shows as sent, even while Vosh draws.
     if c.prompt.draws() && !block.afk {
         // Echoes land where the prompt was, above the drawn prompt.
@@ -826,6 +840,7 @@ fn marker_steps(
         let released = c.prompt.stage.release();
         let steps = released_steps(p, c, batch, released, now, log_session_id);
         c.prompt.record(None, now_ms());
+        c.prompt.vars.prompt_ended();
         end_pulse(c, batch);
         // The marker ends any room look before it, and the round that
         // ended a fight.
@@ -867,6 +882,7 @@ fn marker_steps(
             };
             steps.push(unread_partial(p, c, batch, &partial, &plain));
             c.prompt.record(Some((&partial.bytes, &plain)), now_ms());
+            c.prompt.vars.prompt_ended();
         }
     }
     end_pulse(c, batch);

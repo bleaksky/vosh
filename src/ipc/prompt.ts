@@ -528,6 +528,7 @@ export type PromptFieldKind =
   | 'clock'
   | 'date'
   | 'ticks'
+  | 'change'
   | 'member'
   | 'raw';
 

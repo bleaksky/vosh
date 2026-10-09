@@ -16,7 +16,8 @@
 //! 2. The capture, replaced whole by each recognized prompt, and fresh
 //!    while no pulse has started since.
 //! 3. GMCP, the latest packet per package.
-//! 4. Vosh itself, the tick, your target, the clock and the profile.
+//! 4. Vosh itself, the tick, the changes of your vitals, your target,
+//!    the clock and the profile.
 //!
 //! A value the game hides is Hidden whatever the sources hold, and Vosh
 //! never fills it from another one. [`Hidden`] is worked out from the
@@ -28,6 +29,7 @@ pub mod gmcp;
 pub mod overrides;
 
 mod catalog;
+mod changes;
 mod hidden;
 mod resolver;
 mod samples;
@@ -37,6 +39,7 @@ pub use hidden::Hidden;
 pub use samples::Samples;
 
 pub(crate) use catalog::{entry_for, feeds, Entry, Kind, Pair};
+pub(crate) use changes::change_of;
 pub(crate) use resolver::Resolver;
 pub(crate) use samples::value_of;
 
@@ -155,6 +158,7 @@ pub struct Vars {
     hidden: Hidden,
     emitted: Hidden,
     disagreements: u64,
+    changes: changes::Changes,
 }
 
 impl Vars {
@@ -251,10 +255,12 @@ impl Vars {
     }
 
     /// A profile switch keeps the GMCP snapshot and the new build sign,
-    /// and clears the capture and script values.
+    /// and clears the capture, the script values and the changes of
+    /// your vitals.
     pub fn switch_profile(&mut self, forsaken: bool) {
         self.capture = None;
         self.script.clear();
+        self.forget_changes();
         self.forsaken = forsaken;
         self.recompute();
     }
@@ -264,6 +270,7 @@ impl Vars {
     pub fn disconnect(&mut self) {
         self.capture = None;
         self.script.clear();
+        self.forget_changes();
         self.gmcp.clear();
         self.recompute();
     }
@@ -341,6 +348,10 @@ impl Vars {
         };
         if sent {
             return Some(Source::Gmcp);
+        }
+        if let Some((pair, over)) = change_of(e.name) {
+            let ticks = over == changes::Over::Pulse || client.tick.is_some();
+            return (ticks && self.change(pair, over).is_some()).then_some(Source::Vosh);
         }
         let vosh_has = match e.name {
             "tick" => client.tick.is_some(),

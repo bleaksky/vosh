@@ -48,6 +48,8 @@ pub enum Kind {
     Date,
     /// Ticks left on an affect.
     Ticks,
+    /// How much a vital changed, `+34` or `-12`.
+    Change,
     /// A group member and their health.
     Member,
     /// The game's prompt with its colors.
@@ -79,6 +81,8 @@ pub enum FormatId {
     Names,
     On,
     Off,
+    Zero,
+    PlusMinus,
 }
 
 impl Kind {
@@ -111,6 +115,7 @@ impl Kind {
             Kind::Clock => &[F::Hm, F::Hms],
             Kind::Date => &[F::Md, F::Value],
             Kind::Ticks => &[F::Value, F::On, F::Off],
+            Kind::Change => &[F::Value, F::Zero, F::PlusMinus],
             Kind::Member => &[F::Value, F::Name, F::Pct, F::Bar],
         }
     }
@@ -257,6 +262,42 @@ pub static CATALOG: &[Entry] = &[
         listed: false,
         ..BASE
     },
+    change(
+        "hp_change",
+        "Health change",
+        "+34",
+        &["hp", "gain", "loss", "damage", "regen"],
+    ),
+    change(
+        "mana_change",
+        "Mana change",
+        "-12",
+        &["sp", "mp", "gain", "loss", "regen"],
+    ),
+    change(
+        "move_change",
+        "Moves change",
+        "+20",
+        &["mv", "gain", "loss", "regen"],
+    ),
+    change(
+        "hp_tick",
+        "Health this tick",
+        "+34",
+        &["hp", "regen", "gain", "loss", "tick"],
+    ),
+    change(
+        "mana_tick",
+        "Mana this tick",
+        "-12",
+        &["sp", "mp", "regen", "gain", "loss", "tick"],
+    ),
+    change(
+        "move_tick",
+        "Moves this tick",
+        "+20",
+        &["mv", "regen", "gain", "loss", "tick"],
+    ),
     // Fight
     Entry {
         name: "fight",
@@ -1025,6 +1066,25 @@ const fn slot(name: &'static str, label: &'static str, code: &'static [&'static 
     }
 }
 
+/// How much a vital changed, worked out by Vosh. Over the last pulse for
+/// `_change`, over the last tick for `_tick`.
+const fn change(
+    name: &'static str,
+    label: &'static str,
+    sample: &'static str,
+    search: &'static [&'static str],
+) -> Entry {
+    Entry {
+        name,
+        label,
+        kind: Kind::Change,
+        group: Group::Vitals,
+        sample,
+        search,
+        ..BASE
+    }
+}
+
 const fn moon(
     name: &'static str,
     label: &'static str,
@@ -1069,12 +1129,15 @@ const CAPTURE_KEYS: [&str; 5] = ["hp_pct", "mana_pct", "move_pct", "tank_pct", "
 
 /// True for a name a capture or GMCP also supplies, so a script value for
 /// it lasts one pulse. Every catalog field has one of them but Vosh's own
-/// (the tick, your target, the clock and the profile), whose script value
+/// (the tick, the changes of your vitals, your target, the clock and the
+/// profile), whose script value
 /// lasts until a script changes it, as any other name's does. The raw
 /// prompt comes from the capture.
 pub fn is_sourced(name: &str) -> bool {
     CAPTURE_KEYS.contains(&name)
-        || entry(name).is_some_and(|e| e.group != Group::Vosh || e.kind == Kind::Raw)
+        || entry(name).is_some_and(|e| {
+            (e.group != Group::Vosh && e.kind != Kind::Change) || e.kind == Kind::Raw
+        })
 }
 
 /// True for a name Vosh knows: a catalog field, another spelling of one,
