@@ -416,10 +416,12 @@ fn draw(
                 let holds = match &tokens[piece.content.start].kind {
                     TokenKind::If(field) | TokenKind::IfNot(field) => {
                         active && {
-                            let has = matches!(
-                                values.resolve(field),
-                                Resolved::Value(_) | Resolved::Hidden
-                            );
+                            // A change of 0 is no change.
+                            let has = match values.resolve(field) {
+                                Resolved::Value(Value::Change(0)) => false,
+                                Resolved::Value(_) | Resolved::Hidden => true,
+                                _ => false,
+                            };
                             has == (piece.kind == PieceKind::If)
                         }
                     }
@@ -641,6 +643,12 @@ fn write_formatted(
             w.text(&format!("({word} {level})"), false);
             w.restore(before);
         }
+        (Format::Value | Format::Zero | Format::PlusMinus, Value::Change(n)) => {
+            let Some(text) = value.text(format, label) else {
+                return false;
+            };
+            write_change(w, *n, &text);
+        }
         (Format::Value | Format::Game, Value::Styled(raw)) => {
             let before = w.state;
             w.text(raw, true);
@@ -652,6 +660,26 @@ fn write_formatted(
         },
     }
     true
+}
+
+/// A change of a vital, in the theme's green for a gain and red for a
+/// loss while the design gives it no color of its own. A color the
+/// design sets before it wins, and a zero takes the color around it.
+fn write_change(w: &mut Writer, n: i64, text: &str) {
+    let before = w.state;
+    let own = match n.signum() {
+        1 => Some(Color::Ansi(2)),
+        -1 => Some(Color::Ansi(1)),
+        _ => None,
+    };
+    match own.filter(|_| before.fg == Color::Default && !text.is_empty()) {
+        Some(color) => {
+            w.sgr(&color.params(false));
+            w.text(text, false);
+            w.restore(before);
+        }
+        None => w.text(text, false),
+    }
 }
 
 fn write_bar(w: &mut Writer, value: &Value, width: usize, color: &BarColor, values: &dyn Values) {

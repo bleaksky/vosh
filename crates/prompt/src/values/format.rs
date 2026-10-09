@@ -125,6 +125,9 @@ pub enum Value {
     },
     /// Text with the game's colors, the raw prompt.
     Styled(String),
+    /// How much a vital changed. The value format draws nothing for 0,
+    /// `zero` draws `0` and `plusminus` draws `±0`.
+    Change(i64),
 }
 
 /// A percent rounded to the nearest whole number. None when `max` is not
@@ -471,6 +474,8 @@ impl Value {
             Value::Ticks(-1) => "perm".to_string(),
             Value::Ticks(n) => n.to_string(),
             Value::Member { name, pct } => format!("{name} {pct}%"),
+            Value::Change(0) => String::new(),
+            Value::Change(n) => format!("{n:+}"),
         }
     }
 
@@ -566,6 +571,12 @@ impl Value {
             },
             Format::On => Some(label.to_string()),
             Format::Off => Some(String::new()),
+            Format::Zero | Format::PlusMinus => match self {
+                Value::Change(0) if *format == Format::Zero => Some("0".to_string()),
+                Value::Change(0) => Some("±0".to_string()),
+                Value::Change(_) => Some(self.value_text(label)),
+                _ => None,
+            },
             Format::Bar { .. } => None,
         }
     }

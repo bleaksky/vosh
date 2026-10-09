@@ -91,6 +91,8 @@ fn format_body(format: &Format) -> Option<String> {
         Format::Names => "names".into(),
         Format::On => "on".into(),
         Format::Off => "off".into(),
+        Format::Zero => "zero".into(),
+        Format::PlusMinus => "plusminus".into(),
     })
 }
 
