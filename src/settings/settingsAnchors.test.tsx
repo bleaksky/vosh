@@ -25,8 +25,8 @@ import type { PaneMenu as PaneMenuType } from '../panel/PaneMenu';
 import type { SettingsPageProps } from './pageTypes';
 
 // Every way into Settings names a target as a string: a search hit, a
-// palette row (whose id also sits in the palette's Recent list), an old
-// tab id from an older build, and a link from another window or page.
+// palette row (whose id also sits in the palette's Recent list), and a
+// link from another window or page.
 // The frame resolves the string, opens the group's page, and scrolls to
 // the element that carries the target's anchor as data-st-anchor. A
 // move that drops or renames one of those anchors, or changes where a
@@ -527,8 +527,7 @@ async function paletteLinks(): Promise<Record<string, string>> {
 }
 
 /** Every link string, as the code sends it today and as the golden
- *  file names it, the strings older builds left behind and where they
- *  land, and each group bare, so the anchors a page draws on its own
+ *  file names it, and each group bare, so the anchors a page draws on its own
  *  count too. */
 function everyLink(): string[] {
   return [
@@ -714,10 +713,7 @@ describe('Settings links', () => {
       }
       if (settingsSubpage(target) !== null) {
         // The page inside the group takes the place of the group page.
-        // The bare link logs opens the search, so the Logs page is
-        // the one its first section opens.
-        const page = target.group === 'logs' ? 'logs:session-logs' : target.group;
-        const own = cold.get(page)?.anchors ?? [];
+        const own = cold.get(target.group)?.anchors ?? [];
         expect(own.length, at).toBeGreaterThan(0);
         for (const anchor of own) expect(landing.anchors, at).not.toContain(anchor);
       }

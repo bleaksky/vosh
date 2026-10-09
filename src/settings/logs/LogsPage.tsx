@@ -12,11 +12,10 @@ import type { SettingsPageProps } from '../pageTypes';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
 
 // Logs: Session logs and Scrollback, the two things Vosh keeps of what
-// you saw, on disk and in the terminal. The tab opens on its settings. Search logs… opens
-// the log view inside Logs at logs:search (SessionLogs.tsx), and Save a
-// scene…, here or in the log view, opens the scene page at logs:scene
-// (ScenePage.tsx). The bare link `logs`, which palette Recent and older
-// builds send, opens the search.
+// you saw, on disk and in the terminal. The tab opens on its settings.
+// Search logs… opens the log view inside Logs at logs:search
+// (SessionLogs.tsx), and Save a scene…, here or in the log view, opens
+// the scene page at logs:scene (ScenePage.tsx).
 
 export function LogsPage(props: SettingsPageProps) {
   // The log Save a scene… in the log view picked, with the navigation

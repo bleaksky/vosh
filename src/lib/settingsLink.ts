@@ -9,8 +9,8 @@ import { emitSettingsGotoTab, openSettingsWindow } from '../ipc/windows';
 /** Where a cold open finds its target. */
 export const SETTINGS_PENDING_KEY = 'vosh.settings.pendingTab';
 
-/** Open Settings on `target`, a deep link like `automation:macros`,
- *  `characters:Ilsabet#tracked`, or an old tab id like `themes`. */
+/** Open Settings on `target`, a deep link like `automation:macros` or
+ *  `characters:Ilsabet#tracked`. */
 export function openSettingsTab(target: string): void {
   try {
     localStorage.setItem(SETTINGS_PENDING_KEY, target);

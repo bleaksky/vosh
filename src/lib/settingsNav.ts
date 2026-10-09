@@ -1,10 +1,9 @@
 // Where a Settings deep link lands. A target travels as a bare string,
-// so localStorage, the goto event, and palette Recent ids need no
-// migration. The grammar is `group`, `group:section`, and
-// `group:section#anchor`, with `group#anchor` when no section applies.
-// For example `automation:macros`, `characters:Ilsabet#tracked` or
+// through localStorage, the goto event and palette Recent ids. The
+// grammar is `group`, `group:section`, and `group:section#anchor`, with
+// `group#anchor` when no section applies. For example
+// `automation:macros`, `characters:Ilsabet#tracked` or
 // `scripts:vitals_alert`.
-// Every tab id the old Settings window used still resolves.
 
 export type SettingsGroup =
   | 'general'
@@ -94,116 +93,10 @@ export function leavesSettingsPage(from: SettingsTarget, to: SettingsTarget): bo
   return from.group !== to.group || settingsSubpage(from) !== settingsSubpage(to);
 }
 
-// The tab ids the old Settings window used, from the palette, the pane
-// menu, and any pending tab left over from an older build.
-const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
-  general: { group: 'general' },
-  themes: { group: 'appearance', section: 'theme' },
-  typography: { group: 'appearance', section: 'text' },
-  vitals: { group: 'vitals' },
-  tick: { group: 'automation', section: 'timers', anchor: 'tick' },
-  panels: { group: 'characters', anchor: 'layout' },
-  profiles: { group: 'characters' },
-  loadouts: { group: 'automation', section: 'loadouts' },
-  triggers: { group: 'automation', section: 'triggers' },
-  aliases: { group: 'automation', section: 'aliases' },
-  macros: { group: 'automation', section: 'macros' },
-  timers: { group: 'automation', section: 'timers' },
-  import: { group: 'automation', anchor: 'import' },
-  // The bare link opens the search, as it did in General, so old links
-  // land where they always did.
-  logs: { group: 'logs', section: 'search' },
-};
-
-// Rows that moved out of a section, by the anchor they had there, with
-// where they are now. Your prompt left Input, Advanced for its own
-// section, and the switch is the section's own row. Values, Meter
-// and the warning left Layout, Vitals for Customize vitals. Switch
-// themes took the place of Follow system appearance. The mark, the
-// command color and macro echo left Command line for Sent commands.
-const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
-  'input:advanced#prompt': { group: 'input', section: 'prompt' },
-  'input:advanced#prompt-show': { group: 'input', section: 'prompt', anchor: 'prompt-show' },
-  'layout:vitals#values': { group: 'layout', section: 'customize-vitals', anchor: 'values' },
-  'layout:vitals#meter': { group: 'layout', section: 'customize-vitals', anchor: 'meter' },
-  'layout:vitals#warn-low': { group: 'layout', section: 'customize-vitals', anchor: 'warn-low' },
-  'appearance:theme#follow-system': {
-    group: 'appearance',
-    section: 'theme',
-    anchor: 'switch-themes',
-  },
-  'input:command-line#mark-commands': { group: 'input', section: 'sent', anchor: 'mark-commands' },
-  'input:command-line#sent-color': { group: 'input', section: 'sent', anchor: 'sent-color' },
-  'input:command-line#echo-macros': { group: 'input', section: 'sent', anchor: 'echo-macros' },
-};
-
-// Sections and rows that left their group when Settings grew to eleven
-// groups, keyed by the old link without its anchor, or
-// with it for a single row. The anchor rides along unless the key names
-// one. Applied after MOVED_ANCHORS, so a link that moved twice lands
-// too, like input:advanced#prompt on the Prompt tab. Links live where
-// Vosh cannot rewrite them, palette Recent, a pending tab from an older
-// build and plugin code, so this table stays for good.
-const GROUP_MOVES: Readonly<Record<string, SettingsTarget>> = {
-  'general:session-logs': { group: 'logs', section: 'session-logs' },
-  'general:scrollback': { group: 'logs', section: 'scrollback' },
-  'general:logs': { group: 'logs', section: 'search' },
-  'general:scene': { group: 'logs', section: 'scene' },
-  'appearance:text#color-vision': {
-    group: 'accessibility',
-    section: 'color',
-    anchor: 'color-vision',
-  },
-  'appearance:text#fit-game-colors': {
-    group: 'accessibility',
-    section: 'color',
-    anchor: 'fit-game-colors',
-  },
-  'appearance:text#readable-highlights': {
-    group: 'accessibility',
-    section: 'color',
-    anchor: 'readable-highlights',
-  },
-  'appearance:advanced#blink-text': {
-    group: 'accessibility',
-    section: 'motion',
-    anchor: 'blink-text',
-  },
-  'layout:vitals': { group: 'vitals' },
-  'layout:customize-vitals': { group: 'vitals', section: 'customize-vitals' },
-  'input:prompt': { group: 'prompt' },
-  'input:command-line#writing-offer': {
-    group: 'input',
-    section: 'writing',
-    anchor: 'writing-offer',
-  },
-  'input:command-line#writing-ask-post': {
-    group: 'input',
-    section: 'writing',
-    anchor: 'writing-ask-post',
-  },
-};
-
-/** Where a target from before Settings had eleven groups lands now. */
-function movedSettingsTarget(target: SettingsTarget): SettingsTarget {
-  const whole = GROUP_MOVES[formatSettingsTarget(target)];
-  if (whole) return { ...whole };
-  const bare: SettingsTarget = { group: target.group };
-  if (target.section) bare.section = target.section;
-  const head = GROUP_MOVES[formatSettingsTarget(bare)];
-  if (!head) return target;
-  const next: SettingsTarget = { ...head };
-  if (target.anchor) next.anchor = target.anchor;
-  return next;
-}
-
-/** Resolve a deep link string. Legacy tab ids and rows that moved map to
- *  their new place. Anything this cannot read opens General. */
+/** Resolve a deep link string. Anything this cannot read opens
+ *  General. */
 export function resolveSettingsTarget(raw: string): SettingsTarget {
   const text = raw.trim();
-  const legacy = LEGACY_TARGETS[text.toLowerCase()];
-  if (legacy) return movedSettingsTarget({ ...legacy });
-
   const hash = text.indexOf('#');
   const head = hash === -1 ? text : text.slice(0, hash);
   const anchor = hash === -1 ? '' : text.slice(hash + 1).trim();
@@ -216,8 +109,7 @@ export function resolveSettingsTarget(raw: string): SettingsTarget {
   const section = SECTION_KEEPS_CASE.has(group) ? rawSection : rawSection.toLowerCase();
   if (section) target.section = section;
   if (anchor) target.anchor = anchor.toLowerCase();
-  const moved = MOVED_ANCHORS[formatSettingsTarget(target)];
-  return movedSettingsTarget(moved ? { ...moved } : target);
+  return target;
 }
 
 /** The string form of a target, the inverse of resolveSettingsTarget. */

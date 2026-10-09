@@ -51,13 +51,7 @@ describe('the Settings list in the terminal menu', () => {
 
   it('names each page as the Settings sidebar does, in its order', () => {
     expect(pages.map((row) => row.label)).toEqual(SETTINGS_GROUPS.map((g) => g.label));
-    // The bare link logs opens the search, so the Logs row opens the
-    // tab on its first section.
-    expect(pages.map((row) => at(row.link))).toEqual(
-      SETTINGS_GROUPS.map((g) =>
-        g.id === 'logs' ? { group: g.id, section: 'session-logs' } : { group: g.id },
-      ),
-    );
+    expect(pages.map((row) => at(row.link))).toEqual(SETTINGS_GROUPS.map((g) => ({ group: g.id })));
   });
 
   it('names each list as Settings does, and opens Automation on it', () => {

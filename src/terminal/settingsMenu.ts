@@ -28,8 +28,7 @@ const AUTOMATION_LISTS: readonly { id: string; label: string }[] = [
  *  Settings sidebar lists them, then Help. Each Settings row sends the
  *  deep link search sends for the same place, which is where the
  *  palette row for it lands too, so Settings opens there, comes forward,
- *  and scrolls the same way. The bare link `logs` opens the search, so
- *  the Logs row names the tab's first section. */
+ *  and scrolls the same way. */
 export const SETTINGS_MENU: readonly (readonly SettingsMenuRow[])[] = [
   AUTOMATION_LISTS.map(({ id, label }) => ({
     id,
@@ -39,9 +38,7 @@ export const SETTINGS_MENU: readonly (readonly SettingsMenuRow[])[] = [
   SETTINGS_GROUPS.map(({ id, label }) => ({
     id,
     label,
-    link: formatSettingsTarget(
-      id === 'logs' ? { group: id, section: 'session-logs' } : { group: id },
-    ),
+    link: formatSettingsTarget({ group: id }),
   })),
   [{ id: 'help', label: 'Help', link: null, keys: APP_SHORTCUTS.help }],
 ];

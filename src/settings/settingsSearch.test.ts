@@ -401,10 +401,10 @@ describe('searchSettingsRows', () => {
     expect(row.target).toEqual({ group: 'general', section: 'advanced', anchor: 'gpu' });
   });
 
-  it('finds the log view by the old tab id target', () => {
+  it('finds the log view at its link', () => {
     const [row] = searchSettingsRows('search logs', mac);
     expect(row.label).toBe('Search logs');
-    expect(row.target).toEqual(resolveSettingsTarget('logs'));
+    expect(row.target).toEqual(resolveSettingsTarget('logs:search'));
     expect(labels('saved logs')[0]).toBe('Session logs');
     expect(labels('saved sessions')[0]).toBe('Session logs');
   });

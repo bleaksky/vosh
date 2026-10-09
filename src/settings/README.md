@@ -27,7 +27,7 @@ A page that saves as you go takes `update` from `useSettingsAutoSave`, beside th
 
 ## Deep links and search
 
-A deep link is a string like `automation:macros` or `characters:Ilsabet#tracked`. `src/lib/settingsNav.ts` resolves it and maps every old tab id. `src/lib/settingsLink.ts` opens Settings on one from the main window.
+A deep link is a string like `automation:macros` or `characters:Ilsabet#tracked`. `src/lib/settingsNav.ts` resolves it, and a string it cannot read opens General. `src/lib/settingsLink.ts` opens Settings on one from the main window.
 
 What a section means depends on the group. In Automation it is the kind. In Characters it is the profile name, and no section means the active profile. In Scripts it is a plugin name, and no section means the list. Profile and plugin names keep their case. Everywhere else it is a section `id` the frame scrolls to.
 
