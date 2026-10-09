@@ -196,7 +196,8 @@ The command input sends lines to the server. It handles single commands, chained
 - Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that. It echoes as your mark on its own line, or as a blank line with the mark Off, so you see each one go out. After a prompt that ends in `>`, it ends that row and adds nothing.
 - Paste multi line text straight into the input. A single line submits immediately. Two or more lines become a paste burst, sent one line every 500 ms by default, with a `paste N/M esc cancels` counter in the command line.
 - Press `Esc` during a burst to cancel every line that has not gone out yet. Starting a new paste also cancels the old burst.
-- When `Enter` does something else, a pill takes the place of your mark at the start of the line. It reads `Password` at a password prompt and names your text in the game's editor. At the game's pager it reads `More`, and `Enter` shows the next page. While you walk it reads `Walking` with the steps left.
+
+When `Enter` does something else, the command line names it in a pill where your mark sits. It reads `Password` at a password prompt and `More` at the game's pager, where `Enter` shows the next page. While a walk goes it reads `Walking` with the steps left, and `Esc` stops it. In the game's editor it names your text, as Write your description shows.
 
 With `Keep last command` on under Input, then Command line, in Settings, a sent command stays in the box fully selected. Press `Enter` again to resend it, or start typing to replace it.
 
@@ -368,7 +369,7 @@ Vosh never writes, rewrites or suggests a word. The red underlines come from you
 
 Your drafts stay in writing.toml in your data folder, one for each character on each world, and save as you type. Close the card at any time and your draft waits for you. With no connection the card still opens, and `Send to game` waits for a session that plays the character.
 
-When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Write this in Vosh?`. `Open in Vosh` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed. The pill at the start of the command line names your text and the line you are on, like `Description · 4 of 30`, and the count turns amber past the thirty lines help description allows. A text with no limit reads like `Note · line 4`. A tick marks column 75, and what runs past it takes a wash. Click the pill and choose `Open in the writing card` to open the card on your text, or `Finish` to send `@` and close the game's editor. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
+When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Write this in Vosh?`. `Open in Vosh` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed. The command line names your text and the line you're on, such as `Description · 4 of 30`, in amber past thirty. The tick still marks column 75, and what runs past it takes a wash. Click the name for `Open in the writing card`, which opens the card on your text, or `Finish`, which sends `@` and closes the game's editor. You can also type `@` on a blank line to finish. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
 
 ### 2.10 Write in the game
 
@@ -391,7 +392,7 @@ You can keep as many notes going as you like, each saved as you type. Each post 
 
 You can move the card, resize its box and pin it to the panel for any kind, as Write your description shows.
 
-Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
+Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does. Keep typing in a note and the command line reads like `Note · line 4`, since a note has no line limit.
 
 ### 2.11 Walk to a place
 
@@ -402,7 +403,7 @@ Typing `note edit`, `history edit` or another opener yourself brings the same `W
 - Type `#walk 3n2e` to go north three times, then east twice.
 - Use `n` `e` `s` `w` `u` and `d`. The game has no diagonal exits, so `ne` walks north, then east.
 - Put a count from 1 to 99 before a direction to repeat it. Spaces between parts are fine.
-- The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. While you walk, the pill at the start of the command line reads `Walking` with the steps left. Other `#` commands leave it going.
+- The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. While you walk, the command line shows `Walking · 2 steps left` beside the map's chip. Other `#` commands leave it going.
 - An alias or a macro can run `#walk`, so `#alias bank #walk 3n2e` walks you there by name. Commands after `#walk` in the same alias wait until you arrive, and drop if the walk stops early.
 - Click a room on the map to walk to it. Vosh shows the steps as a `#walk` string first. A new click or `#walk` while you walk takes over once the step on its way lands.
 
