@@ -1025,37 +1025,46 @@ While a snoop is open, type `snoop` in the palette. You then get `Go to snoop`, 
 
 <!-- id: tick.tick-timer -->
 
-The tick timer shows the game's tick in the status line under the command line, with the game time and the moons beside it. The game's own tick decides when it fires. Vosh knows the game ticked when the game hour moves, which Aabahran advances once a tick, or when a line matches your `Reset on` pattern. When the tick lands, the count restarts, the sound plays, and your `Send each tick` command goes out, once per tick. Configure it in Settings under Automation, then Timers, where `Tick` sits at the top of the list, and click `Save` to apply your changes.
+The tick timer shows the tick of the game in the status line under the command line. The game time and the moons are beside it. The tick of the game decides when the timer fires. Vosh knows the game ticked when the game hour moves, because Aabahran moves the hour once each tick. A line that matches your `Reset on` pattern also tells Vosh that the game ticked.
 
-- Turn on `Enabled`. Every connection starts the tick, and switching characters keeps it running until you turn it off. While another session on the profile is connected, a new connection keeps the switch as that session has it. `Play a sound` under `Advanced` plays a sound when the tick lands.
-- Set `Every` in seconds, anywhere from 1 to 3600. It is how long you expect a tick to take. Aabahran picks each tick between 25 and 35 seconds, so once the game ticks, the timer waits for the game instead of firing at `Every`.
-- Put a command in `Send each tick` to send it on every tick. Leave it blank for none.
-- Give `Reset on` a regex. A line that matches is the tick. A signal within 2 seconds of a tick counts as that tick, so a matching line and the game hour moving together fire once.
-- Before the game's first tick in a session, and on a game that never tells Vosh when it ticks, the timer fires on its own every `Every` seconds. When the game goes quiet for twice `Every`, the timer fires once on its own and keeps its own time until the next tick comes in.
-- The tick in the status line turns the warn color on a soft ground in its last 5 seconds, and stays that way while the game runs late. Turn on `Warn before it fires` to also print a warning line in the terminal, and set `Warn at` to how many seconds of lead you want. The status line then follows the same lead. The terminal prints the warning once per tick. Fill `Warning text` and `Warning color` to restyle the warning line the terminal prints. The color takes an ANSI name, `#rrggbb` hex, or a 256 palette index, and blank keeps the defaults.
-- While the game runs late, the tick pulses gently in the warn color until the tick lands. With Reduce motion on in your system settings, it holds still in the warn color.
-- Pick which way the tick counts in Settings under Layout, then Status line, in the Tick counts row. `Up` shows the seconds since the last tick and keeps counting past `Every` while the game runs late, like `31s`. `Down` shows the seconds left until the tick, from `Every` right after one down to `1s` in its last second, and waits at `0s` when the game runs late. `Down past 0` counts down the same way and keeps counting below zero until the tick lands. An early tick restarts either count at once.
-- Pick how the status line shows the tick, the time, and the moons in the Tick and time row at the top of the card. `Value` shows each value alone, like `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a ring before the tick. Counting up it fills clockwise as the seconds pass, closes when the tick is due, and stays closed while the game runs late. Counting down it shows the time left and empties clockwise toward the top, and only the faint ring shows while the game runs late. Before the time it draws the sun on its path over the horizon. The sun rises on the left, stands highest at midday, and sets on the right, and after dark it drops under the horizon as an open dot.
-- Pick the clock the game time reads on in the Game time row under Tick and time. `24 hour` reads like `18:00`, and `12 hour` reads like `6:00 PM`, with `12:00 AM` at midnight and `12:00 PM` at noon. Each character keeps its own.
+When the tick comes, the count starts again, the sound plays, and your `Send each tick` command goes out, one time for each tick. To set up the tick, go to Settings under Automation, then Timers. `Tick` is at the top of the list. Click `Save` to apply your changes.
 
-The tick settings belong to the profile, so what you set here reaches every session on it, and so does each `#tick` command that changes a setting. Each session keeps its own count, and `#tick reset` restarts only the count of the session you type it in. `Send each tick` goes out in every session on its own count, and the sound plays only for the session in front.
+- Turn on `Enabled`. Every connection starts the tick. When you change characters, it keeps running until you turn it off. While another session on the profile is connected, a new connection uses the switch setting of that session. `Play a sound` under `Advanced` plays a sound when the tick comes.
+- Set `Every` in seconds, from 1 to 3600. It is how long you expect a tick to take. Aabahran chooses each tick between 25 and 35 seconds. So after the game ticks, the timer waits for the game and doesn't fire at `Every`.
+- To send a command on every tick, put it in `Send each tick`. Leave it blank for no command.
+- Give `Reset on` a regex. A line that matches is the tick. A signal within 2 seconds of a tick counts as that tick. So a matching line and a move of the game hour at the same time fire one time.
+- Before the first tick of the game in a session, the timer fires on its own every `Every` seconds. It does the same on a game that never tells Vosh when it ticks. When the game is quiet for two times `Every`, the timer fires one time on its own. It then keeps its own time until the next tick comes in.
+- In its last 5 seconds, the tick in the status line turns the warn color on a soft background. It stays that way while the game is late.
+- To also print a warning line in the terminal, turn on `Warn before it fires`. Set `Warn at` to the number of seconds of warning you want. The status line then uses the same number. The terminal prints the warning one time for each tick.
+- To change the style of the warning line, fill in `Warning text` and `Warning color`. The color takes an ANSI name, `#rrggbb` hex, or a 256 palette index. Blank keeps the defaults.
+- While the game is late, the tick pulses gently in the warn color until the tick comes. When Reduce motion is on in your system settings, it stays still in the warn color.
+- To choose which way the tick counts, use the Tick counts row in Settings under Layout, then Status line. `Up` shows the seconds since the last tick. It keeps counting past `Every` while the game is late, such as `31s`.
+- `Down` shows the seconds left until the tick. It goes from `Every` right after a tick down to `1s` in its last second. It waits at `0s` when the game is late. `Down past 0` counts down in the same way, but continues below zero until the tick comes. An early tick starts either count again at once.
+- The Tick and time row at the top of the card sets how the status line shows the tick, the time, and the moons. `Value` shows each value alone, such as `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a ring before the tick.
+- When the ring counts up, it fills clockwise as the seconds go by. It closes when the tick is due, and stays closed while the game is late. When it counts down, it shows the time left and empties clockwise toward the top. While the game is late, only the faint ring shows.
+- With `Icon`, the time has the sun on its path over the horizon before it. The sun rises on the left, is highest at midday, and sets on the right. After dark, it goes under the horizon as an open dot.
+- To choose the clock for the game time, use the Game time row under Tick and time. `24 hour` reads like `18:00`. `12 hour` reads like `6:00 PM`, with `12:00 AM` at midnight and `12:00 PM` at noon. Each character keeps its own choice.
 
-The game time takes a tint from your theme for the part of the day. Each moon in the sky shows as a small icon of its phase in its own color. Each moon takes the color the game gives its name from your theme, so Lysenties draws in the theme's bright white, Nercuros in its bright cyan, and Dyphrities in its red. On a light theme the icons are ink on paper, like a printed calendar, with the dark part filled in, so a new moon is a solid disc and a full moon an open ring. Hover a moon to read its name and phase, like `Nercuros, nearly full and still growing`. During an eclipse, the triad, or a near alignment, one word in the warn color follows the moons. A dormant moon stays hidden, and the moons leave the line while you are not connected.
+The tick settings belong to the profile. So what you set here reaches every session on the profile, and so does each `#tick` command that changes a setting. Each session keeps its own count. `#tick reset` starts the count again only in the session where you type it. `Send each tick` goes out in every session on its own count. The sound plays only for the session in front.
+
+The game time takes a tint from your theme for the part of the day. Each moon in the sky shows as a small icon of its phase in its own color. Each moon takes the color that the game gives its name, from your theme. So Lysenties is in the bright white of the theme, Nercuros in its bright cyan, and Dyphrities in its red.
+
+On a light theme, the icons are ink on paper, like a printed calendar, with the dark part filled in. So a new moon is a solid disc and a full moon is an open ring. Point at a moon to read its name and phase, such as `Nercuros, nearly full and still growing`. During an eclipse, the triad, or a near alignment, one word in the warn color comes after the moons. A dormant moon stays hidden. The moons leave the line while you aren't connected.
 
 ### 5.2 Track a target with quick keys
 
 <!-- id: tick.track-target -->
 
-Set a target with `tar` and Vosh keeps it in the status line. Quick keys pair a short name with a verb, so typing the name acts on your target.
+Set a target with `tar`, and Vosh keeps it in the status line. A quick key pairs a short name with a verb. When you type the name, the verb acts on your target.
 
-- Type `tar` to list the people in the room, and `tar 2` or `tar drag` to pick one by number or by part of the name. `tarn` and `tarp` step to the next or previous person, and `tarclear` clears the target.
-- Read the status line under the command line. Once a target is set it shows `Target` and the name. While you fight that target with the panel hidden, the line names it once, with its health in yellow.
-- Look at the room. With the `Room, time and weather colors` preset on, the line of your target turns bright red while the room lists them.
-- Read the vitals at the foot of the panel. In a fight your opponent gets a row on top with its health.
-- Set a quick key with `#qkey <name> <verb>`, like `#qkey gg backstab`. Then type `gg` as the first word of a command and Vosh sends `backstab` and your target. Vosh skips its own echo, because the backend echoes the expansion instead.
-- Type `#qkeys` to list them and `#qkey clear <name>` to clear one.
+- Type `tar` to list the people in the room. Type `tar 2` or `tar drag` to choose one by number or by part of the name. `tarn` and `tarp` go to the next or previous person. `tarclear` clears the target.
+- Read the status line under the command line. When a target is set, it shows `Target` and the name. While you fight that target with the panel hidden, the line names it one time, with its health in yellow.
+- Look at the room. When the `Room, time and weather colors` preset is on, the line of your target turns bright red while the room lists them.
+- Read the vitals at the foot of the panel. In a fight, your opponent gets a row on top with its health.
+- To set a quick key, type `#qkey <name> <verb>`, such as `#qkey gg backstab`. Then type `gg` as the first word of a command. Vosh sends `backstab` and your target. Vosh doesn't echo it, because the backend echoes the expansion instead.
+- Type `#qkeys` to list the quick keys. Type `#qkey clear <name>` to clear one.
 
-Setting a target with `tar` also fills `$target`, so `cast dispel $target` aims at your current mark. Each session keeps its own target and its own quick keys. A new session starts from the stock `gg`, `xx`, `zz`, and `tt` slots, and every session goes back to them on restart, so set your verbs again with `#qkey` after each launch.
+When you set a target with `tar`, Vosh also fills `$target`. So `cast dispel $target` aims at your current target. Each session keeps its own target and its own quick keys. A new session starts from the stock `gg`, `xx`, `zz`, and `tt` slots. Every session goes back to them when you restart. So set your verbs again with `#qkey` after each launch.
 
 ## Make it yours
 
