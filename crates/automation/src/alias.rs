@@ -91,9 +91,17 @@ pub struct PluginAliases {
     /// Each alias with the plugin that made it, in the order they were
     /// made.
     aliases: Vec<(String, Alias)>,
+    /// See [`PluginAliases::revision`].
+    revision: u64,
 }
 
 impl PluginAliases {
+    /// Moves each time a plugin makes or drops an alias, as
+    /// [`AliasStore::revision`] does for yours.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Make the alias `name` for `plugin`, in place of one of that name
     /// the same plugin made.
     pub fn set(&mut self, plugin: &str, name: impl Into<String>, expansion: impl Into<String>) {
@@ -101,6 +109,7 @@ impl PluginAliases {
         self.aliases
             .retain(|(by, old)| !(by == plugin && old.name == alias.name));
         self.aliases.push((plugin.to_string(), alias));
+        self.revision = next_revision();
     }
 
     /// Remove the alias `name` when `plugin` made it. True when it went.
@@ -108,12 +117,20 @@ impl PluginAliases {
         let before = self.aliases.len();
         self.aliases
             .retain(|(by, alias)| !(by == plugin && alias.name == name));
-        self.aliases.len() != before
+        let removed = self.aliases.len() != before;
+        if removed {
+            self.revision = next_revision();
+        }
+        removed
     }
 
     /// Remove every alias `plugin` made.
     pub fn remove_plugin(&mut self, plugin: &str) {
+        let before = self.aliases.len();
         self.aliases.retain(|(by, _)| by != plugin);
+        if self.aliases.len() != before {
+            self.revision = next_revision();
+        }
     }
 
     /// Every alias by name, with the plugin that made it.
@@ -189,10 +206,10 @@ impl AliasStore {
         }
     }
 
-    /// Moves each time an alias is added, replaced, or removed, so a
-    /// caller can tell whether the list changed across a step without
-    /// comparing it. Turning a group on or off leaves it alone, since
-    /// the list itself stays the same.
+    /// Moves each time an alias is added, replaced, or removed, or Vosh
+    /// stops one, so a caller can tell whether the list or what expands
+    /// changed across a step without comparing it. Turning a group on or
+    /// off leaves it alone, since the group toggles count those.
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -267,8 +284,8 @@ impl AliasStore {
     /// Turn the alias `name` off under `key`, after Vosh stopped its Lua
     /// there. It stays off there until you save it again.
     pub fn stop(&mut self, name: &str, key: StopKey) {
-        if self.aliases.contains_key(name) {
-            self.stopped.stop(name, key);
+        if self.aliases.contains_key(name) && self.stopped.stop(name, key) {
+            self.revision = next_revision();
         }
     }
 
