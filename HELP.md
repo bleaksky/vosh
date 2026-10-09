@@ -1,6 +1,6 @@
 # Vosh help
 
-This file is the help. The Help window reads it when Vosh is built, so what you read here is what the window shows. Open the Help window with `Cmd+/` on macOS or `Ctrl+/` elsewhere, from Help in the menu bar, from Settings in the terminal right click menu, or with Open help in the command palette.
+This file is the help. The Help window reads it when Vosh is built, so the window shows what you read here. To open the Help window, press `Cmd+/` on macOS or `Ctrl+/` on Windows and Linux. You can also choose Help in the menu bar, Settings in the right click menu of the terminal, or Open help in the command palette.
 
 ---
 
@@ -10,16 +10,16 @@ This file is the help. The Help window reads it when Vosh is built, so what you 
 
 <!-- id: get-connected.connect -->
 
-You connect from the session button, centered in the title band over the terminal. While you are not connected it reads `Not connected` beside a status dot.
+You connect from the session button. It sits in the middle of the title band, over the terminal. While you aren't connected, it reads `Not connected` beside a status dot.
 
-- Click the session button and choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere. Vosh dials the world this session keeps, `play.theforsakenlands.com` on port `1848` until you save another.
-- To play somewhere else in this session, choose `Edit connection…` first. Fill in `Host` and `Port`, turn on `Use TLS` when your server offers TLS, and click `Save`. The session dials that world from then on.
-- To play in a second session beside this one, choose `New session…` instead. It opens a row of its own with a form that starts from the world you last saved.
-- Watch the dot shift from connecting to connected.
-- Type your character name at the login prompt and press `Enter`.
-- When the server asks for a password, the command line swaps to a masked field and the pill at its start reads `Password`. Nothing you type shows on screen, echoes to the terminal, lands in command history, or reaches the session log. Vosh sends it exactly as typed, with no aliases, variables, or `#` commands applied. Press `Enter` to submit. `Shift+Enter` submits here too instead of adding a line.
+- Click the session button and choose the `Connect to` row. You can also press `Cmd+R` on macOS or `Ctrl+R` on Windows and Linux. Vosh dials the world this session keeps. Until you save another world, that is `play.theforsakenlands.com` on port `1848`.
+- To play on another world in this session, first choose `Edit connection…`. Type the `Host` and the `Port`. Turn on `Use TLS` when your server offers TLS. Click `Save`. From then on, the session dials that world.
+- To play in a second session next to this one, choose `New session…` instead. It opens a new row with a form. The form starts from the world you saved last.
+- Watch the dot change from connecting to connected.
+- At the login prompt, type your character name and press `Enter`.
+- When the server asks for a password, the command line changes to a masked field. The pill at its start reads `Password`. What you type doesn't show on screen. It doesn't echo to the terminal, go into command history, or go into the session log. Vosh sends it exactly as you type it, with no aliases, variables, or `#` commands. Press `Enter` to send it. Here `Shift+Enter` also sends it and doesn't add a line.
 
-While connected, the button shows your character name and the world. If a saved profile matches the host and port you dialed, Vosh switches to that profile before connecting. A profile set to log in as your character takes over right after login, when the server reports who you are.
+While you're connected, the button shows your character name and the world. If a saved profile matches the host and port you dialed, Vosh changes to that profile before it connects. A profile set to log in as your character takes over right after login, when the server tells Vosh who you are.
 
 To disconnect, click the session button and choose `Disconnect`.
 
@@ -27,149 +27,180 @@ To disconnect, click the session button and choose `Disconnect`.
 
 <!-- id: get-connected.reconnect -->
 
-The session button reports the connection through its status dot. The dot turns to its error state when the connection fails, and the reason shows in the terminal in square brackets and when you point at the button. It goes back to idle when the session closes cleanly.
+The status dot on the session button shows the state of the connection. When the connection fails, the dot changes to its error state. The reason shows in the terminal in square brackets, and also when you point at the button. When the session closes cleanly, the dot goes back to idle.
 
-- Click the session button and choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere, to dial the same world again.
-- Scroll up or press `PageUp` to read output from before the drop. The terminal scrollback survives a disconnect, and nothing clears it unless you choose `Clear scrollback` yourself.
-- To stage commands while offline, type the first command, press `Shift+Enter` to stack more lines under it, and leave the block in the command line. After you reconnect, press `Enter` once and each line submits separately, in order.
+- To dial the same world again, click the session button and choose the `Connect to` row. You can also press `Cmd+R` on macOS or `Ctrl+R` on Windows and Linux.
+- To read the output from before the drop, scroll up or press `PageUp`. The terminal scrollback stays after a disconnect. Only `Clear scrollback` clears it, and only when you choose it.
+- To prepare commands while you're offline, type the first command. Press `Shift+Enter` to add more lines under it. Leave the block in the command line. After you reconnect, press `Enter` once. Vosh sends each line separately, in order.
 
-When the link drops while you play, Vosh dials the same world again on its own. It tries 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries over about five minutes, and the terminal shows a `[reconnect]` line with the reason for each try that fails. It stops at the first try that connects and sends nothing there, so the game waits at its prompt, for about two minutes, for you to log in. Vosh never dials again after your `Disconnect`, a `quit` you typed, or a line from the game that ends your visit, such as `You have escaped from the Forsaken Lands.`, and a drop at the account menu or the login prompt starts nothing. When another session logs in as the character this one plays, the game closes this link and Vosh leaves it closed.
+When the connection drops while you play, Vosh dials the same world again on its own. The first try comes 3 seconds after the drop. The next tries come 6, 12, 24, 48, and 60 seconds after the try before. That makes 8 tries in about five minutes.
 
-While Vosh dials again, a notice at the bottom right shows how it goes for the session in front. It counts down to each try, such as `Reconnecting in 6s` with `Try 2 of 8`. Click `Reconnect now`, press `Cmd+R` on macOS or `Ctrl+R` elsewhere, or choose the `Connect to` row to dial at once. `Cancel` or `Disconnect` ends the tries. While a try dials, the notice reads `Connecting`. When all 8 fail, it reads `Vosh stopped after 8 tries`, and `Try again` dials the world once more. Through every try the status dot keeps its error ring.
+For each try that fails, the terminal shows a `[reconnect]` line with the reason. Vosh stops at the first try that connects. It sends nothing there, so the game waits at its prompt for about two minutes for you to log in.
 
-When the link drops and Vosh will not dial again, a notice reads `Vosh will not reconnect` and says why, such as `you quit`, `the game banned this account` or `another session took Orla`.
+Some events start no new tries. Vosh never dials again after your `Disconnect`, after a `quit` you typed, or after a line from the game that ends your visit. An example of that line is `You have escaped from the Forsaken Lands.` A drop at the account menu or at the login prompt also starts nothing. When another session logs in as the character this one plays, the game closes this connection. Vosh then leaves it closed.
 
-To stop the redial for a profile, turn off `Reconnect when the link drops` in Settings under General, then Connection. A drop then shows only `Connection lost`. Turn on the `Connection` alert preset, in Get alerts at 3.9, and Vosh gets your attention when the link drops, when a redial reaches the login, and when it stops trying.
+While Vosh dials again, a notice at the bottom right shows the progress for the session in front. It counts down to each try, such as `Reconnecting in 6s` with `Try 2 of 8`. To dial at once, click `Reconnect now`, press `Cmd+R` on macOS or `Ctrl+R` on Windows and Linux, or choose the `Connect to` row. `Cancel` or `Disconnect` stops the tries. While a try dials, the notice reads `Connecting`. When all 8 tries fail, it reads `Vosh stopped after 8 tries`, and `Try again` dials the world one more time.
 
-Two things reset between connections. The chat pane empties when you choose `Disconnect` or connect to another world. A drop keeps it, so your tells are still there once Vosh reconnects. Session variables set with `#var` clear when the next connection opens, so they never outlive a connection. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
+Through every try, the status dot keeps its error ring.
 
-`Disconnect` lives in three places. The session button while connected, the Session menu in the macOS menu bar, and the `Cmd+K` palette.
+When the connection drops and Vosh won't dial again, a notice reads `Vosh will not reconnect`. It tells you why, such as `you quit`, `the game banned this account`, or `another session took Orla`.
+
+To stop the automatic reconnect for a profile, turn off `Reconnect when the link drops` in Settings under General, then Connection. A drop then shows only `Connection lost`. You can also turn on the `Connection` alert preset, in Get alerts at 3.9. Vosh then gets your attention when the connection drops, when a reconnect gets to the login, and when Vosh stops trying.
+
+Two things reset between connections. The chat pane empties when you choose `Disconnect` or connect to another world. A drop keeps it, so your tells are still there when Vosh reconnects. Session variables set with `#var` clear when the next connection opens, so they never last longer than a connection. Aliases, triggers, macros, and profile variables stay loaded, because they are part of your profile and not of the connection.
+
+`Disconnect` is in three places. They are the session button while you're connected, the Session menu in the macOS menu bar, and the command palette (`Cmd+K`).
 
 ### 1.3 Save your profile
 
 <!-- id: get-connected.profile-save -->
 
-`#profile save` writes the current client state to the file of the profile your session plays, and the profile loads again on startup with no extra step. The file is a TOML snapshot under `~/Library/Application Support/com.aabahran.vosh`.
+`#profile save` writes the current client state to the file of the profile your session plays. The profile loads again at startup with no more steps. The file is a TOML snapshot under `~/Library/Application Support/com.aabahran.vosh`.
 
 - Set up the client state you want to keep. Aliases, triggers, macros, variables, and tick settings all count.
-- Type `#profile save` in the command line. Vosh writes the snapshot to that profile's TOML.
-- Or choose `Save profile` in the Session menu of the macOS menu bar or in the `Cmd+K` palette. It sends the same command.
+- Type `#profile save` in the command line. Vosh writes the snapshot to the TOML file of that profile.
+- Or choose `Save profile` in the Session menu of the macOS menu bar, or in the command palette (`Cmd+K`). It sends the same command.
 
-The snapshot covers connection defaults, aliases, profile variables, triggers, tick configuration, macros, ui settings, enabled plugins, and the groups you disabled.
+The snapshot holds the connection defaults, aliases, profile variables, triggers, tick configuration, macros, ui settings, and enabled plugins. It also holds the groups you turned off.
 
-Variables set with `#var` live in session scope. They clear when the next connection opens and never reach the file. A lasting value belongs in the `profile_vars` table of your profile file at `profiles/<name>.toml` in the app data folder. Edit it there while Vosh is closed, or set the value from Lua with `mud.set_profile_var`.
+Variables set with `#var` have session scope. They clear when the next connection opens, and they never go into the file. To keep a value, put it in the `profile_vars` table of your profile file. That file is `profiles/<name>.toml` in the app data folder. Edit it there while Vosh is closed, or set the value from Lua with `mud.set_profile_var`.
 
-`#profile load` pulls the saved file back into the profile, and `#profile reset` puts the profile back to its defaults. Both reach every session that plays the profile, and each of the others prints a line that names the session you typed it in, such as `Tolliver loaded this profile from its file.` In loadout mode the profile commands become notices instead, because loadout mode saves your changes automatically.
+`#profile load` reads the saved file back into the profile. `#profile reset` sets the profile back to its defaults. Both commands reach every session that plays the profile. Each of the other sessions prints a line that names the session where you typed the command, such as `Tolliver loaded this profile from its file.` In loadout mode the profile commands only show notices, because loadout mode saves your changes automatically.
 
 ### 1.4 Play in more than one session
 
 <!-- id: get-connected.sessions -->
 
-Each session is one connection to a game, with its own terminal, command line and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, one row for each. With one session it hides by itself.
+Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, with one row for each session. With one session, the sidebar hides on its own.
 
-Each row reads on two lines. The first starts with a mark that says where the session stands, then its name, and ends with a count when something waits for you there. The second says what the session is doing.
+Each row has two lines. The first line starts with a mark that shows the state of the session. Then comes its name. At the end is a count when something waits for you there. The second line tells what the session is doing.
 
-- Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
-- Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front, or `Cmd+Shift+]` and `Cmd+Shift+[` to step to the next row and the one before, round from the last to the first. Hold `Cmd` a moment and each row shows its key. On macOS the Session menu steps too, with `Next session` and `Previous session`.
-- The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
-- Click the sidebar button at the top left of the window, just after the window buttons on macOS, to hide the sidebar in this window. Click it again to bring the sidebar back. The button never moves, and it reads brighter while the sidebar shows. The sidebar stays hidden when you open another session. `Ctrl+Cmd+S` does the same on macOS and `Ctrl+Shift+S` on Windows and Linux. So do `Hide sessions` and `Show sessions` in the `Cmd+K` palette, and on macOS in the View menu.
-- Right click a row for its menu, with `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each acts on that row's session. `Rename session…` and `Edit connection…` bring it to the front first.
+- Click a row to bring its session to the front. The terminal, the command line, the title band, and the panes show that session at once.
+- Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front. Press `Cmd+Shift+]` for the next row and `Cmd+Shift+[` for the row before. After the last row, they go round to the first. Hold `Cmd` for a moment and each row shows its key. On macOS the Session menu also has `Next session` and `Previous session`.
+- The sessions behind keep playing. Their triggers, timers, and Lua run as usual. Only the drawing waits until you look.
+- To hide the sidebar in this window, click the sidebar button at the top left of the window. On macOS it sits just after the window buttons. Click it again to show the sidebar. The button never moves, and it is brighter while the sidebar shows. The sidebar stays hidden when you open another session.
+- On macOS `Ctrl+Cmd+S` also hides and shows the sidebar. On Windows and Linux the key is `Ctrl+Shift+S`. `Hide sessions` and `Show sessions` in the command palette (`Cmd+K`) do the same. On macOS they are also in the View menu.
+- Right click a row to open its menu. It has `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each item acts on the session of that row. `Rename session…` and `Edit connection…` first bring that session to the front.
 
-`Sessions` heads the list with how many are open, such as `Sessions 3`. More rows than fit scroll under it, and it draws a thin line once a row has passed beneath it. Drag a row up or down to move it. The other rows make room, and an accent line marks where it lands. `Cmd+1` to `Cmd+9` follow the new order, and so does your next launch.
+`Sessions` is the heading of the list. It shows how many sessions are open, such as `Sessions 3`. When there are more rows than fit, they scroll under the heading. A thin line shows under the heading when a row has scrolled under it.
 
-Drag the line at the sidebar's right edge to make it wider or narrower, from 180 to 320 pixels, and double click the line to go back to 220. Vosh keeps the width for your next launch.
+To move a row, drag it up or down. The other rows make room, and an accent line shows where it goes. `Cmd+1` to `Cmd+9` follow the new order, and so does your next launch.
 
-When the window is too narrow to hold the sidebar, a terminal 320 pixels wide and the panel, the panel shrinks first, down to its narrowest, and then the sidebar folds away. Widen the window and it comes back. Until then the sidebar button slides the sidebar in over the terminal. Pick a row, click the button again or press `Escape` and it slides away, and the caret goes back to the command line. While the sidebar is folded, in a narrow window or after you hide it, the session button's menu lists every session at its top under `Sessions`. Each one reads the same two lines as its row. The session in front has a check, a session where something waits shows its count, and any other one its key, such as `Cmd+2`. Click one to bring it to the front, or point at it and click the cross to close it. The session button adds up what waits in your other sessions, such as `2` after the arrow, and the number goes once you have looked at each.
+To make the sidebar wider or narrower, drag the line at its right edge. The width goes from 180 to 320 pixels. Double click the line to go back to 220. Vosh keeps the width for your next launch.
 
-To open a session, press `Cmd+T`, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
+Sometimes the window is too narrow to hold the sidebar, a terminal 320 pixels wide, and the panel. Then the panel first gets narrower, down to its narrowest. After that, the sidebar folds away. When you make the window wider, it comes back.
 
-- `Host` and `Port` start from the world you last saved or dialed from a form. The caret waits in `Port`, so you can type the build port and keep the host.
-- `Profile` starts on a profile pinned to that host and port, then one that claims the host on any port, then the profile you were playing. It picks again as you change the address, until you choose one yourself, and the window takes the layout of the profile it shows.
-- Click `Connect` to dial. The session plays the profile the form shows, with no other profile matched first, and keeps the address as its own.
+Until then, the sidebar button slides the sidebar in over the terminal. It slides away when you choose a row, click the button again, or press `Escape`. The caret then goes back to the command line.
+
+While the sidebar is folded, in a narrow window or after you hide it, the menu of the session button lists every session. They are at its top under `Sessions`. Each session shows the same two lines as its row. The session in front has a check. A session where something waits shows its count, and any other session shows its key, such as `Cmd+2`.
+
+Click a session to bring it to the front. To close it, point at it and click the cross. The session button adds up what waits in your other sessions, such as `2` after the arrow. The number goes away when you have looked at each session.
+
+To open a session, press `Cmd+T`. You can also choose `New session…` from the session button, the command palette (`Cmd+K`), or the Session menu on macOS. Or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`. It brings the row to the front and opens its form under the title.
+
+- `Host` and `Port` start from the world you saved last or dialed last from a form. The caret waits in `Port`, so you can type the build port and keep the host.
+- `Profile` starts on a profile pinned to that host and port. If there is none, it starts on a profile that claims the host on any port. If there is none, it starts on the profile you were playing. It chooses again when you change the address, until you choose a profile yourself. The window takes the layout of the profile it shows.
+- Click `Connect` to dial. The session plays the profile the form shows, and no other profile matches first. The session keeps the address as its own.
 - Click `Cancel` or press `Escape` to close the new row. Vosh writes nothing.
 
-The line under `Profile` tells you why it shows. `Build is pinned to The Forsaken Lands 1825.` names the pin. When another session plays the same profile, the line names that session, such as `Tolliver's session plays Default too. An edit in either reaches both.` Two sessions on one profile share its aliases, triggers and settings, and an edit in either saves once. Each keeps its own connection, command history and Lua.
+The line under `Profile` tells you why that profile shows. `Build is pinned to The Forsaken Lands 1825.` names the pin. When another session plays the same profile, the line names that session, such as `Tolliver's session plays Default too. An edit in either reaches both.` Two sessions on one profile share its aliases, triggers, and settings. An edit in either session saves one time. Each session keeps its own connection, command history, and Lua.
 
-While another session is connected to the world's own port, such as `1848` for The Forsaken Lands, and you dial that port too, a note quotes the game, such as `Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` The build port, `1825`, never shows it. Vosh still connects when you click `Connect`, and the game decides what happens next.
+Another session can be connected to the own port of the world, such as `1848` for The Forsaken Lands. When you dial that port too, a note quotes the game, such as `Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` The build port, `1825`, never shows this note. Vosh still connects when you click `Connect`, and the game decides what happens next.
 
-Each row names its session by the first of these it has.
+Each row names its session by the first of these that it has.
 
 - A name you gave it, such as `Builder`.
-- The character it plays, such as `Tolliver`. The row keeps it through a drop, every try to dial again and a disconnect, until you connect again yourself.
+- The character it plays, such as `Tolliver`. The row keeps this name through a drop, every try to dial again, and a disconnect. It keeps it until you connect again yourself.
 - Before you log in, the world it plays, such as `The Forsaken Lands`.
 - `New session` while it has no world yet.
 
-A port that is not the world's own shows in grey beside the name, so Orla on the build port reads `Orla` with `1825` beside it. A row named by its world puts the port in its name instead, as `The Forsaken Lands 1825`, and when the row runs short the world ends in an ellipsis and the port stays. On a host Vosh does not know by name, the port shows only while another session plays on the same host.
+A port that isn't the own port of the world shows in grey beside the name. So Orla on the build port reads `Orla` with `1825` beside it. A row named by its world puts the port in its name instead, as `The Forsaken Lands 1825`. When the row is too short, the world ends in an ellipsis and the port stays. On a host that Vosh doesn't know by name, the port shows only while another session plays on the same host.
 
-Line two says what the session is doing. While you play it reads the room, such as `Thickening Woods`, or who you fight while a fight lasts, such as `Fighting a Blackwatch guard`, with your health at the right, such as `91%`. Health turns red once it runs low. The game hides your vitals in some places, and then the line shows no health. Otherwise the line says what happened.
+The second line tells what the session is doing. While you play, it shows the room, such as `Thickening Woods`. During a fight it shows who you fight, such as `Fighting a Blackwatch guard`. Your health shows at the right, such as `91%`. Health turns red when it gets low.
+
+In some places the game hides your vitals, and then the line shows no health. At other times, the line tells what happened.
 
 - `Waiting for your login` while the game waits for you to log in.
 - `Connecting…` while Vosh dials, and `Reconnecting, try 2 of 8` while it dials again after a drop.
 - `Couldn’t connect` when the first dial fails.
-- `Dropped 4 min ago` when the link dropped and Vosh does not dial again.
-- The world it dials, such as `The Forsaken Lands`, while the session is not connected.
+- `Dropped 4 min ago` when the connection dropped and Vosh doesn't dial again.
+- The world it dials, such as `The Forsaken Lands`, while the session isn't connected.
 
-A row you named starts line two with the character it plays, so you always see who plays it.
+When you named a row, its second line starts with the character it plays. So you always see who plays it.
 
-Rest the pointer on a row for half a second and a card opens beside it with the rest of the session. It names the world and the profile, such as `The Forsaken Lands 1825, profile Build`, then the room, the area, who you fight, your health, mana and moves, how long you have been online and what waits for you. A session that is not connected shows when it last played. Point at the next row and the card moves there at once. The card ends with `Double click the name to rename`. It closes when the pointer leaves the rows, when you click and when you press a key.
+Point at a row for half a second, and a card opens beside it with more about the session. It names the world and the profile, such as `The Forsaken Lands 1825, profile Build`. Then it shows the room, the area, who you fight, and your health, mana, and moves. It also shows how long you have been online and what waits for you.
 
-To name a session, double click its name in the row. When a row has the keyboard, after `Tab` or the arrow keys bring you into the sidebar, `Enter` or `F2` does it too, and `F2` on the command line stays yours. You can also right click the row and choose `Rename session…`, which shows `F2` beside it when the row has the keyboard. The session button, the `Cmd+K` palette and the Session menu on macOS offer `Rename session…` for the session in front. The name turns into a field with its text selected, the mark stays, and line two reads `Return saves, Esc cancels`. Press `Enter` or click elsewhere to keep what you typed, or press `Escape` to leave the row as it was. Clear the field and the row reads the character again. A name tells apart two rows that play one character, such as `Tolliver` on the play port and `Builder` for Tolliver on the build port.
+A session that isn't connected shows when it last played. When you point at the next row, the card moves there at once. The card ends with `Double click the name to rename`. It closes when the pointer leaves the rows, when you click, and when you press a key.
 
-With one session there is no sidebar, so `Rename session…` opens a form under the title with one `Name` field. Click `Save` to keep what you typed.
+To name a session, double click its name in the row. When a row has the keyboard focus, `Enter` or `F2` also does this. A row gets the focus when `Tab` or the arrow keys bring you into the sidebar. On the command line, `F2` stays yours.
 
-The name shows in place of the character in the row, the title band, the window title, the palette and the questions before a close. The card beside the row still names the character with the world, such as `Tolliver on The Forsaken Lands 1825, profile Build`. The name stays with the session through a reconnect, another character and your next launch.
+You can also right click the row and choose `Rename session…`. It shows `F2` beside it when the row has the focus. The session button, the command palette (`Cmd+K`), and the Session menu on macOS have `Rename session…` for the session in front.
 
-The selected row is the filled one. The title band and the window title follow it and add the port after the world the same way, so the band reads `Orla` and `The Forsaken Lands 1825`.
+The name then changes to a field with its text selected. The mark stays, and the second line reads `Return saves, Esc cancels`. To keep what you typed, press `Enter` or click somewhere else. To leave the row as it was, press `Escape`.
 
-A row tells you when something happens in a session you are not looking at. Its name turns brighter once the game prints a new line there, and a prompt alone does not count. A count in an accent pill shows at the right of line one once something for you happens there. It counts each tell, each line with your name and each fight that starts on you, whether or not you turned their alerts on. Low health counts once, however often it falls. Past nine it reads `9+`. A drop adds nothing, since the mark shows it, and neither does an alert a trigger or a script raises. Bringing the session to the front clears the count and the bright name.
+If you clear the field, the row shows the character again. A name helps you tell apart two rows that play one character. An example is `Tolliver` on the play port and `Builder` for Tolliver on the build port.
 
-Every row shows one mark at its left, the row in front too.
+With one session there is no sidebar. So `Rename session…` opens a form under the title with one `Name` field. Click `Save` to keep what you typed.
+
+The name shows in place of the character in the row, the title band, the window title, and the palette. It also shows in the questions before a close. The card beside the row still names the character with the world, such as `Tolliver on The Forsaken Lands 1825, profile Build`. The name stays with the session through a reconnect, another character, and your next launch.
+
+The selected row is the filled one. The title band and the window title follow it. They add the port after the world in the same way, so the band reads `Orla` and `The Forsaken Lands 1825`.
+
+A row tells you when something happens in a session you aren't looking at. Its name gets brighter when the game prints a new line there. A prompt alone doesn't count. A count in an accent pill shows at the right of the first line when something for you happens there. It counts each tell, each line with your name, and each fight that starts on you. It counts them whether or not you turned on their alerts.
+
+Low health counts one time, however often it falls. Past nine, the count reads `9+`. A drop adds nothing, because the mark shows it. An alert from a trigger or a script also adds nothing. When you bring the session to the front, the count and the bright name clear.
+
+Every row shows one mark at its left, and so does the row in front.
 
 - A green dot while you play.
-- A ring while the session is not connected, and its name turns grey.
+- A ring while the session isn't connected. Its name also turns grey.
 - A spinner while Vosh dials, and through every try when it dials again after a drop.
 - A hand while the game waits for you to log in, until you play. It shows on The Forsaken Lands, and on any world after Vosh dials again.
-- A triangle when the first dial fails, or when the link dropped and Vosh does not dial again. Connect again to play on.
+- A triangle when the first dial fails, or when the connection dropped and Vosh doesn't dial again. Connect again to continue.
 
-A row shows one mark at a time, the triangle first, then the hand, then the spinner.
+A row shows one mark at a time. The triangle comes first, then the hand, then the spinner.
 
-The tick sound plays only for the session in front, and the `Connected`, `Connection lost` and reconnect notices speak for it alone.
+The tick sound plays only for the session in front. The `Connected`, `Connection lost`, and reconnect notices also speak only for it.
 
-Each session keeps these of its own.
+Each session keeps these things of its own.
 
-- Its terminal and scrollback, its command line with its history and what you left typed in it, and the world it dials.
-- Its target, its quick keys and the count of its tick.
+- Its terminal and scrollback, and its command line with its history and the text you left in it. Also the world it dials.
+- Its target, its quick keys, and the count of its tick.
 - Its session variables, set with `#var`.
-- Its recorder, so `#record` takes only the commands you type there.
-- Its Lua, with the plugins its profile turns on, the scripts you load with `#script load` and the aliases its plugins make. When Vosh stops the Lua of a trigger or an alias, it stays off in that session alone.
+- Its recorder, so `#record` takes only the commands you type in that session.
+- Its Lua, with the plugins its profile turns on, the scripts you load with `#script load`, and the aliases its plugins make. When Vosh stops the Lua of a trigger or an alias, it stays off only in that session.
 
-The sessions on one profile share everything the profile holds, its aliases, triggers, macros and timers, its groups, its profile variables, its tick settings, its prompt design, its loadouts and its panes. A change from any of them reaches the others at once and saves once. So `#group combat off` turns that group off in every session on the profile, and so does its switch in Settings. Each `#tick` command that changes a setting reaches them all, while `#tick reset` restarts the count of its own session alone. `#profile load` and `#profile reset` reach them all too, and each of the others prints a line that names the session you typed it in.
+The sessions on one profile share everything the profile holds. That is its aliases, triggers, macros, and timers, and its groups and profile variables. It is also its tick settings, its prompt design, its loadouts, and its panes. A change from any of these sessions reaches the others at once and saves one time. So `#group combat off` turns that group off in every session on the profile, and so does its switch in Settings.
 
-When you log in as a character another profile claims, the session moves to that profile and the other sessions stay where they are. If a session already plays that profile, the two share it from then on.
+Each `#tick` command that changes a setting reaches all the sessions on the profile. But `#tick reset` restarts the count of its own session only. `#profile load` and `#profile reset` also reach all of them. Each of the other sessions prints a line that names the session where you typed the command.
 
-When you open Vosh again, your sessions come back in their order with their names, none of them connected, and the one you left in front is in front again. A session opens its profile and its Lua the first time you bring it to the front, and its terminal shows the lines it kept.
+When you log in as a character that another profile claims, the session moves to that profile. The other sessions stay where they are. If a session already plays that profile, the two sessions share it from then on.
 
-Settings edits the profile of the session in front. With two or more sessions open, its header names that session at the right, then the profile it plays in grey, such as `Orla` and `Build`. When another session plays the same profile, the header adds it, such as `Also in Tolliver`, since an edit reaches both.
+When you open Vosh again, your sessions come back in their order with their names. None of them is connected. The session you left in front is in front again. A session opens its profile and its Lua the first time you bring it to the front. Its terminal shows the lines it kept.
 
-When you bring a session on another profile to the front while a list under Automation holds unsaved changes, Settings stays on the profile you were editing. Its header keeps naming that session and profile and reads `Save or discard to follow Orla`. Click `Save` or `Discard`, and Settings moves to the profile Orla plays. Each change you make in Settings saves to the profile it was made on, whichever session is in front by the time it lands.
+Settings edits the profile of the session in front. With two or more sessions open, the Settings header names that session at the right. Then it shows the profile that the session plays in grey, such as `Orla` and `Build`. When another session plays the same profile, the header adds it, such as `Also in Tolliver`. This is because an edit reaches both sessions.
 
-Settings under General, then Connection, edits where the session in front connects with its `World`, `Host and port`, and `Use TLS` rows, and each session keeps its own. Its `Reconnect when the link drops` row belongs to the profile, so it reaches every session on it. A session on a port that is not the world's own shows in `World` as its row reads, such as `The Forsaken Lands 1825`. Choosing `The Forsaken Lands` sets port `1848`.
+Sometimes a list under Automation has unsaved changes when you bring a session on another profile to the front. Settings then stays on the profile you were editing. Its header keeps the name of that session and profile and reads `Save or discard to follow Orla`. Click `Save` or `Discard`, and Settings moves to the profile that Orla plays. Each change you make in Settings saves to the profile where you made it. It doesn't matter which session is in front when the change saves.
 
-To close a session, point at its row and click the cross that takes the place of the count, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
+In Settings under General, then Connection, you edit where the session in front connects. Use its `World`, `Host and port`, and `Use TLS` rows. Each session keeps its own values. The `Reconnect when the link drops` row belongs to the profile, so it reaches every session on the profile. A session on a port that isn't the own port of the world shows in `World` as its row reads, such as `The Forsaken Lands 1825`. When you choose `The Forsaken Lands`, the port changes to `1848`.
 
-Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you press `Cmd+Shift+W`, choose `Close window` in the Session menu on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
+To close a session, point at its row and click the cross that shows in place of the count. You can also press `Cmd+W`. Or choose `Close session` from the right click menu of the row, the Session menu on macOS, or the command palette (`Cmd+K`).
 
-On macOS, `Quit Vosh` and `Cmd+Q` ask first only while two or more sessions are connected, and with one Vosh quits at once. A quit from the Dock or as you log out cannot ask.
+While the session is connected, Vosh asks first, such as `Close Orla's session?`. `Cancel` keeps the session. A session that isn't connected closes at once. Its row goes away, and the next row down comes to the front. When you close your last session, the window closes.
+
+When you close the window, every session ends and Vosh quits. While a session is connected, Vosh asks first. It asks when you press `Cmd+Shift+W`, choose `Close window` in the Session menu on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
+
+On macOS, `Quit Vosh` and `Cmd+Q` ask first only while two or more sessions are connected. With one connected session, Vosh quits at once. A quit from the Dock, or a quit when you log out, can't ask.
 
 ### 1.5 Get started
 
 <!-- id: get-connected.get-started -->
 
-Get started is a short list of what to turn on in Vosh, with a line on what each thing does. It opens by itself the first time you start Vosh, and you open it again here.
+Get started is a short list of things to turn on in Vosh. Each thing has a line that tells what it does. The list opens on its own the first time you start Vosh, and you can open it again here.
 
 [Open Get started](vosh:get-started)
 
-A new install starts with every preset off. The list suggests the presets that suit the world you connect to, each with a sample, and a switch turns one on at once.
+A new install starts with every preset off. The list suggests the presets for the world you connect to, each with a sample. A switch turns a preset on at once.
 
 | What                          | Where it lives                              |
 | ----------------------------- | ------------------------------------------- |
@@ -180,7 +211,7 @@ A new install starts with every preset off. The list suggests the presets that s
 | Customize your prompt         | The first row when you right click the text |
 | Read back while you play      | Scroll up, `Cmd+\` or a middle click        |
 
-On macOS, choose Get started in the Help menu. Anywhere, press `Cmd+K` on macOS or `Ctrl+K` elsewhere and type get started.
+On macOS, choose Get started in the Help menu. On any system, press `Cmd+K` on macOS or `Ctrl+K` on Windows and Linux, and type get started.
 
 ## Play
 
