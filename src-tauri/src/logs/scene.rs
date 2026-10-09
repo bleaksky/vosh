@@ -288,7 +288,7 @@ pub(crate) fn when(first_ms: i64, last_ms: i64) -> String {
 }
 
 /// The line under the scene, what it leaves out, so whoever reads it
-/// knows the scene is cut, like `Saved from Vosh. Prompts, your commands
+/// knows the scene is cut, like `Saved from Vosh. Prompts, your commands,
 /// and five channels were left out.`
 fn footer(filter: &SceneFilter) -> String {
     const COUNTS: [&str; 12] = [
@@ -315,10 +315,10 @@ fn footer(filter: &SceneFilter) -> String {
     let Some((last, rest)) = parts.split_last() else {
         return "Saved from Vosh.".to_string();
     };
-    let mut list = if rest.is_empty() {
-        last.clone()
-    } else {
-        format!("{} and {last}", rest.join(", "))
+    let mut list = match rest {
+        [] => last.clone(),
+        [first] => format!("{first} and {last}"),
+        _ => format!("{}, and {last}", rest.join(", ")),
     };
     list[..1].make_ascii_uppercase();
     let verb = if parts.len() == 1 && filter.left_out.len() == 1 {

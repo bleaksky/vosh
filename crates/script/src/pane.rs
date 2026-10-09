@@ -103,7 +103,7 @@ fn blocks(lua: &Lua, list: &Table) -> LuaResult<Vec<PaneBlock>> {
 /// Block `n` of a list, which holds one of `row`, `gauge`, `line` or
 /// `rule`.
 fn block(lua: &Lua, n: usize, value: Value) -> LuaResult<PaneBlock> {
-    let shape = || format!("Pane block {n} needs one of row, gauge, line or rule.");
+    let shape = || format!("Pane block {n} needs one of row, gauge, line, or rule.");
     let Value::Table(block) = value else {
         return fail(shape());
     };
@@ -323,15 +323,15 @@ mod tests {
         for (blocks, line) in [
             (
                 "{ { cell = 'x' } }",
-                "Pane block 1 needs one of row, gauge, line or rule.",
+                "Pane block 1 needs one of row, gauge, line, or rule.",
             ),
             (
                 "{ { row = { 'Sky', 'rainy' }, line = 'x' } }",
-                "Pane block 1 needs one of row, gauge, line or rule.",
+                "Pane block 1 needs one of row, gauge, line, or rule.",
             ),
             (
                 "{ { rule = true }, 'Sky' }",
-                "Pane block 2 needs one of row, gauge, line or rule.",
+                "Pane block 2 needs one of row, gauge, line, or rule.",
             ),
             (
                 "{ { gauge = { 'Health', 1020 } } }",

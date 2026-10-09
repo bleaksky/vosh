@@ -133,7 +133,7 @@ describe('the shared catalog preview', () => {
     expect(html).toContain('<h2 id="');
     expect(html).toContain('class="ov-confirm-title">Share one catalog</h2>');
     expect(html).toContain(
-      'Vosh merges the aliases, triggers and macros of Tolliver, Maren, and Orla into one catalog, with a loadout for each character. Nothing changes until you apply it.',
+      'Vosh merges the aliases, triggers, and macros of Tolliver, Maren, and Orla into one catalog, with a loadout for each character. Nothing changes until you apply it.',
     );
   });
 

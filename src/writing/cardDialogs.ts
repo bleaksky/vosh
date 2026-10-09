@@ -73,7 +73,7 @@ export function checkAsk(kind: WritingKind, counted: Count): Ask {
         : '';
   return {
     title: 'Send your description for approval?',
-    body: `${warn}The immortals see your description as the game has it now, along with your race, class, birth, age and hand, any perks, and your face, hair and body if you set them. You can only have one check waiting, and you’ll get a note when they decide.`,
+    body: `${warn}The immortals see your description as the game has it now, along with your race, class, birth, age, and hand, any perks, and your face, hair, and body if you set them. You can only have one check waiting, and you’ll get a note when they decide.`,
     label: 'Send dcheck',
     tone: 'primary',
   };

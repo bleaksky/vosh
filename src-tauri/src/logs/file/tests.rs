@@ -238,7 +238,7 @@ fn the_page_names_who_played_where() {
     assert_eq!(place(&[]), None);
     assert_eq!(
         and_list(&["Orla", "Maren", "Tolliver"].map(String::from)),
-        "Orla, Maren and Tolliver"
+        "Orla, Maren, and Tolliver"
     );
 }
 

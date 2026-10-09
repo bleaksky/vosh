@@ -20,7 +20,7 @@ use super::{entry_stays_inside, read_plugin, PluginManifest, PluginManifestFile}
 use crate::disk::atomic::swap_in;
 
 /// What a command says when a plugin name breaks the rule.
-pub(crate) const NAME_RULE: &str = "Use only letters, digits and underscores in a plugin name.";
+pub(crate) const NAME_RULE: &str = "Use only letters, digits, and underscores in a plugin name.";
 
 /// The version a new plugin starts at.
 const FIRST_VERSION: &str = "0.1.0";

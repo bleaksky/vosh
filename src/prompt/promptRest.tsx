@@ -35,7 +35,7 @@ import type { CardView } from './PromptCard';
 
 /** What the Lament preview hides, under the card at rest. */
 const LAMENT_NOTE =
-  "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
+  "Lament hides your vitals, your tank's health, your opponent's health, your affects, and your group. Vosh draws ? where the game hides a value.";
 
 /** What the card hands its body at rest. */
 export interface RestBody {

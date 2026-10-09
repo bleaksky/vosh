@@ -258,7 +258,7 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
         </Row>
         <Row
           label="Color commands as you type"
-          description="Aliases, Vosh commands and chat each take a color, and a # command Vosh doesn’t know turns red."
+          description="Aliases, Vosh commands, and chat each take a color, and a # command Vosh doesn’t know turns red."
           anchor="type-colors"
         >
           <Toggle
@@ -288,7 +288,7 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
                 pickerLabel="Choose a color for Vosh commands"
               />
             </Row>
-            <Row label="Chat" description="Say, tell, reply and the channels.">
+            <Row label="Chat" description="Say, tell, reply, and the channels.">
               <ColorField
                 value={config.input_type_chat_color ?? ''}
                 onChange={(color) => update({ input_type_chat_color: color || null })}

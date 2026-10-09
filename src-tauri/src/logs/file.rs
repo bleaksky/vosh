@@ -99,12 +99,13 @@ fn place(spans: &[ScopedLogSpan]) -> Option<String> {
     })
 }
 
-/// `a`, `a and b`, `a, b and c`.
+/// `a`, `a and b`, `a, b, and c`.
 fn and_list(items: &[String]) -> String {
     match items {
         [] => String::new(),
         [one] => one.clone(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        [first, second] => format!("{first} and {second}"),
+        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
     }
 }
 

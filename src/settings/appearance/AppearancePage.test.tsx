@@ -1188,11 +1188,11 @@ describe('AccessibilityPage', () => {
     const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
     expect(picked.value).toBe('tritanopia');
     expect(picked.label).toContain(
-      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
+      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn, and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
     );
     const kanso = { ...config(), theme: 'kanso-zen', color_vision: 'deuteranopia' as const };
     const swapped =
-      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
+      'In the game text greens turn blue, reds lean toward orange, and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
     expect((await visionRow(kanso)).label).toContain(swapped);
     // Fit game colors off swaps the published colors, so the row says
     // the same.

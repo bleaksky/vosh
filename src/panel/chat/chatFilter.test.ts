@@ -164,7 +164,7 @@ describe('chatEmptyText', () => {
       'Tell messages show up here as they come in.',
     );
     expect(chatEmptyText({ kind: 'channels', channels: ['gtell', 'say', 'tell'] }, new Set())).toBe(
-      'Gtell, Say and Tell messages show up here as they come in.',
+      'Gtell, Say, and Tell messages show up here as they come in.',
     );
     expect(chatEmptyText({ kind: 'none' }, new Set())).toBe(
       'Pick the channels this pane shows from the menu up top.',
@@ -179,7 +179,7 @@ describe('chatEmptyText', () => {
       'Messages on every channel but Tell show up here as they come in.',
     );
     expect(chatEmptyText({ kind: 'rest' }, new Set(['tell', 'gtell', 'say']))).toBe(
-      'Messages on every channel but Gtell, Say and Tell show up here as they come in.',
+      'Messages on every channel but Gtell, Say, and Tell show up here as they come in.',
     );
   });
 

@@ -158,7 +158,7 @@ export function importedSentence(
   ];
   if (result.catalog_group !== null) {
     parts.push(
-      `Its triggers, aliases and macros joined the catalog in the group ${result.catalog_group}.`,
+      `Its triggers, aliases, and macros joined the catalog in the group ${result.catalog_group}.`,
     );
   }
   if (result.clashes.length > 0) parts.push(clashSentence(result.clashes));

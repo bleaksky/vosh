@@ -462,7 +462,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   {
     label: 'Color commands as you type',
     description:
-      'Aliases, Vosh commands and chat each take a color, and a # command Vosh doesn’t know turns red.',
+      'Aliases, Vosh commands, and chat each take a color, and a # command Vosh doesn’t know turns red.',
     keywords: 'syntax highlight fish color alias hash chat unknown',
     target: at('input', 'command-line', 'type-colors'),
   },

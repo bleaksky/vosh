@@ -16,7 +16,7 @@ interface Application {
   guide: Guide;
 }
 
-const LAST = 'Tell the immortals your history, goals and deeds';
+const LAST = 'Tell the immortals your history, goals, and deeds';
 
 const APPLICATIONS: Application[] = [
   {
@@ -25,8 +25,8 @@ const APPLICATIONS: Application[] = [
     guide: {
       head: 'From help psi requirements',
       rows: [
-        'Necromancer, invoker, battlemage or monk',
-        'Illithid, elf, half-elf, wood-elf, half-drow, human, gnome, avian or faerie',
+        'Necromancer, invoker, battlemage, or monk',
+        'Illithid, elf, half-elf, wood-elf, half-drow, human, gnome, avian, or faerie',
         'Rank 50',
         'Psi Application in the subject',
         'Good or neutral, unless you’re an illithid',
@@ -45,8 +45,8 @@ const APPLICATIONS: Application[] = [
     guide: {
       head: 'From help crusader requirements',
       rows: [
-        'Warrior, paladin or berserker',
-        'Elf, half-elf, human or storm giant',
+        'Warrior, paladin, or berserker',
+        'Elf, half-elf, human, or storm giant',
         'Rank 50',
         'Crusader application in the subject',
         'Good, and not moderate',
@@ -84,7 +84,7 @@ const APPLICATIONS: Application[] = [
     guide: {
       head: 'From help demon requirements',
       rows: [
-        'Warrior, berserker, cleric, shaman, battlemage, necromancer or dark knight',
+        'Warrior, berserker, cleric, shaman, battlemage, necromancer, or dark knight',
         'Human and chaotic',
         'Ranks 15 to 30',
         'Demon application in the subject',
@@ -144,7 +144,7 @@ const APPLICATIONS: Application[] = [
     guide: {
       head: 'From help lich requirements',
       rows: [
-        'Necromancer, invoker or battlemage',
+        'Necromancer, invoker, or battlemage',
         'Human or half-drow',
         'Rank 50',
         'Lich and application in the subject',
@@ -183,7 +183,7 @@ const APPLICATIONS: Application[] = [
         'Ranks 30 to 50',
         'Breaker application in the subject',
         'Evil for a soulreaver, neutral for a shepherd',
-        'A follower of the powers of Death, Chance or Chaos',
+        'A follower of the powers of Death, Chance, or Chaos',
         LAST,
       ],
       words: ['The staff look for these words in your subject.'],
@@ -283,8 +283,8 @@ export function applicationGuide(subject: string, customRace: boolean): Guide {
   return {
     head: 'Applications',
     rows: [
-      'Psi, crusader, avatar, demon, undead, vampire, lich or journeyman, with application',
-      'Breaker, noble, royal or custom warcry application',
+      'Psi, crusader, avatar, demon, undead, vampire, lich, or journeyman, with application',
+      'Breaker, noble, royal, or custom warcry application',
       'Cabal application, to the cabal’s name',
       'A custom race, from the ⋯ menu',
     ],

@@ -222,7 +222,7 @@ pub(crate) async fn logs_keep_set(
     days: Option<u32>,
 ) -> Result<(), String> {
     if days.is_some_and(|d| !crate::profile::set::KEEP_DAYS.contains(&d)) {
-        return Err("Vosh keeps logs for a year, 90 days, 30 days or forever.".to_string());
+        return Err("Vosh keeps logs for a year, 90 days, 30 days, or forever.".to_string());
     }
     state
         .loaded_profile_set()

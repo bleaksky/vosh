@@ -157,7 +157,7 @@ describe('the line under the list once the import is done', () => {
       'Vosh replaced Healer with Healer profile.toml. Healer keeps its world and characters.',
     );
     expect(importedSentence(FILE, 'new', result({ catalog_group: 'Healer profile' }), [])).toBe(
-      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile.',
+      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases, and macros joined the catalog in the group Healer profile.',
     );
   });
 
@@ -173,7 +173,7 @@ describe('the line under the list once the import is done', () => {
         [],
       ),
     ).toBe(
-      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile. You already had the trigger spam, the alias kk, and the macro F2, so Vosh kept yours.',
+      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases, and macros joined the catalog in the group Healer profile. You already had the trigger spam, the alias kk, and the macro F2, so Vosh kept yours.',
     );
     // Two of a kind share it, and a file that held only clashes joined
     // nothing.
@@ -196,7 +196,7 @@ describe('the line under the list once the import is done', () => {
         [],
       ),
     ).toBe(
-      'Vosh replaced Healer with Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile. You already had the macro F2, so Vosh kept yours. Healer keeps its world and characters.',
+      'Vosh replaced Healer with Healer profile.toml. Its triggers, aliases, and macros joined the catalog in the group Healer profile. You already had the macro F2, so Vosh kept yours. Healer keeps its world and characters.',
     );
   });
 
@@ -216,7 +216,7 @@ describe('the line under the list once the import is done', () => {
         ['Orla'],
       ),
     ).toBe(
-      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile. You already had 4 of its triggers and 1 of its macros, so Vosh kept yours.',
+      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases, and macros joined the catalog in the group Healer profile. You already had 4 of its triggers and 1 of its macros, so Vosh kept yours.',
     );
   });
 
@@ -259,7 +259,7 @@ describe('the line under the list once the import is done', () => {
         [],
       ),
     ).toBe(
-      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile. Orla stays with Default, so Healer 2 starts with its login off.',
+      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases, and macros joined the catalog in the group Healer profile. Orla stays with Default, so Healer 2 starts with its login off.',
     );
   });
 });

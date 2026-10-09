@@ -122,7 +122,7 @@ export function TriggerAdvanced({
       <Row
         label="Match"
         description={withChanged(
-          'Prompts match what your MUD sends before you type. Room matches the armies, things and people a room lists after its exits. Your target matches the line of the one you target with tar when a room lists them.',
+          'Prompts match what your MUD sends before you type. Room matches the armies, things, and people a room lists after its exits. Your target matches the line of the one you target with tar when a room lists them.',
           changed('target', (v) => MATCH_OPTIONS.find((o) => o.value === v)?.label ?? String(v)),
         )}
       >

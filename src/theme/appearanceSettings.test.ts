@@ -315,7 +315,7 @@ const custom = (id: string, label = id): CustomTheme => ({
 describe('themeCaption', () => {
   it('follows the description with the source, the author and the license', () => {
     expect(themeCaption(findTheme('kanso-zen'))).toBe(
-      'Calm Japanese dark. Cool blue accent, with sage, gold and red for status. ' +
+      'Calm Japanese dark. Cool blue accent, with sage, gold, and red for status. ' +
         'Its colors come from kanso.nvim by Webhooked, under the MIT license.',
     );
     expect(themeCaption(findTheme('solarized-light'))).toBe(
@@ -326,7 +326,7 @@ describe('themeCaption', () => {
 
   it('says James Wright made a theme of its own for Vosh', () => {
     expect(themeCaption(findTheme('obsidian-ember'))).toBe(
-      'Warm near black ground, pastel colors and a single ember accent. ' +
+      'Warm near black ground, pastel colors, and a single ember accent. ' +
         'James Wright made it for Vosh, under the GPL version 3.',
     );
   });
@@ -378,11 +378,11 @@ describe('colorVisionNote', () => {
   // says what turns into what, as far as the theme leaves room.
   it('says what each vision swaps, in the game text and the window', () => {
     const redGreen =
-      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
+      'In the game text greens turn blue, reds lean toward orange, and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
     expect(colorVisionNote('deuteranopia')).toBe(redGreen);
     expect(colorVisionNote('protanopia')).toBe(redGreen);
     expect(colorVisionNote('tritanopia')).toBe(
-      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
+      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn, and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
     );
   });
 
@@ -395,7 +395,7 @@ describe('colorVisionNote', () => {
     );
     expect(colorVisionNote('protanopia', false)).toBe(colorVisionNote('deuteranopia', false));
     expect(colorVisionNote('tritanopia', false)).toBe(
-      "Game text keeps your base palette while the theme's colors are off for MUD text. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.",
+      "Game text keeps your base palette while the theme's colors are off for MUD text. The window keeps danger, warn, and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.",
     );
     for (const vision of COLOR_VISIONS) {
       expect(colorVisionNote(vision, false)).not.toContain('nothing changes');

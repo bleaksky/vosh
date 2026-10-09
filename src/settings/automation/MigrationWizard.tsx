@@ -232,7 +232,7 @@ const DONE_BODY =
 function introLine(plan: MigrationPlan | null): string {
   const names = plan && plan.source_profiles.length > 0 ? plan.source_profiles : null;
   const whose = names ? `of ${listJoin(names)}` : 'of your profiles';
-  return `Vosh merges the aliases, triggers and macros ${whose} into one catalog, with a loadout for each character. Nothing changes until you apply it.`;
+  return `Vosh merges the aliases, triggers, and macros ${whose} into one catalog, with a loadout for each character. Nothing changes until you apply it.`;
 }
 
 interface PlanViewProps {
@@ -316,7 +316,7 @@ export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
 /** A few names, then how many more. */
 function namesLine(names: string[]): string {
   if (names.length <= MOST_NAMES) return names.join(', ');
-  return `${names.slice(0, MOST_NAMES).join(', ')} and ${names.length - MOST_NAMES} more`;
+  return `${names.slice(0, MOST_NAMES).join(', ')}, and ${names.length - MOST_NAMES} more`;
 }
 
 /** The presets a character gains and loses once every character shares

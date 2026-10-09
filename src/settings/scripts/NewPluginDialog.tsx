@@ -11,7 +11,7 @@ import { pluginNameOk, takenPluginName } from './pluginName';
 // list with it, which opens the new plugin's page.
 
 /** The hint under the field, which says the rule. */
-const NAME_HINT = 'Letters, digits and underscores.';
+const NAME_HINT = 'Letters, digits, and underscores.';
 
 interface Props {
   /** Your plugins, whose names are taken. */

@@ -100,7 +100,7 @@ export function VitalsTextRows({ config }: { config: UiConfig }) {
     <>
       <Row
         label="Your vitals text"
-        description="Write your vitals with the codes your prompt uses. Your text decides which vitals show, their order, their colors and how values read."
+        description="Write your vitals with the codes your prompt uses. Your text decides which vitals show, their order, their colors, and how values read."
         anchor="vitals-text"
       >
         {/* The card for your text opens over the main window's terminal. */}

@@ -167,7 +167,7 @@ describe('InputPage', () => {
       between(off, 'data-st-anchor="type-colors"', 'data-st-anchor="keep-last"'),
     ).not.toContain('checked=""');
     expect(off).toContain(
-      'Aliases, Vosh commands and chat each take a color, and a # command Vosh doesn’t know turns red.',
+      'Aliases, Vosh commands, and chat each take a color, and a # command Vosh doesn’t know turns red.',
     );
     expect(labels(off)).not.toContain('Aliases');
 
@@ -182,7 +182,7 @@ describe('InputPage', () => {
       'A # command Vosh doesn’t know',
     ]);
     expect(four).toContain('Commands that start with #, like #walk.');
-    expect(four).toContain('Say, tell, reply and the channels.');
+    expect(four).toContain('Say, tell, reply, and the channels.');
     const swatches = [...four.matchAll(/st-color-swatch" style="background:([^"]*)"/g)].map(
       (m) => m[1],
     );

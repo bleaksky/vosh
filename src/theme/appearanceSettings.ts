@@ -233,11 +233,11 @@ export function colorVisionNote(vision: ColorVision, themeTerminalColors = true)
   const game = themeTerminalColors
     ? vision === 'tritanopia'
       ? 'In the game text blues turn purple and magentas turn pink.'
-      : 'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room.'
+      : 'In the game text greens turn blue, reds lean toward orange, and blues toward violet, as far as your theme leaves room.'
     : "Game text keeps your base palette while the theme's colors are off for MUD text.";
   const window =
     vision === 'tritanopia'
-      ? 'The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.'
+      ? 'The window keeps danger, warn, and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.'
       : 'In the window success turns blue and danger leans toward orange.';
   return `${game} ${window}`;
 }

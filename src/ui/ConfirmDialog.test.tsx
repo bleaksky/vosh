@@ -60,7 +60,7 @@ describe('ConfirmDialog', () => {
         onCancel={none}
       >
         <label className="ov-field-label">Name</label>
-        <p className="ov-hint">Letters, digits and underscores.</p>
+        <p className="ov-hint">Letters, digits, and underscores.</p>
       </ConfirmDialog>,
     );
     const order = [

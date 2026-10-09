@@ -77,7 +77,7 @@ export interface AppTheme {
 const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',
-  description: 'Calm Japanese dark. Cool blue accent, with sage, gold and red for status.',
+  description: 'Calm Japanese dark. Cool blue accent, with sage, gold, and red for status.',
   source: 'kanso.nvim',
   author: 'Webhooked',
   license: 'MIT',
@@ -138,7 +138,7 @@ const kansoZen: AppTheme = {
 const obsidianEmber: AppTheme = {
   id: 'obsidian-ember',
   label: 'Obsidian Ember',
-  description: 'Warm near black ground, pastel colors and a single ember accent.',
+  description: 'Warm near black ground, pastel colors, and a single ember accent.',
   source: 'Vosh',
   author: 'James Wright',
   license: 'GPL-3.0',
@@ -1276,7 +1276,7 @@ const nightfly: AppTheme = {
   id: 'nightfly',
   label: 'Nightfly',
   description:
-    'Deep navy night after Night Owl, with soft text, distinct bright colors and a violet accent.',
+    'Deep navy night after Night Owl, with soft text, distinct bright colors, and a violet accent.',
   source: 'nightfly',
   author: 'bluz71',
   license: 'MIT',

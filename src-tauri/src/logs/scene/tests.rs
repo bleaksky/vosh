@@ -194,7 +194,7 @@ fn the_file_holds_what_stays_with_a_header_and_a_footer() {
         html.contains("<p>Orla in The Forsaken Lands, October 3, 2026, from 21:14 to 21:15</p>")
     );
     assert!(html.contains(
-        "<footer>Saved from Vosh. Prompts, your commands and five channels were left out.</footer>"
+        "<footer>Saved from Vosh. Prompts, your commands, and five channels were left out.</footer>"
     ));
     assert!(html.contains(
         "Maren walks in.\n\nTolliver says '<span class=\"c11 b\">The day has begun.</span>'\nYou say '"

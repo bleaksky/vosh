@@ -972,7 +972,7 @@ export const PRESETS: Preset[] = [
     id: 'numpad_movement',
     category: 'movement',
     name: 'Numpad movement',
-    description: 'Walk with the numpad. The game has six directions, so 7, 1 and 5 stay free.',
+    description: 'Walk with the numpad. The game has six directions, so 7, 1, and 5 stay free.',
     suggest: [],
     sample: [],
     colors: {},

@@ -54,7 +54,7 @@ const NOTE_GUIDE: Guide = {
   head: 'From help note',
   rows: [
     'Spell every name in To right, or the note never gets there',
-    'To takes a name, a cabal, your class or race, immortal or all',
+    'To takes a name, a cabal, your class or race, immortal, or all',
   ],
   words: ['Readers see your lines exactly as you break them, so Vosh keeps them to 75 columns.'],
   help: 'note',
@@ -63,7 +63,7 @@ const NOTE_GUIDE: Guide = {
 const REPORT_GUIDE: Guide = {
   head: 'From help bug',
   rows: ['Post it from the room where it happened'],
-  words: ['The game adds your name, your level and the room you post from.'],
+  words: ['The game adds your name, your level, and the room you post from.'],
   help: 'bug',
 };
 
@@ -74,12 +74,12 @@ const DESCRIPTION_GUIDE: Guide = {
       head: 'A picture frozen in time',
       sub: 'How you look, or look to be doing, with no action under way.',
     },
-    { head: 'Never force the looker', sub: 'Leave what they do, feel or think to them.' },
+    { head: 'Never force the looker', sub: 'Leave what they do, feel, or think to them.' },
     {
       head: 'You, not your history',
-      sub: 'Your stance, face, body and gear. Not who you are or where you came from.',
+      sub: 'Your stance, face, body, and gear. Not who you are or where you came from.',
     },
-    { head: 'No boasting', sub: 'Not how powerful, fearful or deadly you are.' },
+    { head: 'No boasting', sub: 'Not how powerful, fearful, or deadly you are.' },
     { head: 'Gear you want is fine', sub: 'A crested shield or a sword you would like to carry.' },
   ],
   words: [

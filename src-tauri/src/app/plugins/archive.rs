@@ -110,7 +110,7 @@ pub(crate) fn read(file: &str, source: Source) -> Result<Package, String> {
     let manifest = manifest.ok_or_else(|| no_manifest(file))?;
     if !plugin_name_ok(&manifest.name) {
         return Err(format!(
-            "Vosh did not install {file}. Its plugin name holds more than letters, digits and underscores."
+            "Vosh did not install {file}. Its plugin name holds more than letters, digits, and underscores."
         ));
     }
     Ok(Package {
@@ -613,7 +613,7 @@ entry = \"main.lua\"
         let zip = zip_of(&[("weather_pane/manifest.toml", manifest.as_bytes())]);
         assert_eq!(
             read_zip(zip).unwrap_err(),
-            "Vosh did not install weather_pane.zip. Its plugin name holds more than letters, digits and underscores."
+            "Vosh did not install weather_pane.zip. Its plugin name holds more than letters, digits, and underscores."
         );
         let zip = zip_of(&[("weather_pane/manifest.toml", b"[plugin\n")]);
         assert_eq!(

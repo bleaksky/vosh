@@ -113,7 +113,7 @@ impl std::fmt::Display for StepsError {
         match self {
             Self::Unreadable(text) => write!(
                 f,
-                "#walk cannot read {text}. Use n, e, s, w, u and d, each with an optional count, like 3n2e."
+                "#walk cannot read {text}. Use n, e, s, w, u, and d, each with an optional count, like 3n2e."
             ),
             Self::TooMany => write!(f, "#walk takes at most {MAX_STEPS} steps."),
         }

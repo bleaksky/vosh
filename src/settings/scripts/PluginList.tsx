@@ -42,7 +42,7 @@ export const NO_PLUGINS =
 
 /** The line under a plugin whose folder name breaks the rule. */
 export const MISNAMED_NOTE =
-  'Rename its folder with only letters, digits and underscores to open it or turn it on here.';
+  'Rename its folder with only letters, digits, and underscores to open it or turn it on here.';
 
 interface Props {
   /** Your plugins, or null until the list arrives. */

@@ -84,7 +84,7 @@ function hint(host: string, all: boolean): string {
   if (onForsakenLands(host)) {
     return 'Vosh starts plain, with every preset off. Each step shows one thing and what it does. Play when you like, and the list waits.';
   }
-  return `Vosh's presets and its Affects, Chat and Group panes are made for The Forsaken Lands, so on ${host.trim()} this list keeps to two steps.`;
+  return `Vosh's presets and its Affects, Chat, and Group panes are made for The Forsaken Lands, so on ${host.trim()} this list keeps to two steps.`;
 }
 
 export function GetStartedCard({
@@ -424,7 +424,7 @@ function StepPage({
         {step.id === 'panes' && (
           <>
             <p className="pc-copy">
-              Each new pane lands at the bottom of the panel. A pane's menu splits it, swaps it or
+              Each new pane lands at the bottom of the panel. A pane's menu splits it, swaps it, or
               closes it, and Vosh keeps the layout for each character.
             </p>
             <SentTells facts={facts} />

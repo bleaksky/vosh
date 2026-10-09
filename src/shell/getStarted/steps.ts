@@ -2,6 +2,7 @@ import { enabledPresetIds } from '../../automation/automationRecords';
 import { PRESETS, type Preset } from '../../automation/presets';
 import type { ConnectionTarget } from '../../ipc/session';
 import { knownWorld } from '../../lib/knownWorlds';
+import { listJoin } from '../../lib/text';
 
 // The steps of Get started. The list follows the world you connect to.
 // The Forsaken Lands gets five steps, the last two under After you log
@@ -135,7 +136,7 @@ export function stepMeta(id: StepId, host: string, facts: GetStartedFacts): stri
     }
     case 'panes': {
       const panes = socialPanes(facts);
-      return panes.length > 0 ? panes.join(' and ') : null;
+      return panes.length > 0 ? listJoin(panes) : null;
     }
     case 'affects':
       return facts.tracked > 0 ? `${facts.tracked} tracked` : null;

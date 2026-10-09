@@ -216,7 +216,7 @@ describe('CustomizeVitalsSection', () => {
     const html = draw({ vitals_style: 'text', vitals_colors: { mana: 12 } });
     expect(labels(html)).toEqual(['Your vitals text']);
     expect(html).toContain(
-      'Write your vitals with the codes your prompt uses. Your text decides which vitals show, their order, their colors and how values read.',
+      'Write your vitals with the codes your prompt uses. Your text decides which vitals show, their order, their colors, and how values read.',
     );
     expect(html).toContain('Edit…');
     expect(html).not.toContain('Vitals and their order');
