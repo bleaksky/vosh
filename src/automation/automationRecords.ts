@@ -6,8 +6,15 @@
 // applied over it, macros and timers go item by item, presets install
 // and remove triggers, and loadouts set the active list.
 
-import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
-import { groupKeyOf, searchText, type ListEntry } from './automationList';
+import {
+  draftChanges,
+  saveDraftOnto,
+  saveProblem,
+  type Draft,
+  type SavedWrite,
+  type SaveProblem,
+} from './automationDraft';
+import { compareGroups, groupKeyOf, searchText, type ListEntry } from './automationList';
 import { defaultEnabledIds, type Preset, PRESETS } from './presets';
 import {
   deleteMacro,
@@ -39,7 +46,9 @@ export interface AliasRecord {
 export function normalizeAlias(raw: unknown): AliasRecord {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const out: AliasRecord = {
-    name: typeof r.name === 'string' ? r.name : '',
+    // An alias matches the first word you type, so the store trims the
+    // name, and the page reads it trimmed.
+    name: typeof r.name === 'string' ? r.name.trim() : '',
     expansion: typeof r.expansion === 'string' ? r.expansion : '',
     enabled: r.enabled !== false,
   };
@@ -57,7 +66,7 @@ export function blankAlias(): AliasRecord {
 export function aliasesForSave(list: readonly AliasRecord[]): string {
   return JSON.stringify(
     list.map((a) => ({
-      name: a.name,
+      name: a.name.trim(),
       expansion: a.expansion,
       enabled: a.enabled,
       ...(a.group ? { group: a.group } : {}),
@@ -68,8 +77,56 @@ export function aliasesForSave(list: readonly AliasRecord[]): string {
   );
 }
 
-/** An alias's identity. The store keys aliases by name. */
-export const aliasKey = (alias: AliasRecord): string => alias.name;
+/** An alias's identity: its group and its name, as the store keys it.
+ *  Two groups may each hold an alias of one name. */
+export const aliasKey = (alias: AliasRecord): string =>
+  `${groupKeyOf(alias.group)}\u001f${alias.name.trim()}`;
+
+/** The order aliases of one name win in: the one in no group first,
+ *  then the groups as the list shows them, which is the order the store
+ *  tries them in. Negative when `a` wins over `b`. */
+export function compareAliasGroups(a: AliasRecord, b: AliasRecord): number {
+  const ga = groupKeyOf(a.group);
+  const gb = groupKeyOf(b.group);
+  if (ga === gb) return 0;
+  if (ga === '') return -1;
+  if (gb === '') return 1;
+  return compareGroups(ga, gb);
+}
+
+/** For each alias, the note that says another alias of its name fires
+ *  in its place, or null. Of the aliases of one name that are on, the
+ *  one Settings lists first fires, while its group is on. `groupOn`
+ *  says whether a group is on now. A group only the draft has is on. */
+export function coveredAliasNotes(
+  list: readonly AliasRecord[],
+  groupOn: (group: string) => boolean,
+): (string | null)[] {
+  const on = (a: AliasRecord) => {
+    const group = groupKeyOf(a.group);
+    return group === '' || groupOn(group);
+  };
+  return list.map((alias) => {
+    const name = alias.name.trim();
+    if (!alias.enabled || !name) return null;
+    const before = list.filter(
+      (other) =>
+        other !== alias &&
+        other.enabled &&
+        other.name.trim() === name &&
+        compareAliasGroups(other, alias) < 0,
+    );
+    if (before.length === 0) return null;
+    before.sort(compareAliasGroups);
+    const winner = before.find(on) ?? before[0];
+    const group = groupKeyOf(winner.group);
+    if (group === '') return `Your ${name} with no group fires instead.`;
+    if (!on(winner)) {
+      return `${group}’s ${name} fires instead whenever the ${group} group is on.`;
+    }
+    return `${group}’s ${name} fires instead while both groups are on.`;
+  });
+}
 
 /** The two calls the alias store takes a whole list through. */
 export interface AliasStoreApi {
@@ -115,13 +172,46 @@ export async function saveAliasDraft(
   );
 }
 
-export function validateAliases(list: readonly AliasRecord[]): string | null {
+/** Why the aliases cannot save yet, and which ones, or null. Every
+ *  alias needs a name of one word, since an alias matches the first word
+ *  you type. Two groups may each hold an alias of one name, but one
+ *  group holds only one of each. */
+export function validateAliases(list: readonly AliasRecord[]): SaveProblem | null {
+  const at = (test: (a: AliasRecord) => boolean) =>
+    list.flatMap((a, index) => (test(a) ? [index] : []));
+  const blank = at((a) => !a.name.trim());
+  if (blank.length > 0) {
+    return saveProblem(
+      blank.length === 1
+        ? 'This alias needs a name before you can save.'
+        : 'These aliases need names before you can save.',
+      blank,
+    );
+  }
+  const spaced = list.findIndex((a) => /\s/.test(a.name.trim()));
+  if (spaced >= 0) {
+    const name = list[spaced].name.trim();
+    return saveProblem(
+      `An alias name is one word, so ${quoted(name)} won’t work. Take out the space.`,
+      [spaced],
+    );
+  }
   const seen = new Set<string>();
   for (const a of list) {
-    const name = a.name.trim();
-    if (!name) return 'Give every alias a name before you save.';
-    if (seen.has(name)) return `Two aliases are named ${quoted(name)}. Give each one its own name.`;
-    seen.add(name);
+    const key = aliasKey(a);
+    if (!seen.has(key)) {
+      seen.add(key);
+      continue;
+    }
+    const name = quoted(a.name.trim());
+    const group = groupKeyOf(a.group);
+    const both = at((b) => aliasKey(b) === key);
+    return saveProblem(
+      group
+        ? `${group} has two aliases named ${name}. Rename one or move it to another group.`
+        : `You have two aliases named ${name} with no group. Rename one or give it a group.`,
+      both,
+    );
   }
   return null;
 }
@@ -157,14 +247,17 @@ export function blankMacro(): MacroRecord {
 /** Why the draft cannot save yet, or null. Only your macros need a key
  *  and a command of their own, since a preset macro saves nothing but
  *  its group, and yours may use a key a preset macro wants. */
-export function validateMacros(list: readonly MacroRecord[]): string | null {
-  const seen = new Set<string>();
-  for (const m of list) {
+export function validateMacros(list: readonly MacroRecord[]): SaveProblem | null {
+  const seen = new Map<string, number>();
+  for (const [index, m] of list.entries()) {
     if (m.preset) continue;
-    if (!m.key) return 'Press a key for every macro before you save.';
-    if (seen.has(m.key)) return `Two macros use ${m.key}. Give each one its own key.`;
-    seen.add(m.key);
-    if (!m.command.trim()) return `The macro on ${m.key} needs a command.`;
+    if (!m.key) return saveProblem('Press a key for every macro before you save.', [index]);
+    const first = seen.get(m.key);
+    if (first !== undefined) {
+      return saveProblem(`Two macros use ${m.key}. Give each one its own key.`, [first, index]);
+    }
+    seen.set(m.key, index);
+    if (!m.command.trim()) return saveProblem(`The macro on ${m.key} needs a command.`, [index]);
   }
   return null;
 }
@@ -288,12 +381,15 @@ export function blankTimer(): TimerRecord {
   return { id: null, name: '', interval_secs: 30, command: '', enabled: true };
 }
 
-export function validateTimers(list: readonly TimerRecord[]): string | null {
-  for (const t of list) {
+export function validateTimers(list: readonly TimerRecord[]): SaveProblem | null {
+  for (const [index, t] of list.entries()) {
     if (!t.command.trim()) {
-      return t.name.trim()
-        ? `The timer ${quoted(t.name.trim())} needs a command.`
-        : 'Every timer needs a command before you save.';
+      return saveProblem(
+        t.name.trim()
+          ? `The timer ${quoted(t.name.trim())} needs a command.`
+          : 'Every timer needs a command before you save.',
+        [index],
+      );
     }
   }
   return null;

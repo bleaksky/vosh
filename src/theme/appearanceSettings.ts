@@ -15,6 +15,7 @@ import {
   PANEL_FONT_TERMINAL,
 } from '../panel/panelFont';
 import { renderFontStack } from '../lib/fontLoader';
+import { offeredTextSizes, SCALABLE, type FontSizing } from '../lib/textSize';
 import type { CustomTheme } from '../ipc/theme';
 import type { SystemFontEntry } from '../ipc/uiConfig';
 import type { ThemePrefs } from './theme';
@@ -128,13 +129,17 @@ export function panelFontChoices(current: string, installed: readonly SystemFont
 
 // ── Size ─────────────────────────────────────────────────────────────
 
-/** The sizes the Size select offers, in points. */
-export const TEXT_SIZES: readonly number[] = [11, 12, 13, 14, 15, 16, 18];
+/** The sizes the Size select offers for a font that scales, in points:
+ *  every half step from 11 to 18. */
+export const TEXT_SIZES: readonly number[] = offeredTextSizes(SCALABLE);
 
-/** What the Size select offers: those sizes plus your current
- *  size when it is not one of them, smallest first. */
-export function sizeChoices(current: number): Choice[] {
-  const sizes = new Set<number>(TEXT_SIZES);
+/** What the Size select offers for a font with `sizing`: every half
+ *  step from 11 to 18 for a font that scales, or the sizes a bitmap only
+ *  font holds (src/lib/textSize.ts), plus your current size when it is
+ *  not one of them, smallest first. The arrow keys step through them, a
+ *  half at a time. */
+export function sizeChoices(current: number, sizing: FontSizing = SCALABLE): Choice[] {
+  const sizes = new Set<number>(offeredTextSizes(sizing));
   if (Number.isFinite(current) && current > 0) sizes.add(current);
   return [...sizes].sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n} pt` }));
 }
@@ -142,8 +147,8 @@ export function sizeChoices(current: number): Choice[] {
 /** What a Size select that can follow the terminal offers: Same as
  *  terminal, then the sizes Size offers, your size among them. Panel
  *  text and the command line both save 0 to follow the terminal. */
-export function sizeChoicesWithTerminal(current: number): Choice[] {
-  return [{ value: '0', label: 'Same as terminal' }, ...sizeChoices(current)];
+export function sizeChoicesWithTerminal(current: number, sizing: FontSizing = SCALABLE): Choice[] {
+  return [{ value: '0', label: 'Same as terminal' }, ...sizeChoices(current, sizing)];
 }
 
 // ── Light and dark themes ────────────────────────────────────────────

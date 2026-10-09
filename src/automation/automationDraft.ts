@@ -16,6 +16,19 @@
 
 import { listJoin } from '../lib/text';
 
+/** Why a list cannot save yet: the sentence the save bar shows, and
+ *  where in the list the items it names sit, so the list can mark
+ *  their rows and select the first. */
+export interface SaveProblem {
+  message: string;
+  at: number[];
+}
+
+/** A problem with `message` about the items at `at`. */
+export function saveProblem(message: string, at: number[] = []): SaveProblem {
+  return { message, at };
+}
+
 export interface DraftItem<T> {
   readonly uid: string;
   readonly value: T;

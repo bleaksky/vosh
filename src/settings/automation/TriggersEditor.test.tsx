@@ -323,7 +323,11 @@ async function mountEditor(
         on(area).onChange({ target: { value: text } });
         await new Promise((resolve) => setTimeout(resolve, 200));
       }),
-    error: () => error,
+    /** What stopped a Save, beside the save bar, else the last error
+     *  the page shows at the top. */
+    error: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-savebar-error')[0]?.textContent ??
+      error,
     /** The text of the card row the label `label` names. */
     row: (label: string) => {
       const name = findAll(

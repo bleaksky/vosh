@@ -109,10 +109,11 @@ export function useTerminalOptions({
     }
     if (nativeSurfaceEnabled()) {
       // The whole list, so the atlas falls back through it the way
-      // xterm does.
+      // xterm does, and the size as xterm takes it, a half step such as
+      // 13.5 included.
       void nativeSurfaceSetFont({
         family: fontFamily,
-        size: Math.round(fontSize),
+        size: fontSize,
       }).catch(() => {});
     }
     // xterm just measured its cell on the faces that had loaded, and a

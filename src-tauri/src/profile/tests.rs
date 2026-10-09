@@ -10,6 +10,7 @@ use super::login_match::AutoMatch;
 use crate::profile::file::ProfileConfig;
 use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 use crate::profile::shared::{strip_global_fields, GlobalConfig};
+use crate::profile::text_size::TextPx;
 use crate::profile::ui::CustomTheme;
 
 pub(crate) fn theme(id: &str, background: &str) -> CustomTheme {
@@ -36,7 +37,7 @@ pub(crate) fn styled_profile() -> Profile {
     profile.ui.day_theme = "classic-vivid".into();
     profile.ui.night_theme = "night-ink".into();
     profile.ui.custom_themes = vec![theme("night-ink", "#000000")];
-    profile.ui.font_size = 16;
+    profile.ui.font_size = TextPx::whole(16);
     profile.ui.terminal_line_height = "loose".into();
     profile
 }

@@ -246,30 +246,46 @@ pub(crate) fn install_preset_triggers(
         .filter_map(|t| t.preset.as_deref())
         .collect();
     let names: BTreeSet<&str> = triggers.iter().map(|t| t.name.as_str()).collect();
-    let removed: Vec<String> = p
+    let gone: Vec<Trigger> = p
         .triggers
         .list()
         .into_iter()
         .filter(|t| t.preset.as_deref().is_some_and(|id| presets.contains(id)))
         .filter(|t| !names.contains(t.name.as_str()))
-        .map(|t| t.name)
         .collect();
-    for name in &removed {
-        p.triggers.remove(name);
+    for t in &gone {
+        p.triggers.remove(t.group.as_deref(), &t.name);
     }
     for mut t in triggers {
-        // Each install overwrites same-named presets so pattern and
-        // template fixes land, but the group is your organization. A
-        // built trigger with no group keeps the one its stored copy has,
-        // so putting a preset into a group survives relaunch.
+        // Each install overwrites the stored copy of the preset trigger
+        // so pattern and template fixes land, but the group is your
+        // organization. A built trigger with no group keeps the one its
+        // stored copy has, so putting a preset into a group survives
+        // relaunch. The store knows a trigger by its group and its name,
+        // so every stored trigger of the name comes out first, as one
+        // install replaced it when the store kept one trigger per name,
+        // and a built trigger in another group never sits beside a copy.
+        // Settings never lets one of yours take a preset trigger's name.
+        // Only a trigger of another preset stays.
+        let copies: Vec<Trigger> = p
+            .triggers
+            .named(&t.name)
+            .into_iter()
+            .filter(|old| old.preset.is_none() || old.preset == t.preset)
+            .cloned()
+            .collect();
         if t.group.is_none() {
-            if let Some(existing) = p.triggers.get(&t.name) {
+            let tagged = copies.iter().find(|old| old.preset.is_some());
+            if let Some(existing) = tagged.or(copies.first()) {
                 t.group.clone_from(&existing.group);
             }
         }
+        for old in &copies {
+            p.triggers.remove(old.group.as_deref(), &old.name);
+        }
         p.triggers.set(t).map_err(|e| e.to_string())?;
     }
-    Ok(removed)
+    Ok(gone.into_iter().map(|t| t.name).collect())
 }
 
 /// One preset you turned on or off, as `presets_enabled_set` takes it.
@@ -1221,6 +1237,40 @@ mod tests {
         let group = |name| p.triggers.get(name).and_then(|t| t.group.clone());
         assert_eq!(group("disarm.secondary").as_deref(), Some("combat"));
         assert_eq!(group("buff.sanctuary").as_deref(), Some("buffs"));
+    }
+
+    #[test]
+    fn a_preset_trigger_moved_to_another_group_never_doubles_or_goes() {
+        let mut p = Profile::default();
+        let buff = "disarm_buff_fade";
+        // Your copy sits in Maren, and a trigger of yours of another name
+        // in Tolliver.
+        p.triggers
+            .set(preset_trigger(buff, "disarm.secondary", Some("Maren")))
+            .unwrap();
+        p.triggers
+            .set(Trigger {
+                preset: None,
+                ..preset_trigger(buff, "my.disarm", Some("Tolliver"))
+            })
+            .unwrap();
+        // A build that puts the trigger in a group of its own, then one
+        // with no group, then the same again.
+        for built in [Some("buffs"), None, None] {
+            let t = preset_trigger(buff, "disarm.secondary", built);
+            assert_eq!(install_preset_triggers(&mut p, vec![t]), Ok(Vec::new()));
+            let copies = p.triggers.named("disarm.secondary");
+            assert_eq!(copies.len(), 1, "{built:?}");
+            assert_eq!(copies[0].group.as_deref(), Some("buffs"));
+        }
+        assert!(p.triggers.get_in(Some("Tolliver"), "my.disarm").is_some());
+        // A whole list save from Settings sends the copy back as it is,
+        // and the next install still finds it.
+        let json = p.triggers.export_json().unwrap();
+        p.triggers.import_json(&json).unwrap();
+        let t = preset_trigger(buff, "disarm.secondary", None);
+        assert_eq!(install_preset_triggers(&mut p, vec![t]), Ok(Vec::new()));
+        assert_eq!(p.triggers.list().len(), 2);
     }
 
     fn switch(id: &str, on: bool) -> PresetSwitch {

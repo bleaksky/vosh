@@ -6,7 +6,8 @@
 // leaves the rest of the list, and its order, as it was.
 
 import { normalizeAlert } from './alertParts';
-import { saveDraftOnto, type Draft } from './automationDraft';
+import { saveDraftOnto, saveProblem, type Draft, type SaveProblem } from './automationDraft';
+import { groupKeyOf } from './automationList';
 import { parseJsonList } from './automationRecords';
 import { colorize, decolorize } from './colorTokens';
 import { PRESETS } from './presets';
@@ -346,7 +347,7 @@ export const HIGHLIGHT_COLORS: readonly { value: NamedColor; label: string }[] =
 export function normalizeTrigger(raw: unknown): TriggerRecord {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const out: TriggerRecord = {
-    name: typeof r.name === 'string' ? r.name : String(r.name ?? ''),
+    name: (typeof r.name === 'string' ? r.name : String(r.name ?? '')).trim(),
     patterns: normalizePatterns(r),
     priority: typeof r.priority === 'number' && Number.isFinite(r.priority) ? r.priority : 0,
     enabled: r.enabled !== false,
@@ -369,6 +370,7 @@ export function normalizeTrigger(raw: unknown): TriggerRecord {
 export function triggerForSave(trigger: TriggerRecord): TriggerRecord {
   return {
     ...trigger,
+    name: trigger.name.trim(),
     actions: trigger.actions.map((a) =>
       a.kind === 'replace' || a.kind === 'send' ? { ...a, template: colorize(a.template) } : a,
     ),
@@ -386,36 +388,51 @@ export function blankTrigger(): TriggerRecord {
   };
 }
 
-/** Why the triggers cannot save yet, or null. Every trigger needs a
- *  name, names must differ (the store keys by name, so a second one
- *  would replace the first), and a trigger needs a pattern. A trigger of
- *  yours never takes the name of a trigger in the preset library, its
- *  preset on or off, since the next launch would put the preset's in its
- *  place. */
-export function validateTriggers(list: readonly TriggerRecord[]): string | null {
-  for (const t of list) {
+/** Why the triggers cannot save yet, and which ones, or null. Every
+ *  trigger needs a name and a pattern. Two groups may each hold a
+ *  trigger of one name, and both fire, but one group holds only one of
+ *  each, since the store knows a trigger by its group and its name. A
+ *  name may hold spaces. A trigger of yours never takes the name of a
+ *  trigger in the preset library, its preset on or off, since the next
+ *  launch would put the preset's in its place. */
+export function validateTriggers(list: readonly TriggerRecord[]): SaveProblem | null {
+  for (const [index, t] of list.entries()) {
     if (t.preset) continue;
     const name = t.name.trim();
     const preset = PRESETS.find((p) => p.triggers.some((pt) => pt.name === name));
-    if (preset) return `${preset.name} uses the name ${name}. Give your trigger its own name.`;
-  }
-  const seen = new Set<string>();
-  for (const t of list) {
-    const name = t.name.trim();
-    if (!name) return 'Give every trigger a name before you save.';
-    if (seen.has(name)) {
-      return `Two triggers are named ${quoted(name)}. Give each one its own name.`;
+    if (preset) {
+      return saveProblem(`${preset.name} uses the name ${name}. Give your trigger its own name.`, [
+        index,
+      ]);
     }
-    seen.add(name);
+  }
+  const seen = new Map<string, number>();
+  for (const [index, t] of list.entries()) {
+    const name = t.name.trim();
+    if (!name) return saveProblem('Give every trigger a name before you save.', [index]);
+    const key = triggerKey(t);
+    const first = seen.get(key);
+    if (first !== undefined) {
+      const group = groupKeyOf(t.group);
+      return saveProblem(
+        group
+          ? `${group} has two triggers named ${quoted(name)}. Rename one or move it to another group.`
+          : `You have two triggers named ${quoted(name)} with no group. Rename one or give it a group.`,
+        [first, index],
+      );
+    }
+    seen.set(key, index);
     if (!t.patterns.some((p) => patternSource(p).trim().length > 0)) {
-      return `The trigger ${quoted(name)} needs a pattern.`;
+      return saveProblem(`The trigger ${quoted(name)} needs a pattern.`, [index]);
     }
   }
   return null;
 }
 
-/** A trigger's identity. The store keys triggers by name. */
-export const triggerKey = (trigger: TriggerRecord): string => trigger.name;
+/** A trigger's identity: its group and its name, as the store keys it.
+ *  Two groups may each hold a trigger of one name. */
+export const triggerKey = (trigger: TriggerRecord): string =>
+  `${groupKeyOf(trigger.group)}\u001f${trigger.name.trim()}`;
 
 /** The two calls the trigger store takes a whole list through. */
 export interface TriggerStoreApi {
@@ -455,21 +472,24 @@ async function storedList(api: TriggerStoreApi): Promise<unknown[]> {
   return list;
 }
 
-type Stored = { name?: unknown; group?: string | null };
+type Stored = { name?: unknown; group?: string | null; preset?: unknown };
 const isStored = (t: unknown): t is Stored => t !== null && typeof t === 'object';
 
-/** Set the trigger named `name` to match Prompts, as Match does in the
- *  Triggers editor. The prompt card offers it for a Line trigger that
- *  matched your prompt as a line, which no longer sees it once the
- *  profile reads your prompt. It reads the store's list again and writes
- *  it back with only that trigger's target changed, every other field as
- *  the store wrote it. */
+/** Set the trigger named `name` in `group`, null for none, to match
+ *  Prompts, as Match does in the Triggers editor. The prompt card offers
+ *  it for a Line trigger that matched your prompt as a line, which no
+ *  longer sees it once the profile reads your prompt. It reads the
+ *  store's list again and writes it back with only that trigger's target
+ *  changed, every other field as the store wrote it. */
 export async function moveTriggerToPrompts(
   name: string,
+  group: string | null = null,
   api: TriggerStoreApi = triggerStore(),
 ): Promise<void> {
   const list = await storedList(api);
-  const at = list.findIndex((t) => isStored(t) && t.name === name);
+  const at = list.findIndex(
+    (t) => isStored(t) && t.name === name && groupKeyOf(t.group) === groupKeyOf(group),
+  );
   if (at < 0) throw new Error(`Vosh no longer has a trigger named ${quoted(name)}.`);
   const next = [...list];
   next[at] = { ...(list[at] as Stored), target: 'prompt' };
@@ -477,16 +497,20 @@ export async function moveTriggerToPrompts(
 }
 
 /** Put each stored trigger `groups` names in its group there, blank for
- *  none, every other field as the store wrote it. A name the store does
- *  not hold is passed over, and with none to change it writes nothing. */
+ *  none, every other field as the store wrote it. With `preset`, only
+ *  that preset's copies move, so a trigger of yours of the name stays.
+ *  A name the store does not hold is passed over, and with none to
+ *  change it writes nothing. */
 export async function setTriggerGroups(
   groups: ReadonlyMap<string, string>,
   api: TriggerStoreApi = triggerStore(),
+  preset?: string,
 ): Promise<void> {
   const list = await storedList(api);
   let changed = false;
   const next = list.map((t) => {
-    const group = isStored(t) ? groups.get(String(t.name)) : undefined;
+    const ours = isStored(t) && (preset === undefined || t.preset === preset);
+    const group = ours ? groups.get(String(t.name)) : undefined;
     if (!isStored(t) || group === undefined) return t;
     const moved = withGroup(t, group);
     changed ||= moved.group !== t.group;

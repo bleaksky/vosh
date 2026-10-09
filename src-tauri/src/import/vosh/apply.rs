@@ -428,7 +428,10 @@ async fn gate_of(state: &SharedState, name: Option<&str>) -> Option<LoadoutSet> 
 fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
     let mut joined = 0;
     for trigger in join.triggers {
-        if p.triggers.get(&trigger.name).is_some() {
+        if p.triggers
+            .get_in(trigger.group.as_deref(), &trigger.name)
+            .is_some()
+        {
             continue;
         }
         let name = trigger.name.clone();
@@ -438,7 +441,10 @@ fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
         }
     }
     for alias in join.aliases {
-        if p.aliases.get(&alias.name).is_none() {
+        if p.aliases
+            .get_in(alias.group.as_deref(), &alias.name)
+            .is_none()
+        {
             p.aliases.set(alias);
             joined += 1;
         }

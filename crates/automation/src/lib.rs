@@ -22,5 +22,6 @@ mod stops;
 pub mod trigger;
 pub mod vars;
 
+pub use groups::compare_groups;
 pub use script_call::ScriptCall;
 pub use stops::StopKey;

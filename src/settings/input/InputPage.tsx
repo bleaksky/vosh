@@ -8,7 +8,9 @@ import {
   type InputLineBackground,
 } from '../../ipc/uiConfigInput';
 import type { SettingsTarget } from '../../lib/settingsNav';
-import { sizeChoicesWithTerminal } from '../../theme/appearanceSettings';
+import { BUNDLED_FONTS, sizeChoicesWithTerminal } from '../../theme/appearanceSettings';
+import { textSizeNote } from '../../lib/textSize';
+import { useFontSizing } from '../useFontSizing';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme } from '../../theme/themes';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
@@ -84,6 +86,8 @@ function opensAdvanced(target: SettingsTarget): boolean {
 
 export function InputPage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
+  // The command line draws in the terminal font.
+  const sizing = useFontSizing(config?.font_family || BUNDLED_FONTS[0].value);
   const [advanced, setAdvanced] = useState(() => opensAdvanced(target));
   const advancedId = useId();
   const baseAnsi = config?.terminal_base_ansi ?? null;
@@ -248,10 +252,10 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
             />
           )}
         </Row>
-        <Row label="Size" anchor="line-size">
+        <Row label="Size" anchor="line-size" description={textSizeNote(sizing)}>
           <Select
             value={String(config.input_line_size)}
-            options={sizeChoicesWithTerminal(config.input_line_size)}
+            options={sizeChoicesWithTerminal(config.input_line_size, sizing)}
             onChange={(size) => update({ input_line_size: Number(size) })}
             width={180}
           />

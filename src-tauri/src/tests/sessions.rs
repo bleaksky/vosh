@@ -656,8 +656,8 @@ async fn a_trigger_vosh_stops_in_one_session_fires_in_the_other_until_you_save_i
     assert!(!shows(&h, two, "Vosh stopped"));
     {
         let p = h.state.selected_profile().await;
-        assert!(p.triggers.is_stopped("ender", one.stop_key()));
-        assert!(!p.triggers.is_stopped("ender", two.stop_key()));
+        assert!(p.triggers.is_stopped(None, "ender", one.stop_key()));
+        assert!(!p.triggers.is_stopped(None, "ender", two.stop_key()));
     }
 
     // It stays off in the first session, though its Lua would no longer

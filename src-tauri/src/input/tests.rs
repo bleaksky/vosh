@@ -2141,6 +2141,82 @@ fn slash_unalias_removes() {
     assert_eq!(r.bytes, b"greet\r\n");
 }
 
+/// A profile with `ds` in the groups Maren and Tolliver.
+fn ds_in_two_groups() -> Profile {
+    let mut p = Profile::default();
+    for (expansion, group) in [("look", "Maren"), ("ponder", "Tolliver")] {
+        p.aliases.set(Alias {
+            group: Some(group.into()),
+            ..Alias::new("ds", expansion)
+        });
+    }
+    p
+}
+
+#[test]
+fn unalias_asks_which_group_when_two_hold_the_name() {
+    let mut p = ds_in_two_groups();
+    let r = process(&mut p, "#unalias ds");
+    assert!(
+        r.echo.iter().any(|l| l.contains(
+            "ds is in Maren and Tolliver, so name the group too, like #unalias ds Maren"
+        )),
+        "{:?}",
+        r.echo
+    );
+    assert_eq!(p.aliases.named("ds").len(), 2);
+    let r = process(&mut p, "#unalias ds Orla");
+    assert!(
+        r.echo
+            .iter()
+            .any(|l| l.contains("alias ds in Orla not found")),
+        "{:?}",
+        r.echo
+    );
+    let r = process(&mut p, "#unalias ds Maren");
+    assert!(
+        r.echo.iter().any(|l| l == "alias ds in Maren removed"),
+        "{:?}",
+        r.echo
+    );
+    assert_eq!(process(&mut p, "ds").bytes, b"ponder\r\n");
+    // With one left, the name alone is enough.
+    let r = process(&mut p, "#unalias ds");
+    assert!(
+        r.echo.iter().any(|l| l == "alias ds in Tolliver removed"),
+        "{:?}",
+        r.echo
+    );
+    let leftover = p.aliases.named("ds");
+    assert!(leftover.is_empty(), "{leftover:?}");
+}
+
+#[test]
+fn alias_again_replaces_the_one_that_fires_in_its_group() {
+    let mut p = ds_in_two_groups();
+    p.aliases.set_group_enabled("Maren", false);
+    let r = process(&mut p, "#alias ds glance");
+    assert!(
+        r.echo.iter().any(|l| l == "alias ds in Tolliver set"),
+        "{:?}",
+        r.echo
+    );
+    assert_eq!(
+        p.aliases.get_in(Some("Tolliver"), "ds").unwrap().expansion,
+        "glance"
+    );
+    assert_eq!(
+        p.aliases.get_in(Some("Maren"), "ds").unwrap().expansion,
+        "look"
+    );
+    let r = process(&mut p, "#aliases");
+    assert!(
+        r.echo.iter().any(|l| l.contains("ds in Maren -> look")),
+        "{:?}",
+        r.echo
+    );
+}
+
 #[test]
 fn slash_var_set_and_show() {
     let mut p = Profile::default();
@@ -2225,7 +2301,13 @@ fn alias_recursion_returns_error_echo_not_panic() {
     let r = process(&mut p, "loop");
     let leftover = &r.bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
-    assert!(r.echo.iter().any(|l| l.contains("recursion limit")));
+    assert!(
+        r.echo
+            .iter()
+            .any(|l| l.contains("alias loop calls itself, so Vosh stopped it after 16 steps")),
+        "{:?}",
+        r.echo
+    );
 }
 
 #[test]
@@ -2316,6 +2398,78 @@ fn slash_untrigger_removes() {
     let _ = process(&mut p, "#trigger spam {tingle} gag");
     let _ = process(&mut p, "#untrigger spam");
     assert_eq!(p.triggers.len(), 0);
+}
+
+/// A profile with a trigger named `greet` in the Maren and Tolliver
+/// groups, and `hp watch` in the Orla group.
+fn triggers_in_groups() -> Profile {
+    use vosh_automation::trigger::Trigger;
+    let mut p = Profile::default();
+    for (name, group, command) in [
+        ("greet", "Tolliver", "bow"),
+        ("greet", "Maren", "wave"),
+        ("hp watch", "Orla", "quaff"),
+    ] {
+        p.triggers
+            .set(Trigger {
+                group: Some(group.into()),
+                ..Trigger::new(
+                    name,
+                    "^Orla arrives",
+                    TriggerAction::Send {
+                        template: command.into(),
+                    },
+                )
+            })
+            .unwrap();
+    }
+    p
+}
+
+#[test]
+fn untrigger_asks_which_group_when_two_hold_the_name() {
+    let mut p = triggers_in_groups();
+    let r = process(&mut p, "#untrigger greet");
+    assert_eq!(
+        r.echo,
+        ["[greet is in Maren and Tolliver, so name the group too, like #untrigger greet Maren]"]
+    );
+    assert_eq!(p.triggers.len(), 3);
+    let r = process(&mut p, "#untrigger greet Orla");
+    assert_eq!(r.echo, ["[trigger greet Orla not found]"]);
+    let r = process(&mut p, "#untrigger greet Maren");
+    assert_eq!(r.echo, ["trigger greet in Maren removed"]);
+    assert!(p.triggers.get_in(Some("Tolliver"), "greet").is_some());
+    // One left, so the name alone finds it.
+    let r = process(&mut p, "#untrigger greet");
+    assert_eq!(r.echo, ["trigger greet in Tolliver removed"]);
+    // A name with a space in it, alone and with its group.
+    let r = process(&mut p, "#untrigger hp watch Orla");
+    assert_eq!(r.echo, ["trigger hp watch in Orla removed"]);
+    assert!(p.triggers.is_empty());
+}
+
+#[test]
+fn trigger_replaces_the_first_listed_and_keeps_its_group() {
+    let mut p = triggers_in_groups();
+    let r = process(&mut p, "#trigger greet {^Orla waves} send nod");
+    assert_eq!(r.echo, ["trigger greet in Maren set"]);
+    assert_eq!(p.triggers.named("greet").len(), 2);
+    assert_eq!(
+        p.triggers
+            .get_in(Some("Maren"), "greet")
+            .unwrap()
+            .first_pattern(),
+        "^Orla waves"
+    );
+    let r = process(&mut p, "#triggers");
+    assert!(
+        r.echo
+            .iter()
+            .any(|l| l.contains("greet in Tolliver /^Orla arrives/")),
+        "{:?}",
+        r.echo
+    );
 }
 
 #[test]

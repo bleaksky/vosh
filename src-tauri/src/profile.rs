@@ -20,5 +20,6 @@ pub(crate) mod shared;
 pub(crate) mod switch;
 #[cfg(test)]
 pub(crate) mod tests;
+pub(crate) mod text_size;
 pub(crate) mod ui;
 pub(crate) mod worlds;

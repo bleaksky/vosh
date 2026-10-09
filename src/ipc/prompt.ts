@@ -477,10 +477,12 @@ export async function promptCodeReaderSet(on: boolean, session?: number): Promis
   await invoke('prompt_code_reader_set', { on, session });
 }
 
-/** A Line trigger that matched your prompt as a line. `preset` says
- *  a highlight preset installed it. */
+/** A Line trigger that matched your prompt as a line. `group` is its
+ *  group, null for none, and `preset` says a highlight preset installed
+ *  it. */
 export interface PromptLineTrigger {
   name: string;
+  group?: string | null;
   pattern: string;
   preset: boolean;
 }

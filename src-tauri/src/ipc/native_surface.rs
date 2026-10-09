@@ -381,10 +381,11 @@ pub(crate) fn native_surface_find_clear(
 }
 
 /// Native renderer (macOS): rebuild the surface atlas at a new font
-/// list and size (CSS px) so it matches the configured Vosh font. `family`
-/// is the CSS font list xterm draws with. A no-op elsewhere.
+/// list and size (CSS px, half steps such as 13.5 included) so it matches
+/// the configured Vosh font. `family` is the CSS font list xterm draws
+/// with. A no-op elsewhere.
 #[tauri::command]
-pub(crate) fn native_surface_set_font(family: String, size: u32) {
+pub(crate) fn native_surface_set_font(family: String, size: f32) {
     #[cfg(native_surface)]
     crate::native::surface::device::request_set_font(family, size);
     #[cfg(not(native_surface))]

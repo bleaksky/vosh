@@ -18,6 +18,7 @@ use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::live::Profile;
 use crate::profile::panes::DockEntryPersist;
 use crate::profile::set::ProfileSet;
+use crate::profile::text_size::TextPx;
 use crate::profile::ui::{
     default_color_vision, is_default_color_vision, is_default_font_family, read_theme_follow,
     set_theme_follow, CustomTheme, UiConfig, DEFAULT_PANEL_FONT_SIZE,
@@ -115,7 +116,7 @@ pub(crate) struct GlobalConfig {
     #[serde(default)]
     pub font_family: Option<String>,
     #[serde(default)]
-    pub font_size: Option<u32>,
+    pub font_size: Option<TextPx>,
     #[serde(default)]
     pub follow_system_appearance: Option<bool>,
     #[serde(default)]
@@ -154,7 +155,7 @@ pub(crate) struct GlobalConfig {
     /// `font_family` here, a missing panel size is 12 (see
     /// `shared_panel_font_size`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub panel_font_size: Option<u32>,
+    pub panel_font_size: Option<TextPx>,
     #[serde(default)]
     pub dock_layout: Option<Vec<DockEntryPersist>>,
     #[serde(default)]
@@ -311,7 +312,7 @@ impl GlobalConfig {
     /// The panel size every character shares, or None while the font is
     /// not shared. The file leaves out 12, the default, so a shared font
     /// with no panel size of its own is 12.
-    fn shared_panel_font_size(&self) -> Option<u32> {
+    fn shared_panel_font_size(&self) -> Option<TextPx> {
         self.font_family
             .as_ref()
             .map(|_| self.panel_font_size.unwrap_or(DEFAULT_PANEL_FONT_SIZE))
@@ -752,7 +753,7 @@ mod tests {
         // Set up a profile with both per-profile and global fields.
         let mut profile = Profile::default();
         profile.ui.theme = "tokyo-night".into();
-        profile.ui.font_size = 18;
+        profile.ui.font_size = TextPx::whole(18);
         profile.ui.keep_last_command = true;
         profile.ui.tracked_affects = vec![
             TrackedAffect {
@@ -792,7 +793,7 @@ mod tests {
         parsed_global.apply_to(&mut restored);
 
         assert_eq!(restored.ui.theme, "tokyo-night");
-        assert_eq!(restored.ui.font_size, 18);
+        assert_eq!(restored.ui.font_size, TextPx::whole(18));
         assert!(restored.ui.keep_last_command);
         assert_eq!(restored.ui.tracked_affects.len(), 2);
         let labeled = restored
@@ -907,7 +908,7 @@ mod tests {
         let (per_profile, restored) = split_and_reload(&profile, &ScopeConfig::default());
         assert_eq!(per_profile.ui.terminal_line_height, "default");
         assert_eq!(restored.ui.terminal_line_height, "loose");
-        assert_eq!(restored.ui.font_size, 16);
+        assert_eq!(restored.ui.font_size, TextPx::whole(16));
     }
 
     #[test]
@@ -947,7 +948,7 @@ mod tests {
         assert_eq!(profile.ui.dark_theme, "night-ink");
         assert_eq!(theme_ids(&profile.ui.custom_themes), ["night-ink"]);
         assert_eq!(profile.ui.font_family, "Iosevka");
-        assert_eq!(profile.ui.font_size, 16);
+        assert_eq!(profile.ui.font_size, TextPx::whole(16));
         assert_eq!(profile.ui.terminal_line_height, "loose");
         assert!(profile.ui.keep_last_command);
         assert!(profile.ui.auto_update);
@@ -1015,7 +1016,7 @@ mod tests {
         assert!(leftover.is_empty(), "{leftover:?}");
         assert!(!live.ui.follow_system_appearance);
         // The font is still shared, so it stays.
-        assert_eq!(live.ui.font_size, 16);
+        assert_eq!(live.ui.font_size, TextPx::whole(16));
         assert_eq!(live.ui.font_family, "Iosevka");
     }
 
@@ -1030,7 +1031,7 @@ mod tests {
         };
         assert!(shared.hand_out(&mut ui, "alt"));
         assert_eq!(ui.font_family, "Iosevka");
-        assert_eq!(ui.font_size, 16);
+        assert_eq!(ui.font_size, TextPx::whole(16));
         // A font you picked is your own and stays.
         let picked = "\"Fira Code\", Menlo, monospace";
         let mut own = UiConfig {
@@ -1060,7 +1061,7 @@ mod tests {
         assert!(global.theme.is_none());
         assert!(global.custom_themes.is_none());
         assert!(global.light_theme.is_none());
-        assert_eq!(global.font_size, Some(16));
+        assert_eq!(global.font_size, Some(TextPx::whole(16)));
         assert_eq!(global.keep_last_command, Some(true));
         let missing = dir.path().join("missing.toml");
         assert!(GlobalConfig::load_shared(&missing, &scope)
@@ -1286,7 +1287,7 @@ mod tests {
     #[test]
     fn the_font_scope_carries_the_panel_size() {
         let mut profile = styled_profile();
-        profile.ui.panel_font_size = 16;
+        profile.ui.panel_font_size = TextPx::whole(16);
         let scope = ScopeConfig::default();
         let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
             .expect("global config serializes");
@@ -1295,8 +1296,8 @@ mod tests {
             "{global_text}"
         );
         let (per_profile, restored) = split_and_reload(&profile, &scope);
-        assert_eq!(per_profile.ui.panel_font_size, 12);
-        assert_eq!(restored.ui.panel_font_size, 16);
+        assert_eq!(per_profile.ui.panel_font_size, TextPx::whole(12));
+        assert_eq!(restored.ui.panel_font_size, TextPx::whole(16));
 
         // Kept per profile, it stays in the profile file.
         let scope = ScopeConfig {
@@ -1307,8 +1308,8 @@ mod tests {
             .expect("global config serializes");
         assert!(!global_text.contains("panel_font_size"), "{global_text}");
         let (per_profile, restored) = split_and_reload(&profile, &scope);
-        assert_eq!(per_profile.ui.panel_font_size, 16);
-        assert_eq!(restored.ui.panel_font_size, 16);
+        assert_eq!(per_profile.ui.panel_font_size, TextPx::whole(16));
+        assert_eq!(restored.ui.panel_font_size, TextPx::whole(16));
     }
 
     #[test]
@@ -1321,35 +1322,35 @@ mod tests {
         // So a profile file that kept a panel size of its own from before
         // the font was shared draws at the 12 every character shares.
         let mut live = Profile::default();
-        live.ui.panel_font_size = 0;
+        live.ui.panel_font_size = TextPx::whole(0);
         toml::from_str::<GlobalConfig>(&text)
             .unwrap()
             .apply_to(&mut live);
-        assert_eq!(live.ui.panel_font_size, 12);
+        assert_eq!(live.ui.panel_font_size, TextPx::whole(12));
         // A global.toml that shares no font leaves it alone.
-        live.ui.panel_font_size = 0;
+        live.ui.panel_font_size = TextPx::whole(0);
         GlobalConfig::default().apply_to(&mut live);
-        assert_eq!(live.ui.panel_font_size, 0);
+        assert_eq!(live.ui.panel_font_size, TextPx::whole(0));
     }
 
     #[test]
     fn a_profile_with_its_own_panel_size_keeps_it_when_the_font_stops_being_shared() {
         let mut profile = shared_profile();
-        profile.ui.panel_font_size = 0;
+        profile.ui.panel_font_size = TextPx::whole(0);
         let shared = GlobalConfig::from_profile(&profile, &ScopeConfig::default());
-        assert_eq!(shared.panel_font_size, Some(0));
+        assert_eq!(shared.panel_font_size, Some(TextPx::whole(0)));
         // A file with no font of its own takes the shared panel size.
         let mut ui = UiConfig::default();
         assert!(shared.hand_out(&mut ui, "alt"));
-        assert_eq!(ui.panel_font_size, 0);
+        assert_eq!(ui.panel_font_size, TextPx::whole(0));
         assert_eq!(ui.font_family, "Iosevka");
         // A panel size of its own is its own font, and it all stays.
         let mut ui = UiConfig {
-            panel_font_size: 15,
+            panel_font_size: TextPx::whole(15),
             ..UiConfig::default()
         };
         shared.hand_out(&mut ui, "alt");
-        assert_eq!(ui.panel_font_size, 15);
+        assert_eq!(ui.panel_font_size, TextPx::whole(15));
         assert_eq!(ui.font_family, UiConfig::default().font_family);
     }
 }
@@ -1367,6 +1368,7 @@ mod scope_change_tests {
     use crate::profile::live::Profile;
     use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
     use crate::profile::tests::{james_like_set, persist_live, shared_profile, theme, theme_ids};
+    use crate::profile::text_size::TextPx;
     use crate::profile::ui::{TrackedAffect, UiConfig};
 
     /// Mirror a switch. The active profile file loads first, then the
@@ -1416,7 +1418,7 @@ mod scope_change_tests {
         let mut prompt = ProfileConfig::default();
         prompt.ui.theme = "night-ink".into();
         prompt.ui.custom_themes = vec![theme("night-ink", "#ffffff")];
-        prompt.ui.font_size = 13;
+        prompt.ui.font_size = TextPx::whole(13);
         prompt.save(&set.profile_path("Test-Prompt")).unwrap();
 
         let state: SharedState = Arc::new(AppState::default());
@@ -1463,7 +1465,7 @@ mod scope_change_tests {
         assert_eq!(healer.night_theme, "night-ink");
         assert_eq!(theme_ids(&healer.custom_themes), ["night-ink"]);
         assert_eq!(healer.font_family, "Iosevka");
-        assert_eq!(healer.font_size, 16);
+        assert_eq!(healer.font_size, TextPx::whole(16));
         assert_eq!(healer.terminal_line_height, "loose");
         assert!(healer.keep_last_command);
         assert!(healer.auto_update);
@@ -1482,7 +1484,7 @@ mod scope_change_tests {
             own
         });
         assert_eq!(prompt.theme, "night-ink-2");
-        assert_eq!(prompt.font_size, 13);
+        assert_eq!(prompt.font_size, TextPx::whole(13));
         assert_eq!(prompt.font_family, UiConfig::default().font_family);
         assert!(prompt.keep_last_command);
 
@@ -1490,13 +1492,13 @@ mod scope_change_tests {
         set.switch("Healer").unwrap();
         let healer = load(set);
         assert_eq!(healer.ui.theme, "night-ink");
-        assert_eq!(healer.ui.font_size, 16);
+        assert_eq!(healer.ui.font_size, TextPx::whole(16));
         assert!(healer.ui.keep_last_command);
         // The live profile kept its values in its own file.
         set.switch(DEFAULT_PROFILE_NAME).unwrap();
         let live = load(set);
         assert_eq!(live.ui.theme, "night-ink");
-        assert_eq!(live.ui.font_size, 16);
+        assert_eq!(live.ui.font_size, TextPx::whole(16));
     }
 
     #[tokio::test]
@@ -1547,7 +1549,7 @@ mod scope_change_tests {
         let guard = state.profile_set.lock().await;
         let set = guard.as_ref().unwrap();
         let bard = file(set, "Bard").ui;
-        assert_eq!(bard.font_size, 16);
+        assert_eq!(bard.font_size, TextPx::whole(16));
         assert_eq!(bard.terminal_line_height, "loose");
         // The theme is still shared, so the file keeps the defaults.
         let leftover = &bard.custom_themes;

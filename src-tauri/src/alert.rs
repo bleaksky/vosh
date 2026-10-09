@@ -54,8 +54,9 @@ pub(crate) struct Alert {
     /// What the 10 second cap counts it under, such as `trigger:visitor`
     /// or `preset:alert_tells:Tolliver`.
     pub(crate) cap: String,
-    /// Where it came from, for the page: `trigger:<name>`,
-    /// `preset:<id>` or `lua:<owner>`.
+    /// Where it came from, for the page: `trigger:<name>`, with the
+    /// unit separator and the group after the name for a trigger in a
+    /// group, `preset:<id>` or `lua:<owner>`.
     pub(crate) source: String,
     /// The banner's title, such as `Tell from Tolliver`.
     pub(crate) title: String,
@@ -69,11 +70,17 @@ pub(crate) struct Alert {
 }
 
 impl Alert {
-    /// The alert of the trigger `trigger` that matched `line`.
+    /// The alert of the trigger `trigger` that matched `line`. Two groups
+    /// may each hold a trigger of one name, so the key of one in a group
+    /// carries the group too, and each rings under its own cap.
     pub(crate) fn of_trigger(alert: &vosh_automation::trigger::TriggerAlert, line: &str) -> Self {
+        let key = match &alert.group {
+            Some(group) => format!("trigger:{}\u{1f}{group}", alert.trigger),
+            None => format!("trigger:{}", alert.trigger),
+        };
         Self {
-            cap: format!("trigger:{}", alert.trigger),
-            source: format!("trigger:{}", alert.trigger),
+            cap: key.clone(),
+            source: key,
             title: alert.trigger.clone(),
             words: Some(line.to_string()),
             parts: alert.parts.clone(),

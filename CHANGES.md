@@ -2,6 +2,19 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.95.2 - 2026-10-09
+
+Pick text sizes in half steps, and give each character its own aliases and triggers with the same names.
+
+- Terminal text, panel text, and the command line take half sizes, such as 13.5. A font that only comes in fixed sizes keeps to them and says so.
+- Two groups can each hold an alias with the same name. While both groups are on, the group listed first wins, and Settings shows which one fires. Use a loadout for each character so each one fires for its own character.
+- Two groups can each hold a trigger with the same name, and both fire while both groups are on.
+- When Settings can't save your aliases, triggers, macros, or timers, it says why beside Save and marks the rows to fix.
+- Alias and trigger names lose stray spaces at either end. An alias name with a space inside is refused, with the reason.
+- A new group that a loadout doesn't list says so before it turns off at your next launch.
+- An alias that calls itself is named in the error.
+- #unalias and #untrigger ask which group you mean when two groups hold the name.
+
 ## v0.95.1 - 2026-10-09
 
 Write your descriptions, notes and history in a card built for it, save a scene to share, and shape the command line your way. This is the test build before 1.0.

@@ -392,7 +392,7 @@ fn a_plugin_alias_or_a_stopped_alias_tells_every_window_once() {
     listening.finish("a plugin that turned off", &mut heard, &mut want);
 
     let stop = || ScriptOutcome {
-        stopped: vec![Owner::Alias("greet".into())],
+        stopped: vec![Owner::alias("greet")],
         ..ScriptOutcome::default()
     };
     let listening = Heard::listen(&app, &[ALIASES_CHANGED]);

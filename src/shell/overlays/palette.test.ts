@@ -653,6 +653,27 @@ describe('alias rows', () => {
   });
 });
 
+describe('an alias name two groups share', () => {
+  it('gets one row, the alias Settings lists first, with its group in the id', async () => {
+    const exported = JSON.stringify([
+      { name: 'ds', expansion: "cast 'detect scry' tolliver", group: 'Tolliver' },
+      { name: 'ds', expansion: "cast 'detect scry' maren", group: 'Maren' },
+      { name: 'ds', expansion: 'ponder', group: 'Orla', enabled: false },
+    ]);
+    vi.mocked(invoke).mockClear();
+    vi.mocked(invoke).mockImplementationOnce(((command: string) =>
+      Promise.resolve(command === 'aliases_export' ? exported : undefined)) as typeof invoke);
+    const rows = await buildAliasEntries(deps());
+    expect(rows.map((r) => [r.id, r.meta ?? null])).toEqual([
+      ['alias-ds-in-Maren', "cast 'detect scry' maren"],
+    ]);
+    // Its group finds it too.
+    expect(flat(paletteSections(rows, 'maren', [])).map((r) => r.id)).toEqual([
+      'alias-ds-in-Maren',
+    ]);
+  });
+});
+
 describe('initialSelection', () => {
   it('never opens on a destructive row', () => {
     const entries = buildPaletteEntries(deps());

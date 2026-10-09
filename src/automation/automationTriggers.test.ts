@@ -502,25 +502,58 @@ describe('validateTriggers', () => {
   });
 
   it('asks for names, unique names, and a pattern', () => {
-    expect(validateTriggers([t('')])).toBe('Give every trigger a name before you save.');
-    expect(validateTriggers([t('a'), t('a')])).toContain('Two triggers are named');
-    expect(validateTriggers([t('a', ' ')])).toContain('needs a pattern');
+    expect(validateTriggers([t('')])?.message).toBe('Give every trigger a name before you save.');
+    expect(validateTriggers([t('a'), t('b'), t(' a ')])).toEqual({
+      message: 'You have two triggers named “a” with no group. Rename one or give it a group.',
+      at: [0, 2],
+    });
+    expect(validateTriggers([t('a', ' ')])?.message).toContain('needs a pattern');
+  });
+
+  it('lets two groups each hold a trigger of one name, and not one group two', () => {
+    const inGroup = (name: string, group: string) => ({ ...t(name), group });
+    expect(
+      validateTriggers([inGroup('greet', 'Tolliver'), inGroup('greet', 'Maren'), t('greet')]),
+    ).toBeNull();
+    expect(
+      validateTriggers([
+        inGroup('greet', 'Tolliver'),
+        inGroup('greet', 'Maren'),
+        inGroup('greet ', 'Maren'),
+      ]),
+    ).toEqual({
+      message: 'Maren has two triggers named “greet”. Rename one or move it to another group.',
+      at: [1, 2],
+    });
+    // A name may hold spaces, as it always could.
+    expect(validateTriggers([t('Sleep when mana is low')])).toBeNull();
+  });
+
+  it('keys a trigger by its group and its trimmed name', () => {
+    expect(triggerKey({ ...t(' greet '), group: 'Maren' })).toBe('Maren\u001fgreet');
+    expect(triggerKey(t('greet'))).toBe('\u001fgreet');
+    expect(triggerKey({ ...t('greet'), group: 'Maren' })).not.toBe(triggerKey(t('greet')));
   });
 
   it('keeps your trigger off the name of a preset trigger, its preset on or off', () => {
     const guard =
       'Disarms and fading buffs uses the name disarm.secondary. Give your trigger its own name.';
-    expect(validateTriggers([t('disarm.secondary')])).toBe(guard);
+    expect(validateTriggers([t('disarm.secondary')])?.message).toBe(guard);
     // Ahead of the clash with the preset's own copy, so the message
     // says why.
     const installed = { ...t('disarm.secondary'), preset: 'disarm_buff_fade' };
-    expect(validateTriggers([installed, t('disarm.secondary')])).toBe(guard);
+    expect(validateTriggers([installed, t('disarm.secondary')])).toEqual({
+      message: guard,
+      at: [1],
+    });
     expect(validateTriggers([installed])).toBeNull();
   });
 
   it('reads what you typed in a Text row, not its regex', () => {
     const row = { pattern: '^\\s*\\s*$', enabled: true, mode: 'text' as const, text: ' ' };
-    expect(validateTriggers([{ ...t('a'), patterns: [row] }])).toContain('needs a pattern');
+    expect(validateTriggers([{ ...t('a'), patterns: [row] }])?.message).toContain(
+      'needs a pattern',
+    );
     expect(validateTriggers([{ ...t('a'), patterns: [{ ...row, text: 'x' }] }])).toBeNull();
   });
 });
@@ -594,18 +627,53 @@ describe('saving triggers', () => {
 
   it('moves one trigger to Prompts and leaves the rest as the store wrote them', async () => {
     const store = fakeStore([trigger('rest', 'sleep'), trigger('flee', 'flee')]);
-    await moveTriggerToPrompts('flee', store.api);
+    await moveTriggerToPrompts('flee', null, store.api);
     expect(store.list().map((t) => [t.name, t.target ?? 'line'])).toEqual([
       ['rest', 'line'],
       ['flee', 'prompt'],
     ]);
     expect(store.list()[1].actions).toEqual([{ kind: 'send', template: 'flee' }]);
-    await expect(moveTriggerToPrompts('gone', store.api)).rejects.toThrow(
+    await expect(moveTriggerToPrompts('gone', null, store.api)).rejects.toThrow(
       'Vosh no longer has a trigger named “gone”.',
     );
     const broken = { ...store.api, exportTriggers: () => Promise.resolve('not json') };
-    await expect(moveTriggerToPrompts('rest', broken)).rejects.toThrow('changed nothing');
+    await expect(moveTriggerToPrompts('rest', null, broken)).rejects.toThrow('changed nothing');
     expect(store.list()[0].target).toBeUndefined();
+  });
+
+  it('moves only the trigger of the group it names to Prompts', async () => {
+    const store = fakeStore([
+      { ...trigger('greet', 'bow'), group: 'Tolliver' },
+      { ...trigger('greet', 'wave'), group: 'Maren' },
+    ]);
+    await moveTriggerToPrompts('greet', 'Maren', store.api);
+    expect(store.list().map((t) => [t.group, t.target ?? 'line'])).toEqual([
+      ['Tolliver', 'line'],
+      ['Maren', 'prompt'],
+    ]);
+    await expect(moveTriggerToPrompts('greet', null, store.api)).rejects.toThrow(
+      'Vosh no longer has a trigger named “greet”.',
+    );
+  });
+
+  it('saves two triggers of one name in two groups, each where it was', async () => {
+    const store = fakeStore([{ ...trigger('greet', 'bow'), group: 'Tolliver' }]);
+    let draft = createDraft(await loadTriggers(store.api));
+    draft = addDraftItem(draft, { ...trigger(' greet ', 'wave'), group: 'Maren' });
+    await saveTriggerDraft(draft, store.api);
+    expect(store.list().map((t) => [t.name, t.group])).toEqual([
+      ['greet', 'Tolliver'],
+      ['greet', 'Maren'],
+    ]);
+  });
+
+  it('moves only the copies of the preset it names', async () => {
+    const store = fakeStore([
+      { ...trigger('flee', 'flee'), group: 'mine' },
+      { ...trigger('flee', 'flee'), group: 'Maren', preset: 'terror_events' },
+    ]);
+    await setTriggerGroups(new Map([['flee', '']]), store.api, 'terror_events');
+    expect(store.list().map((t) => t.group)).toEqual(['mine', undefined]);
   });
 
   it('puts named triggers in their group and writes nothing when none moves', async () => {

@@ -20,7 +20,7 @@ use crate::app::events::{
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::{merge_triggers, ImportFormat};
-use crate::loadouts::gating::{loadout_hold, LoadoutHold};
+use crate::loadouts::gating::{loadout_hold, new_group_hold, LoadoutHold};
 use crate::loadouts::presets::{
     delete_macro, import_macros, install_preset_macros, install_preset_triggers,
     remove_preset_macros, retag_returned_macros, set_macro, switch_presets, PresetSwitch,
@@ -79,7 +79,8 @@ pub(crate) async fn aliases_export(
     aliases_json(&p.aliases)
 }
 
-/// The JSON `aliases_export` sends, sorted by name. The page reads it in
+/// The JSON `aliases_export` sends, sorted by name, and the aliases of
+/// one name in the order Settings lists their groups. The page reads it in
 /// the palette and the Aliases editor, and its tests read
 /// `fixtures/ipc/aliases_export.json`, which a test here holds to it.
 fn aliases_json(store: &vosh_automation::alias::AliasStore) -> Result<String, String> {
@@ -296,6 +297,26 @@ pub(crate) async fn groups_list(
     let p = edited.lock().await;
     let set = set.as_ref().map(|set| set.for_profile(p.name.as_deref()));
     Ok(group_switches(&p, set.as_deref(), list))
+}
+
+/// What the loadouts would decide about a group of `list` the profile
+/// does not hold yet, as one you just typed in Settings and have not
+/// saved, so its heading can say the loadouts keep it off. None while
+/// they have no opinion, in per profile mode, and for timers.
+#[tauri::command]
+pub(crate) async fn groups_new_hold(
+    state: State<'_, SharedState>,
+    list: GroupList,
+    profile: Option<String>,
+) -> Result<Option<LoadoutHold>, String> {
+    let edited = state.edited_profile(profile)?;
+    let set = state.loadout_set.lock().await;
+    let p = edited.lock().await;
+    let set = set.as_ref().map(|set| set.for_profile(p.name.as_deref()));
+    Ok(set
+        .as_deref()
+        .filter(|_| list.in_catalog())
+        .and_then(new_group_hold))
 }
 
 /// Turn a whole group of one list on or off, from the switch on its
@@ -709,13 +730,37 @@ mod tests {
         let mut old = AliasStore::new();
         old.set(Alias::new("hl", "cast heal"));
         old.set(Alias::new("kk", "kick"));
-        old.stop("hl", one);
-        old.stop("kk", two);
+        old.stop(None, "hl", one);
+        old.stop(None, "kk", two);
         let saved = vec![Alias::new("hl", "cast heal"), Alias::new("kk", "kick %1")];
         let store = imported_aliases(saved, &old);
-        assert!(store.is_stopped("hl", one));
-        assert!(!store.is_stopped("hl", two));
-        assert!(!store.is_stopped("kk", two));
+        assert!(store.is_stopped(None, "hl", one));
+        assert!(!store.is_stopped(None, "hl", two));
+        assert!(!store.is_stopped(None, "kk", two));
+    }
+
+    #[test]
+    fn a_saved_list_keeps_an_alias_name_in_each_group_and_the_export_lists_both() {
+        use super::{aliases_json, imported_aliases};
+        use vosh_automation::alias::AliasStore;
+        let json = r#"[
+            {"name": "ds", "expansion": "cast 'detect scry' tolliver", "group": "Tolliver"},
+            {"name": " ds ", "expansion": "cast 'detect scry' maren", "group": "Maren"},
+            {"name": "res", "expansion": "cast resurrect", "group": "Maren"}
+        ]"#;
+        let parsed = serde_json::from_str(json).unwrap();
+        let store = imported_aliases(parsed, &AliasStore::new());
+        assert_eq!(store.list().len(), 3);
+        let exported: Vec<serde_json::Value> =
+            serde_json::from_str(&aliases_json(&store).unwrap()).unwrap();
+        let rows: Vec<(&str, &str)> = exported
+            .iter()
+            .map(|a| (a["name"].as_str().unwrap(), a["group"].as_str().unwrap()))
+            .collect();
+        assert_eq!(
+            rows,
+            [("ds", "Maren"), ("ds", "Tolliver"), ("res", "Maren")]
+        );
     }
 
     #[test]

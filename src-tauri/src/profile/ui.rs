@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist};
+use crate::profile::text_size::TextPx;
 
 /// One tracked-affect entry. `name` is what the server actually
 /// pushes in the Char.Affects feed (matched case-insensitively); the
@@ -138,9 +139,9 @@ pub(crate) struct UiConfig {
     /// Falls back to `default_font_family` when not set.
     #[serde(default = "default_font_family")]
     pub font_family: String,
-    /// Terminal font size in pixels.
+    /// Terminal font size in pixels, on half steps (see [`TextPx`]).
     #[serde(default = "default_font_size")]
-    pub font_size: u32,
+    pub font_size: TextPx,
     /// Terminal row spacing: `compact`, `default`, or `loose` (1.1,
     /// 1.2, and 1.35 times the glyph height). Part of the `font` scope
     /// category. Unknown values coerce back to `default` on save.
@@ -157,7 +158,7 @@ pub(crate) struct UiConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub panel_font: String,
     /// The size in pixels every pane and the status line under the
-    /// terminal draw at, 12 by default, the size they were drawn at
+    /// terminal draw at, on half steps, 12 by default, the size they were drawn at
     /// before you could pick one. 0 follows the terminal size
     /// (`PANEL_FONT_SIZE_TERMINAL`). Part of the `font` scope category.
     /// Written only once you pick another size, so a profile that never
@@ -167,7 +168,7 @@ pub(crate) struct UiConfig {
         default = "default_panel_font_size",
         skip_serializing_if = "is_default_panel_font_size"
     )]
-    pub panel_font_size: u32,
+    pub panel_font_size: TextPx,
     /// Affect names rendered as pills in the status bar. Present affects
     /// show their remaining duration; absent ones render as a struck-out
     /// red-bordered pill so the player notices the gap at a glance.
@@ -420,13 +421,13 @@ pub(crate) struct UiConfig {
     /// picked, so picking `own` again brings it back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_line_background_color: Option<String>,
-    /// Size in px of the text you type. 0, the default, follows the
-    /// terminal size. Anything else is held to 6 to 64.
+    /// Size in px of the text you type, on half steps. 0, the default,
+    /// follows the terminal size. Anything else is held to 6 to 64.
     #[serde(
         default = "default_input_line_size",
         skip_serializing_if = "is_default_input_line_size"
     )]
-    pub input_line_size: u32,
+    pub input_line_size: TextPx,
     /// Color the command line as you type, by what Vosh knows the first
     /// word to be. Off by default.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1975,13 +1976,19 @@ pub(crate) fn is_default_font_family(family: &str) -> bool {
     family == default_font_family() || family == RETIRED_DEFAULT_FONT_FAMILY
 }
 
-fn default_font_size() -> u32 {
-    14
+fn default_font_size() -> TextPx {
+    TextPx::whole(14)
 }
 
-/// Hold the terminal font size to 6 to 64 pixels.
-pub(crate) fn coerce_font_size(size: u32) -> u32 {
-    size.clamp(6, 64)
+/// The smallest text size Settings saves.
+const MIN_TEXT_SIZE: TextPx = TextPx::whole(6);
+
+/// The largest text size Settings saves.
+const MAX_TEXT_SIZE: TextPx = TextPx::whole(64);
+
+/// Hold the terminal font size to 6 to 64 pixels, keeping a half step.
+pub(crate) fn coerce_font_size(size: TextPx) -> TextPx {
+    size.clamp(MIN_TEXT_SIZE, MAX_TEXT_SIZE)
 }
 
 /// What the Panel font row saves for the terminal font. Empty is As
@@ -2003,22 +2010,22 @@ pub(crate) fn normalize_panel_font(value: String) -> String {
 }
 
 /// What the panel Size row saves to follow the terminal size.
-pub(crate) const PANEL_FONT_SIZE_TERMINAL: u32 = 0;
+pub(crate) const PANEL_FONT_SIZE_TERMINAL: TextPx = TextPx::whole(0);
 
 /// The panel size a profile starts at, the size the panes were drawn at.
-pub(crate) const DEFAULT_PANEL_FONT_SIZE: u32 = 12;
+pub(crate) const DEFAULT_PANEL_FONT_SIZE: TextPx = TextPx::whole(12);
 
-fn default_panel_font_size() -> u32 {
+fn default_panel_font_size() -> TextPx {
     DEFAULT_PANEL_FONT_SIZE
 }
 
-fn is_default_panel_font_size(size: &u32) -> bool {
+fn is_default_panel_font_size(size: &TextPx) -> bool {
     *size == DEFAULT_PANEL_FONT_SIZE
 }
 
 /// Hold a panel size to the terminal size's 6 to 64 pixels, keeping 0,
 /// which follows the terminal size.
-pub(crate) fn coerce_panel_font_size(size: u32) -> u32 {
+pub(crate) fn coerce_panel_font_size(size: TextPx) -> TextPx {
     if size == PANEL_FONT_SIZE_TERMINAL {
         size
     } else {
@@ -2075,19 +2082,19 @@ pub(crate) fn coerce_input_line_background(value: String) -> String {
 }
 
 /// What the command line Size row saves to follow the terminal size.
-pub(crate) const INPUT_LINE_SIZE_TERMINAL: u32 = 0;
+pub(crate) const INPUT_LINE_SIZE_TERMINAL: TextPx = TextPx::whole(0);
 
-fn default_input_line_size() -> u32 {
+fn default_input_line_size() -> TextPx {
     INPUT_LINE_SIZE_TERMINAL
 }
 
-fn is_default_input_line_size(size: &u32) -> bool {
+fn is_default_input_line_size(size: &TextPx) -> bool {
     *size == INPUT_LINE_SIZE_TERMINAL
 }
 
 /// Hold a command line size to the terminal size's 6 to 64 pixels,
 /// keeping 0, which follows the terminal size.
-pub(crate) fn coerce_input_line_size(size: u32) -> u32 {
+pub(crate) fn coerce_input_line_size(size: TextPx) -> TextPx {
     if size == INPUT_LINE_SIZE_TERMINAL {
         size
     } else {
@@ -2339,14 +2346,14 @@ name = "haste"
         assert_eq!(back.input_line_color, None);
         assert_eq!(back.input_line_background, "theme");
         assert_eq!(back.input_line_background_color, None);
-        assert_eq!(back.input_line_size, 0);
+        assert_eq!(back.input_line_size, TextPx::whole(0));
         let ui = UiConfig {
             input_caret_blink: false,
             input_caret_color: Some("#c6a46a".into()),
             input_line_color: Some("#d8dee9".into()),
             input_line_background: "tint".into(),
             input_line_background_color: Some("#1d1f21".into()),
-            input_line_size: 16,
+            input_line_size: TextPx::whole(16),
             ..UiConfig::default()
         };
         let back = through_toml(&ui);
@@ -2355,7 +2362,7 @@ name = "haste"
         assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
         assert_eq!(back.input_line_background, "tint");
         assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
-        assert_eq!(back.input_line_size, 16);
+        assert_eq!(back.input_line_size, TextPx::whole(16));
         for pick in ["theme", "tint", "own"] {
             let ui = UiConfig {
                 input_line_background: pick.into(),
@@ -2416,10 +2423,13 @@ name = "haste"
 
     #[test]
     fn a_command_line_size_holds_to_the_terminal_sizes_and_keeps_same_as_terminal() {
-        assert_eq!(coerce_input_line_size(INPUT_LINE_SIZE_TERMINAL), 0);
-        assert_eq!(coerce_input_line_size(3), 6);
-        assert_eq!(coerce_input_line_size(14), 14);
-        assert_eq!(coerce_input_line_size(90), 64);
+        assert_eq!(
+            coerce_input_line_size(INPUT_LINE_SIZE_TERMINAL),
+            TextPx::whole(0)
+        );
+        assert_eq!(coerce_input_line_size(TextPx::whole(3)), TextPx::whole(6));
+        assert_eq!(coerce_input_line_size(TextPx::whole(14)), TextPx::whole(14));
+        assert_eq!(coerce_input_line_size(TextPx::whole(90)), TextPx::whole(64));
     }
 
     /// The profile file a save of `ui` writes.
@@ -2765,10 +2775,15 @@ name = "haste"
         let written = ProfileConfig::default().to_toml().unwrap();
         assert!(!written.contains("panel_font_size"), "{written}");
         let old = ProfileConfig::from_toml("[ui]\nfont_size = 16\n").unwrap();
-        assert_eq!(old.ui.panel_font_size, 12);
+        assert_eq!(old.ui.panel_font_size, TextPx::whole(12));
         let mut ui = UiConfig::default();
-        assert_eq!(through_toml(&ui).panel_font_size, 12);
-        for pick in [PANEL_FONT_SIZE_TERMINAL, 11, 14, 18] {
+        assert_eq!(through_toml(&ui).panel_font_size, TextPx::whole(12));
+        for pick in [
+            PANEL_FONT_SIZE_TERMINAL,
+            TextPx::whole(11),
+            TextPx::whole(14),
+            TextPx::whole(18),
+        ] {
             ui.panel_font_size = pick;
             assert_eq!(through_toml(&ui).panel_font_size, pick);
         }
@@ -2782,10 +2797,84 @@ name = "haste"
 
     #[test]
     fn a_panel_size_holds_to_the_terminal_sizes_and_keeps_same_as_terminal() {
-        assert_eq!(coerce_panel_font_size(PANEL_FONT_SIZE_TERMINAL), 0);
-        assert_eq!(coerce_panel_font_size(3), 6);
-        assert_eq!(coerce_panel_font_size(14), 14);
-        assert_eq!(coerce_panel_font_size(90), 64);
+        assert_eq!(
+            coerce_panel_font_size(PANEL_FONT_SIZE_TERMINAL),
+            TextPx::whole(0)
+        );
+        assert_eq!(coerce_panel_font_size(TextPx::whole(3)), TextPx::whole(6));
+        assert_eq!(coerce_panel_font_size(TextPx::whole(14)), TextPx::whole(14));
+        assert_eq!(coerce_panel_font_size(TextPx::whole(90)), TextPx::whole(64));
+    }
+
+    fn half(px: f64) -> TextPx {
+        TextPx::from_px(px)
+    }
+
+    #[test]
+    fn every_size_keeps_a_half_step_and_holds_to_six_to_sixty_four() {
+        for coerce in [
+            coerce_font_size,
+            coerce_panel_font_size,
+            coerce_input_line_size,
+        ] {
+            assert_eq!(coerce(half(13.5)), half(13.5));
+            assert_eq!(coerce(half(6.5)), half(6.5));
+            assert_eq!(coerce(half(63.5)), half(63.5));
+            assert_eq!(coerce(half(5.5)), TextPx::whole(6));
+            assert_eq!(coerce(half(64.5)), TextPx::whole(64));
+        }
+        // 0 is too small for the terminal and follows it for the others.
+        assert_eq!(coerce_font_size(TextPx::whole(0)), TextPx::whole(6));
+        assert_eq!(coerce_panel_font_size(half(0.5)), TextPx::whole(6));
+        assert_eq!(coerce_input_line_size(half(0.5)), TextPx::whole(6));
+    }
+
+    #[test]
+    fn sizes_read_whole_half_and_odd_values_leniently() {
+        let read = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        let ui = read("[ui]\nfont_size = 13\npanel_font_size = 0\ninput_line_size = 16\n");
+        assert_eq!(ui.font_size, TextPx::whole(13));
+        assert_eq!(ui.panel_font_size, PANEL_FONT_SIZE_TERMINAL);
+        assert_eq!(ui.input_line_size, TextPx::whole(16));
+        let ui = read("[ui]\nfont_size = 13.5\npanel_font_size = 11.5\ninput_line_size = 15.5\n");
+        assert_eq!(ui.font_size, half(13.5));
+        assert_eq!(ui.panel_font_size, half(11.5));
+        assert_eq!(ui.input_line_size, half(15.5));
+        // A hand edit off the half steps reads as the nearest half.
+        let ui = read("[ui]\nfont_size = 13.3\npanel_font_size = 0.2\ninput_line_size = 14.8\n");
+        assert_eq!(ui.font_size, half(13.5));
+        assert_eq!(ui.panel_font_size, PANEL_FONT_SIZE_TERMINAL);
+        assert_eq!(ui.input_line_size, TextPx::whole(15));
+        // Out of range reads as written, and the save clamps it as before.
+        let ui = read("[ui]\nfont_size = 90.5\n");
+        assert_eq!(ui.font_size, half(90.5));
+        assert_eq!(coerce_font_size(ui.font_size), TextPx::whole(64));
+    }
+
+    #[test]
+    fn a_whole_size_saves_as_an_integer_and_a_half_as_a_float() {
+        let text = "[ui]\nfont_size = 13\npanel_font_size = 11\ninput_line_size = 16\n";
+        let config = ProfileConfig::from_toml(text).unwrap();
+        let saved = config.to_toml().unwrap();
+        assert!(saved.contains("font_size = 13\n"), "{saved}");
+        assert!(saved.contains("panel_font_size = 11\n"), "{saved}");
+        assert!(saved.contains("input_line_size = 16\n"), "{saved}");
+        let again = ProfileConfig::from_toml(&saved).unwrap().to_toml().unwrap();
+        assert_eq!(saved, again);
+        let ui = UiConfig {
+            font_size: half(13.5),
+            panel_font_size: half(12.5),
+            input_line_size: half(14.5),
+            ..UiConfig::default()
+        };
+        let saved = through_text(&ui);
+        assert!(saved.contains("font_size = 13.5\n"), "{saved}");
+        assert!(saved.contains("panel_font_size = 12.5\n"), "{saved}");
+        assert!(saved.contains("input_line_size = 14.5\n"), "{saved}");
+        let back = through_toml(&ui);
+        assert_eq!(back.font_size, half(13.5));
+        assert_eq!(back.panel_font_size, half(12.5));
+        assert_eq!(back.input_line_size, half(14.5));
     }
 
     #[test]
@@ -3476,6 +3565,6 @@ name = "haste"
         assert_eq!(ui.dark_theme, "");
         assert_eq!(ui.terminal_line_height, "default");
         assert_eq!(ui.panel_font, "");
-        assert_eq!(ui.panel_font_size, 12);
+        assert_eq!(ui.panel_font_size, TextPx::whole(12));
     }
 }

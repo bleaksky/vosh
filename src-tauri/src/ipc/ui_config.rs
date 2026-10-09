@@ -16,6 +16,7 @@ use crate::app::state::SharedState;
 use crate::app::system_fonts::FontEntry;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::profile::open::OpenProfile;
+use crate::profile::text_size::TextPx;
 use crate::session::vitals_text;
 use crate::sessions::SessionId;
 
@@ -32,12 +33,12 @@ pub(crate) struct UiConfigPayload {
     pub night_theme: String,
     pub auto_update: bool,
     pub font_family: String,
-    pub font_size: u32,
+    pub font_size: TextPx,
     pub terminal_line_height: String,
     /// Empty for As designed, `terminal`, `system`, or a font list.
     pub panel_font: String,
     /// The panel size in pixels, or 0 for the terminal size.
-    pub panel_font_size: u32,
+    pub panel_font_size: TextPx,
     pub tracked_affects: Vec<crate::profile::ui::TrackedAffect>,
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
@@ -80,7 +81,7 @@ pub(crate) struct UiConfigPayload {
     pub input_line_background: String,
     pub input_line_background_color: Option<String>,
     /// 0 follows the terminal size.
-    pub input_line_size: u32,
+    pub input_line_size: TextPx,
     pub input_type_colors: bool,
     pub input_type_alias_color: Option<String>,
     pub input_type_hash_color: Option<String>,
@@ -262,10 +263,10 @@ pub(crate) enum UiField {
     NightTheme(String),
     AutoUpdate(bool),
     FontFamily(String),
-    FontSize(u32),
+    FontSize(TextPx),
     TerminalLineHeight(String),
     PanelFont(String),
-    PanelFontSize(u32),
+    PanelFontSize(TextPx),
     EnabledPresets(Vec<String>),
     KeepLastCommand(bool),
     ThemeTerminalColors(Option<bool>),
@@ -303,7 +304,7 @@ pub(crate) enum UiField {
     InputLineColor(Option<String>),
     InputLineBackground(String),
     InputLineBackgroundColor(Option<String>),
-    InputLineSize(u32),
+    InputLineSize(TextPx),
     InputTypeColors(bool),
     InputTypeAliasColor(Option<String>),
     InputTypeHashColor(Option<String>),
@@ -628,6 +629,14 @@ pub(crate) async fn fonts_list() -> Vec<FontEntry> {
     crate::app::system_fonts::list().await
 }
 
+/// The sizes a font family draws at, so the Size selects offer half
+/// sizes only for a font that takes them. `family` is one family name,
+/// not a font list. Async, since it reads the font file.
+#[tauri::command]
+pub(crate) async fn font_sizing(family: String) -> crate::app::system_fonts::FontSizing {
+    crate::app::system_fonts::sizing(family).await
+}
+
 /// The 16 ANSI slots a chat channel can take, in the frontend's names.
 const CHAT_COLOR_SLOTS: [&str; 16] = [
     "black",
@@ -753,6 +762,7 @@ fn reset_chat_colors(
 mod tests {
     use super::UiConfigPayload;
     use crate::profile::file::ProfileConfig;
+    use crate::profile::text_size::TextPx;
     use crate::profile::ui::UiConfig;
     use crate::prompt::tests::prompt_profile;
 
@@ -1084,7 +1094,7 @@ mod tests {
         crate::prompt::take_config(&mut p, &mut c, config);
         let table = p.prompt.clone();
         super::apply_fields(&mut p.ui, vec![setter("font_size", &16.into())]);
-        assert_eq!(p.ui.font_size, 16);
+        assert_eq!(p.ui.font_size, TextPx::whole(16));
         assert_eq!(p.prompt, table);
 
         // The file keeps the table, and [ui] its copy of the switch and
@@ -1193,13 +1203,13 @@ mod tests {
     #[test]
     fn the_panel_size_round_trips() {
         let mut ui = UiConfig::default();
-        assert_eq!(through_payload(&ui).panel_font_size, 12);
-        for pick in [0, 11, 16] {
+        assert_eq!(through_payload(&ui).panel_font_size, TextPx::whole(12));
+        for pick in [0.0, 11.0, 13.5, 16.0].map(TextPx::from_px) {
             ui.panel_font_size = pick;
             assert_eq!(through_payload(&ui).panel_font_size, pick);
         }
-        ui.panel_font_size = 200;
-        assert_eq!(through_payload(&ui).panel_font_size, 64);
+        ui.panel_font_size = TextPx::whole(200);
+        assert_eq!(through_payload(&ui).panel_font_size, TextPx::whole(64));
     }
 
     #[test]
@@ -1208,27 +1218,42 @@ mod tests {
         let back = through_payload(&ui);
         assert!(back.input_caret_blink);
         assert_eq!(back.input_line_background, "theme");
-        assert_eq!(back.input_line_size, 0);
+        assert_eq!(back.input_line_size, TextPx::whole(0));
         ui.input_caret_blink = false;
         ui.input_caret_color = Some("#c6a46a".into());
         ui.input_line_color = Some("#d8dee9".into());
         ui.input_line_background = "own".into();
         ui.input_line_background_color = Some("#1d1f21".into());
-        ui.input_line_size = 18;
+        ui.input_line_size = TextPx::whole(18);
         let back = through_payload(&ui);
         assert!(!back.input_caret_blink);
         assert_eq!(back.input_caret_color.as_deref(), Some("#c6a46a"));
         assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
         assert_eq!(back.input_line_background, "own");
         assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
-        assert_eq!(back.input_line_size, 18);
+        assert_eq!(back.input_line_size, TextPx::whole(18));
         ui.input_caret_color = Some("  ".into());
         ui.input_line_background = "glass".into();
-        ui.input_line_size = 3;
+        ui.input_line_size = TextPx::whole(3);
         let back = through_payload(&ui);
         assert_eq!(back.input_caret_color, None);
         assert_eq!(back.input_line_background, "theme");
-        assert_eq!(back.input_line_size, 6);
+        assert_eq!(back.input_line_size, TextPx::whole(6));
+    }
+
+    #[test]
+    fn a_half_size_round_trips_through_the_page() {
+        let mut ui = UiConfig {
+            font_size: TextPx::from_px(13.5),
+            input_line_size: TextPx::from_px(15.5),
+            ..UiConfig::default()
+        };
+        let back = through_payload(&ui);
+        assert_eq!(back.font_size, TextPx::from_px(13.5));
+        assert_eq!(back.input_line_size, TextPx::from_px(15.5));
+        // The page sends a size it never offers, 13.3, and it lands on 13.5.
+        super::apply_fields(&mut ui, vec![setter("font_size", &13.3.into())]);
+        assert_eq!(ui.font_size, TextPx::from_px(13.5));
     }
 
     #[test]

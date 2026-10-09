@@ -33,19 +33,55 @@ pub(super) fn slash_alias(profile: &mut Profile, c: &Connection, args: &str) -> 
             "quick-key `{name}` exists — `#qkey clear {name}` first if you want this name"
         ));
     }
-    crate::script::define_alias(profile, name, expansion);
-    InputResult::echo_line(format!("alias {name} set"))
+    let label = crate::script::define_alias(profile, c.stop_key, name, expansion);
+    InputResult::echo_line(format!("alias {label} set"))
 }
 
+/// `#unalias <name> [group]`. With a group it removes the alias of that
+/// name in that group. Without one it removes the alias of that name in
+/// no group, or the only alias of that name, and asks for the group
+/// when more than one group holds the name.
 pub(super) fn slash_unalias(profile: &mut Profile, args: &str) -> InputResult {
-    let name = args.trim();
+    let (name, group) = split_first_word(args.trim());
     if name.is_empty() {
-        return InputResult::error("usage #unalias <name>");
+        return InputResult::error("usage #unalias <name> [group]");
     }
-    if profile.aliases.remove(name) {
-        InputResult::echo_line(format!("alias {name} removed"))
-    } else {
-        InputResult::error(format!("alias {name} not found"))
+    let group = Some(group.trim()).filter(|g| !g.is_empty());
+    let found = profile.aliases.named(name);
+    let target = match group {
+        Some(group) => profile.aliases.get_in(Some(group), name),
+        None => profile
+            .aliases
+            .get_in(None, name)
+            .or_else(|| (found.len() == 1).then(|| &found[0])),
+    };
+    let Some(target) = target.cloned() else {
+        if group.is_none() && found.len() > 1 {
+            let groups: Vec<&str> = found.iter().filter_map(|a| a.group.as_deref()).collect();
+            let example = groups.first().copied().unwrap_or_default();
+            return InputResult::error(format!(
+                "{name} is in {}, so name the group too, like #unalias {name} {example}",
+                join_and(&groups)
+            ));
+        }
+        let label = match group {
+            Some(group) => format!("{name} in {group}"),
+            None => name.to_string(),
+        };
+        return InputResult::error(format!("alias {label} not found"));
+    };
+    profile
+        .aliases
+        .remove(target.group.as_deref(), &target.name);
+    InputResult::echo_line(format!("alias {} removed", target.label()))
+}
+
+/// `a`, `a and b`, or `a, b and c`.
+fn join_and(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => (*one).to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }
 
@@ -60,7 +96,7 @@ pub(super) fn slash_aliases_list(profile: &Profile, c: &Connection) -> InputResu
     lines.push(format!("{count} alias(es):"));
     for a in aliases {
         let mark = if a.enabled { ' ' } else { '*' };
-        lines.push(format!("  {mark} {} -> {}", a.name, a.expansion));
+        lines.push(format!("  {mark} {} -> {}", a.label(), a.expansion));
     }
     // A plugin's aliases last while it runs, and Vosh never saves them.
     for (plugin, a) in from_plugins {
@@ -84,23 +120,57 @@ pub(super) fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
         Ok(a) => a,
         Err(msg) => return InputResult::error(msg),
     };
-    let trigger = Trigger::new(name, pattern, action);
+    // When groups hold triggers of this name, the one Settings lists
+    // first is replaced and stays in its group, as #alias keeps one.
+    let mut trigger = Trigger::new(name, pattern, action);
+    trigger.group = profile.triggers.get(name).and_then(|old| old.group.clone());
+    let label = trigger.label();
     match profile.triggers.set(trigger) {
-        Ok(()) => InputResult::echo_line(format!("trigger {name} set")),
-        Err(e) => InputResult::error(format!("trigger {name} rejected: {e}")),
+        Ok(()) => InputResult::echo_line(format!("trigger {label} set")),
+        Err(e) => InputResult::error(format!("trigger {label} rejected: {e}")),
     }
 }
 
+/// `#untrigger <name> [group]`. With a group it removes the trigger of
+/// that name in that group. Without one it removes the trigger of that
+/// name in no group, or the only trigger of that name, and asks for the
+/// group when more than one group holds the name. A trigger name may
+/// hold spaces, so the whole line is read as a name first, then as a
+/// name and a group after it.
 pub(super) fn slash_untrigger(profile: &mut Profile, args: &str) -> InputResult {
-    let name = args.trim();
-    if name.is_empty() {
-        return InputResult::error("usage #untrigger <name>");
+    let args = args.trim();
+    if args.is_empty() {
+        return InputResult::error("usage #untrigger <name> [group]");
     }
-    if profile.triggers.remove(name) {
-        InputResult::echo_line(format!("trigger {name} removed"))
+    let found = profile.triggers.named(args);
+    let target = if found.is_empty() {
+        args.char_indices()
+            .filter(|(_, c)| c.is_whitespace())
+            .find_map(|(at, _)| {
+                let (name, group) = args.split_at(at);
+                profile.triggers.get_in(Some(group), name)
+            })
     } else {
-        InputResult::error(format!("trigger {name} not found"))
-    }
+        profile
+            .triggers
+            .get_in(None, args)
+            .or_else(|| (found.len() == 1).then(|| found[0]))
+    };
+    let Some(target) = target.cloned() else {
+        if found.len() > 1 {
+            let groups: Vec<&str> = found.iter().filter_map(|t| t.group.as_deref()).collect();
+            let example = groups.first().copied().unwrap_or_default();
+            return InputResult::error(format!(
+                "{args} is in {}, so name the group too, like #untrigger {args} {example}",
+                join_and(&groups)
+            ));
+        }
+        return InputResult::error(format!("trigger {args} not found"));
+    };
+    profile
+        .triggers
+        .remove(target.group.as_deref(), &target.name);
+    InputResult::echo_line(format!("trigger {} removed", target.label()))
 }
 
 pub(super) fn slash_triggers_list(profile: &Profile) -> InputResult {
@@ -124,7 +194,8 @@ pub(super) fn slash_triggers_list(profile: &Profile) -> InputResult {
             .map_or_else(|| "//".to_string(), describe_pattern);
         lines.push(format!(
             "  {mark} [{:>3}] {} {pattern} -> {action}",
-            t.priority, t.name,
+            t.priority,
+            t.label(),
         ));
     }
     InputResult::echo_lines(lines)
@@ -442,7 +513,7 @@ pub(super) fn slash_endrec(profile: &mut Profile, c: &mut Connection) -> InputRe
     let expansion = recorder.commands.join(";");
     let name = recorder.name.clone();
     let count = recorder.commands.len();
-    crate::script::define_alias(profile, name.clone(), expansion);
+    crate::script::define_alias(profile, c.stop_key, name.clone(), expansion);
     InputResult::echo_line(format!(
         "saved macro `{name}` ({count} command(s)) — invoke by typing `{name}`"
     ))

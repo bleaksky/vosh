@@ -27,7 +27,8 @@ export interface AlertPayload {
   /** Vosh is in front and you look at another session, so the page
    *  shows a notice of its own in place of a banner. */
   notice: boolean;
-  /** Where it came from, `trigger:<name>`, `preset:<id>` or
+  /** Where it came from, `trigger:<name>` with the unit separator and
+   *  the group after it for a trigger in a group, `preset:<id>` or
    *  `lua:<owner>`. */
   source: string;
   /** The owner tag of the Lua that raised it, such as

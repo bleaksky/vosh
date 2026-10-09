@@ -259,8 +259,8 @@ pub(super) fn slash_walk(profile: &mut Profile, c: &Connection, args: &str) -> I
             .expand_line_full(tail, &c.plugin_aliases, c.stop_key)
         {
             Ok(steps) => steps,
-            Err(ExpandError::RecursionLimit(depth)) => {
-                return InputResult::error(format!("alias recursion limit hit ({depth})"));
+            Err(e @ ExpandError::RecursionLimit { .. }) => {
+                return InputResult::error(e.to_string());
             }
         },
         None => Vec::new(),

@@ -112,11 +112,13 @@ pub(crate) struct TriggersMerged {
     pub clashes: Vec<Clash>,
 }
 
-/// Merge `triggers` into `store`, each replacing yours of the same name.
+/// Merge `triggers` into `store`, each replacing yours of the same name
+/// in the same group. The other clients' importers set no group, so one
+/// replaces yours of its name in no group, and yours in a group stay.
 /// One that takes the name of a preset trigger, any name in `presets`,
-/// the library's, or one the store holds for a preset, joins the clash
-/// list and leaves the preset's in place, its preset on or off, since
-/// the next install would put the preset's back.
+/// the library's, or one the store holds for a preset in any group,
+/// joins the clash list and leaves the preset's in place, its preset on
+/// or off, since the next install would put the preset's back.
 pub(crate) fn merge_triggers(
     store: &mut TriggerStore,
     triggers: &[Trigger],
@@ -126,7 +128,7 @@ pub(crate) fn merge_triggers(
     for trigger in triggers {
         let name = &trigger.name;
         let preset =
-            presets.contains(name) || store.get(name).is_some_and(|held| held.preset.is_some());
+            presets.contains(name) || store.named(name).iter().any(|held| held.preset.is_some());
         if preset {
             merged.clashes.push(Clash {
                 kind: ClashKind::Trigger,
