@@ -6,6 +6,7 @@ import MainWindow from './shell/MainWindow';
 import { SettingsWindow } from './settings/SettingsWindow';
 import { HelpWindow } from './help/HelpWindow';
 import { SnoopWindow } from './shell/SnoopWindow';
+import { crashNotice } from './shell/crashNotice';
 import './styles/index.css';
 
 // Tag the document with the host OS so CSS can apply per-platform
@@ -36,26 +37,12 @@ document.documentElement.dataset.platform = platform;
 // bare themed background with no chrome at all, and WKWebView gives
 // no console to read. Any uncaught error or rejection paints itself
 // into the page so the failure names itself instead of wedging
-// silently.
-function showBootError(label: string, detail: unknown) {
-  try {
-    const el = document.createElement('pre');
-    el.style.cssText =
-      'position:fixed;left:12px;bottom:12px;right:12px;z-index:99999;max-height:40vh;' +
-      'overflow:auto;background:#3a1215;color:#f0b0a8;border:1px solid #7a2a28;' +
-      'border-radius:8px;padding:10px 14px;font:11px ui-monospace,monospace;white-space:pre-wrap;';
-    const err =
-      detail instanceof Error ? `${detail.message}\n${detail.stack ?? ''}` : String(detail);
-    el.textContent = `${label}: ${err}`;
-    document.body.appendChild(el);
-  } catch {
-    // the trap must never throw
-  }
-}
-window.addEventListener('error', (e) => showBootError('uncaught error', e.error ?? e.message));
-window.addEventListener('unhandledrejection', (e) =>
-  showBootError('unhandled rejection', e.reason),
-);
+// silently. Once the app has mounted the notice keeps to a corner clear
+// of the command line, counts the errors that follow, and closes
+// (src/shell/crashNotice.ts).
+const crash = crashNotice(document);
+window.addEventListener('error', (e) => crash.show('uncaught error', e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => crash.show('unhandled rejection', e.reason));
 
 // One frontend bundle, multiple windows: the main window loads MainWindow;
 // auxiliary Tauri windows pass a `?view=...` query so this entry
@@ -78,6 +65,6 @@ try {
     ),
   );
 } catch (e) {
-  showBootError('render failed', e);
+  crash.show('render failed', e);
   throw e;
 }

@@ -10,6 +10,8 @@ import type { XtermBlink } from './xtermBlink';
 export interface XtermWebgl {
   load(): void;
   release(): void;
+  /** The pane is going. Let WebGL go and paint nothing after. */
+  dispose(): void;
 }
 
 /** Draws `term` with xterm's WebGL renderer while it shows, when it can,
@@ -25,6 +27,8 @@ export function xtermWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): X
   // nothing, which against Tauri's `transparent: true` window reads
   // as see-through desktop.
   let webglAddon: WebglAddon | null = null;
+  // The pane went, and xterm with it.
+  let disposed = false;
   const lsVal = typeof localStorage !== 'undefined' ? localStorage.getItem('vosh.webgl') : null;
   // On by default (opt-out). Only the live pane uses WebGL; the history
   // pane (quiet) always stays on the DOM renderer so the
@@ -35,7 +39,7 @@ export function xtermWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): X
   }
 
   const load = () => {
-    if (!enableWebgl || webglAddon) return;
+    if (disposed || !enableWebgl || webglAddon) return;
     // Probe webgl2 in a throwaway canvas first. If the WebView
     // can't allocate a context, the addon would load and fire
     // onContextLoss at once, a renderer swap that can leave the pane
@@ -86,6 +90,9 @@ export function xtermWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): X
         // change, so this just makes the content reappear immediately
         // instead of on the next server write.
         requestAnimationFrame(() => {
+          // A pane that went in the meantime has no renderer to paint,
+          // and a refresh of it queues a frame that throws.
+          if (disposed) return;
           try {
             term.refresh(0, term.rows - 1);
           } catch {
@@ -119,5 +126,10 @@ export function xtermWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): X
     }
   };
 
-  return { load, release };
+  const dispose = () => {
+    disposed = true;
+    release();
+  };
+
+  return { load, release, dispose };
 }

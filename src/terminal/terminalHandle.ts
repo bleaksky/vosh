@@ -144,6 +144,8 @@ export interface HandleParts {
   /** The session whose terminal this is, whose native grid the prompt
    *  card reads. */
   session: number;
+  /** True once the pane unmounted and xterm let its renderer go. */
+  gone(): boolean;
 }
 
 // The ground under the text as #rrggbb. While the pane lifts your prompt
@@ -193,7 +195,17 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
     quiet,
     lent,
     session,
+    gone,
   } = parts;
+  // A host can hold the handle of a pane that already went, as the split
+  // holds its history pane's for a frame or a promise past its close.
+  // xterm's renderer is gone then, and a refresh or a scroll asked of it
+  // queues a frame that reads it and throws (`_renderer.value.dimensions`).
+  // So a gone pane does nothing and answers as an empty one would.
+  const live =
+    <A extends unknown[], R>(fn: (...args: A) => R, otherwise: R) =>
+    (...args: A): R =>
+      gone() ? otherwise : fn(...args);
   // The cell grid the renderer in use draws, in client px: the box it
   // fills and the size of a cell, or null before it has a size. The
   // native grid draws from the pane's top left, below the pixels its
@@ -230,15 +242,15 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
   return {
     write,
     outputTaken,
-    fit: () => paneSizer.fitKept(),
-    focus: () => term.focus(),
-    clear: () => term.clear(),
-    scrollPages: (n) => term.scrollPages(n),
-    scrollLines: (n) => term.scrollLines(n),
-    scrollToBottom: () => term.scrollToBottom(),
-    refresh: () => {
+    fit: live(() => paneSizer.fitKept(), undefined),
+    focus: live(() => term.focus(), undefined),
+    clear: live(() => term.clear(), undefined),
+    scrollPages: live((n: number) => term.scrollPages(n), undefined),
+    scrollLines: live((n: number) => term.scrollLines(n), undefined),
+    scrollToBottom: live(() => term.scrollToBottom(), undefined),
+    refresh: live(() => {
       if (term.rows > 0) term.refresh(0, term.rows - 1);
-    },
+    }, undefined),
     contentSize: () => ({
       rows: term.rows,
       bufferLength: term.buffer.active.length,
@@ -246,7 +258,7 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
     // viewportY tracks the top of the viewport in scrollback coords;
     // baseY tracks the top of the bottom page. Equal means the
     // viewport is anchored to the live tail.
-    isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
+    isAtBottom: live(() => term.buffer.active.viewportY === term.buffer.active.baseY, true),
     getSize: () => ({ cols: term.cols, rows: term.rows }),
     windowSize: () => gameSize(term.cols, term.rows, lent()),
     cellHeight: () => {
@@ -271,25 +283,34 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
       const rows = term.rows + lent();
       return rows > 0 ? Math.ceil(h / rows) : 0;
     },
-    findNext: (query, opts) =>
-      searchAddon.findNext(query, {
-        regex: opts?.regex ?? false,
-        wholeWord: opts?.wholeWord ?? false,
-        caseSensitive: opts?.caseSensitive ?? false,
-        decorations: searchDecorations(term),
-      }),
-    findPrevious: (query, opts) =>
-      searchAddon.findPrevious(query, {
-        regex: opts?.regex ?? false,
-        wholeWord: opts?.wholeWord ?? false,
-        caseSensitive: opts?.caseSensitive ?? false,
-        decorations: searchDecorations(term),
-      }),
-    clearSearch: () => searchAddon.clearDecorations(),
-    clearSelection: () => term.clearSelection(),
-    hasSelection: () => term.hasSelection(),
-    getSelection: () => term.getSelection(),
-    select: (column, row, length) => term.select(column, row, length),
+    findNext: live(
+      (query: string, opts?: FindOptions) =>
+        searchAddon.findNext(query, {
+          regex: opts?.regex ?? false,
+          wholeWord: opts?.wholeWord ?? false,
+          caseSensitive: opts?.caseSensitive ?? false,
+          decorations: searchDecorations(term),
+        }),
+      false,
+    ),
+    findPrevious: live(
+      (query: string, opts?: FindOptions) =>
+        searchAddon.findPrevious(query, {
+          regex: opts?.regex ?? false,
+          wholeWord: opts?.wholeWord ?? false,
+          caseSensitive: opts?.caseSensitive ?? false,
+          decorations: searchDecorations(term),
+        }),
+      false,
+    ),
+    clearSearch: live(() => searchAddon.clearDecorations(), undefined),
+    clearSelection: live(() => term.clearSelection(), undefined),
+    hasSelection: live(() => term.hasSelection(), false),
+    getSelection: live(() => term.getSelection(), ''),
+    select: live(
+      (column: number, row: number, length: number) => term.select(column, row, length),
+      undefined,
+    ),
     bufferView: () => {
       const buffer = term.buffer.active;
       return {
@@ -300,13 +321,13 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
         cursorY: buffer.cursorY,
       };
     },
-    markLine: (row) => {
+    markLine: live((row: number): LineMark | null => {
       const buffer = term.buffer.active;
       if (buffer.type !== 'normal') return null;
       return term.registerMarker(Math.max(0, row) - (buffer.baseY + buffer.cursorY)) ?? null;
-    },
+    }, null),
     lineText: (row) => term.buffer.active.getLine(row)?.translateToString(true) ?? null,
-    selectAll: () => term.selectAll(),
+    selectAll: live(() => term.selectAll(), undefined),
     onSelectionChange: (cb) => {
       const disposable = term.onSelectionChange(cb);
       return () => disposable.dispose();
