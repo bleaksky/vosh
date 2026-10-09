@@ -1,6 +1,9 @@
 // The Automation list: grouping, ordering, and the filter. Items with
-// no group come first under no heading. Named groups follow in
-// alphabetical order, each under its name exactly as you typed it.
+// no group come first under no heading. Named groups follow by name
+// with case folded, each under its name exactly as you typed it. The
+// alias store sorts groups the same way (compare_groups in
+// crates/automation/src/groups.rs), so when two groups hold an alias of
+// one name, the one this list shows first is the one that fires.
 // Items keep their draft order inside a group, so a new item lands at
 // the end of its group. Preset triggers that sit in no group of yours
 // close the list under their own heading.
@@ -57,9 +60,13 @@ export function groupKeyOf(group: string | null | undefined): string {
   return typeof group === 'string' ? group.trim() : '';
 }
 
-function compareGroups(a: string, b: string): number {
-  const base = a.localeCompare(b, undefined, { sensitivity: 'base' });
-  if (base !== 0) return base;
+/** The order of two group names: by name with case folded, then two
+ *  names that differ only in case by their exact text. Both compare
+ *  UTF-16 code units, as compare_groups in Rust does. */
+export function compareGroups(a: string, b: string): number {
+  const la = a.toLowerCase();
+  const lb = b.toLowerCase();
+  if (la !== lb) return la < lb ? -1 : 1;
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
@@ -76,7 +83,7 @@ export function groupOfSectionKey(key: string): string | null {
 }
 
 /** Sort entries into sections: ungrouped first, named groups in
- *  alphabetical order, ungrouped presets last. */
+ *  compareGroups order, ungrouped presets last. */
 export function buildSections(entries: readonly ListEntry[]): ListSection[] {
   const ungrouped: ListEntry[] = [];
   const presets: ListEntry[] = [];

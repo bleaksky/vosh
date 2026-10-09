@@ -6,7 +6,7 @@
 // leaves the rest of the list, and its order, as it was.
 
 import { normalizeAlert } from './alertParts';
-import { saveDraftOnto, type Draft } from './automationDraft';
+import { saveDraftOnto, saveProblem, type Draft, type SaveProblem } from './automationDraft';
 import { parseJsonList } from './automationRecords';
 import { colorize, decolorize } from './colorTokens';
 import { PRESETS } from './presets';
@@ -392,23 +392,31 @@ export function blankTrigger(): TriggerRecord {
  *  yours never takes the name of a trigger in the preset library, its
  *  preset on or off, since the next launch would put the preset's in its
  *  place. */
-export function validateTriggers(list: readonly TriggerRecord[]): string | null {
-  for (const t of list) {
+export function validateTriggers(list: readonly TriggerRecord[]): SaveProblem | null {
+  for (const [index, t] of list.entries()) {
     if (t.preset) continue;
     const name = t.name.trim();
     const preset = PRESETS.find((p) => p.triggers.some((pt) => pt.name === name));
-    if (preset) return `${preset.name} uses the name ${name}. Give your trigger its own name.`;
-  }
-  const seen = new Set<string>();
-  for (const t of list) {
-    const name = t.name.trim();
-    if (!name) return 'Give every trigger a name before you save.';
-    if (seen.has(name)) {
-      return `Two triggers are named ${quoted(name)}. Give each one its own name.`;
+    if (preset) {
+      return saveProblem(`${preset.name} uses the name ${name}. Give your trigger its own name.`, [
+        index,
+      ]);
     }
-    seen.add(name);
+  }
+  const seen = new Map<string, number>();
+  for (const [index, t] of list.entries()) {
+    const name = t.name.trim();
+    if (!name) return saveProblem('Give every trigger a name before you save.', [index]);
+    const first = seen.get(name);
+    if (first !== undefined) {
+      return saveProblem(`Two triggers are named ${quoted(name)}. Give each one its own name.`, [
+        first,
+        index,
+      ]);
+    }
+    seen.set(name, index);
     if (!t.patterns.some((p) => patternSource(p).trim().length > 0)) {
-      return `The trigger ${quoted(name)} needs a pattern.`;
+      return saveProblem(`The trigger ${quoted(name)} needs a pattern.`, [index]);
     }
   }
   return null;

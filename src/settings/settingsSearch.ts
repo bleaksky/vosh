@@ -527,7 +527,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Aliases',
-    keywords: 'alias shortcut expansion command',
+    keywords: 'alias shortcut expansion command group character',
     target: at('automation', 'aliases'),
   },
   {

@@ -389,6 +389,16 @@ export async function listGroupSwitches(
   return invoke('groups_list', { list, profile });
 }
 
+/** What the loadouts would decide about a group of `list` the profile
+ *  does not hold yet, as one you typed in Settings and have not saved.
+ *  Null while they have no opinion. */
+export async function newGroupHold(
+  list: GroupList,
+  profile?: string | null,
+): Promise<LoadoutHold | null> {
+  return invoke('groups_new_hold', { list, profile });
+}
+
 /** Turn a whole group of one list on or off. Returns every switch of the
  *  list. A group the loadouts decide turns too, until they lay their
  *  state over it again. */

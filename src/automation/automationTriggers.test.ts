@@ -502,25 +502,33 @@ describe('validateTriggers', () => {
   });
 
   it('asks for names, unique names, and a pattern', () => {
-    expect(validateTriggers([t('')])).toBe('Give every trigger a name before you save.');
-    expect(validateTriggers([t('a'), t('a')])).toContain('Two triggers are named');
-    expect(validateTriggers([t('a', ' ')])).toContain('needs a pattern');
+    expect(validateTriggers([t('')])?.message).toBe('Give every trigger a name before you save.');
+    expect(validateTriggers([t('a'), t('b'), t('a')])).toEqual({
+      message: 'Two triggers are named “a”. Give each one its own name.',
+      at: [0, 2],
+    });
+    expect(validateTriggers([t('a', ' ')])?.message).toContain('needs a pattern');
   });
 
   it('keeps your trigger off the name of a preset trigger, its preset on or off', () => {
     const guard =
       'Disarms and fading buffs uses the name disarm.secondary. Give your trigger its own name.';
-    expect(validateTriggers([t('disarm.secondary')])).toBe(guard);
+    expect(validateTriggers([t('disarm.secondary')])?.message).toBe(guard);
     // Ahead of the clash with the preset's own copy, so the message
     // says why.
     const installed = { ...t('disarm.secondary'), preset: 'disarm_buff_fade' };
-    expect(validateTriggers([installed, t('disarm.secondary')])).toBe(guard);
+    expect(validateTriggers([installed, t('disarm.secondary')])).toEqual({
+      message: guard,
+      at: [1],
+    });
     expect(validateTriggers([installed])).toBeNull();
   });
 
   it('reads what you typed in a Text row, not its regex', () => {
     const row = { pattern: '^\\s*\\s*$', enabled: true, mode: 'text' as const, text: ' ' };
-    expect(validateTriggers([{ ...t('a'), patterns: [row] }])).toContain('needs a pattern');
+    expect(validateTriggers([{ ...t('a'), patterns: [row] }])?.message).toContain(
+      'needs a pattern',
+    );
     expect(validateTriggers([{ ...t('a'), patterns: [{ ...row, text: 'x' }] }])).toBeNull();
   });
 });

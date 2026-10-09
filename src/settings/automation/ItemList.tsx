@@ -23,7 +23,7 @@ import {
   type ListSection,
   type ListStop,
 } from '../../automation/automationList';
-import { loadoutHoldNote } from '../../automation/groupSwitches';
+import { loadoutHoldNote, newGroupNote } from '../../automation/groupSwitches';
 import { scrollWithin } from '../../lib/scrollWithin';
 import {
   ChevronRightIcon,
@@ -63,6 +63,9 @@ interface RowProps {
   /** Why the row carries the warn ring, which a reader hears as its
    *  description. Undefined for a row with no ring. */
   warnNote: string | undefined;
+  /** The id of the save bar's error line while it names this row, so a
+   *  reader hears what to fix. Undefined for a row it does not name. */
+  errorId: string | undefined;
   onSelect: (uid: string) => void;
   onFocus: () => void;
 }
@@ -84,19 +87,21 @@ const ListRow = memo(function ListRow({
   dot,
   edited,
   warnNote,
+  errorId,
   onSelect,
   onFocus,
 }: RowProps) {
   const warn = warnNote !== undefined;
   const suggested = !enabled && dot === 'suggested';
   const noteId = warn ? `st-auto-warn-${uid}` : undefined;
+  const describedBy = [errorId, noteId].filter(Boolean).join(' ') || undefined;
   return (
     <div className="st-auto-rowwrap">
       <button
         type="button"
-        className={cx('st-auto-row', warn && 'is-warn')}
+        className={cx('st-auto-row', warn && 'is-warn', errorId && 'is-error')}
         aria-current={selected ? 'true' : undefined}
-        aria-describedby={noteId}
+        aria-describedby={describedBy}
         tabIndex={tabbable ? 0 : -1}
         data-uid={uid}
         data-st-anchor={anchor}
@@ -161,6 +166,13 @@ export interface ItemListProps {
    *  in its place. A reader hears the why as the row's description,
    *  since the ring is a picture. */
   warnNotes?: ReadonlyMap<string, string> | undefined;
+  /** The rows that carry the warn ring, by uid, each with why, like an
+   *  alias another group's alias of its name covers. */
+  rowNotes?: ReadonlyMap<string, string> | undefined;
+  /** The rows the save bar's error names, which carry the danger ring. */
+  errorUids?: ReadonlySet<string> | undefined;
+  /** The id of the save bar's error line, while it shows. */
+  errorId?: string | undefined;
   /** The groups that show folded, by fold key. */
   folded: ReadonlySet<string>;
   /** Fold or open a group from its heading. */
@@ -201,6 +213,9 @@ export function ItemList({
   monoMeta,
   footer,
   warnNotes,
+  rowNotes,
+  errorUids,
+  errorId,
   folded,
   onFold,
   groupSwitches,
@@ -305,6 +320,7 @@ export function ItemList({
               dot={undefined}
               edited={false}
               warnNote={undefined}
+              errorId={undefined}
               onSelect={onSelect}
               onFocus={onRowFocus}
             />
@@ -329,8 +345,11 @@ export function ItemList({
                     dot={entry.dot}
                     edited={entry.edited ?? false}
                     warnNote={
-                      entry.warn ?? (entry.enabled ? warnNotes?.get(entry.name) : undefined)
+                      entry.warn ??
+                      rowNotes?.get(entry.uid) ??
+                      (entry.enabled ? warnNotes?.get(entry.name) : undefined)
                     }
+                    errorId={errorUids?.has(entry.uid) ? errorId : undefined}
                     onSelect={onSelect}
                     onFocus={onRowFocus}
                   />
@@ -354,7 +373,13 @@ export function ItemList({
             const group = groupOfSectionKey(section.key);
             const groupSwitch = group !== null ? groupSwitches?.byName.get(group) : undefined;
             const hold = groupSwitch?.loadouts;
-            const noteId = hold ? `${groupId}-note` : undefined;
+            // A group only the draft has gets its switch once you save
+            // it. Until then, say when the loadouts would turn it off.
+            const newHold =
+              group !== null && !groupSwitch && groupSwitches?.newHold?.on === false
+                ? groupSwitches.newHold
+                : null;
+            const noteId = hold || newHold ? `${groupId}-note` : undefined;
             return (
               <Fragment key={section.key}>
                 {divider}
@@ -399,6 +424,11 @@ export function ItemList({
                 {hold && groupSwitch && (
                   <p id={noteId} className="st-auto-groupnote">
                     {loadoutHoldNote(hold, groupSwitch.enabled)}
+                  </p>
+                )}
+                {newHold && (
+                  <p id={noteId} className="st-auto-groupnote">
+                    {newGroupNote(newHold)}
                   </p>
                 )}
                 {open && (
