@@ -219,226 +219,252 @@ On macOS, choose Get started in the Help menu. On any system, press `Cmd+K` on m
 
 <!-- id: play.send-commands -->
 
-The command input sends lines to the server. It handles single commands, chained commands, multi line blocks, and pastes.
+The command line sends lines to the game. It sends single commands, chained commands, blocks of more than one line, and pastes.
 
 - Type a command and press `Enter` to send it.
-- Chain commands on one line with `;`. Each piece goes out as its own command. Type `\;` for a literal semicolon.
-- Press `Shift+Enter` to add a line without sending. The box grows and a line number gutter appears once it holds two or more lines. Press `Enter` and every line submits separately, in order, with blank lines dropped.
-- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that. It echoes as your mark on its own line, or as a blank line with the mark Off, so you see each one go out. After a prompt that ends in `>`, it ends that row and adds nothing.
-- Paste multi line text straight into the input. A single line submits immediately. Two or more lines become a paste burst, sent one line every 500 ms by default, with a `paste N/M esc cancels` counter in the command line.
-- Press `Esc` during a burst to cancel every line that has not gone out yet. Starting a new paste also cancels the old burst.
+- To chain commands on one line, put `;` between them. Each part goes out as its own command. Type `\;` for a literal semicolon.
+- To add a line without sending, press `Shift+Enter`. The command line gets taller. When it holds two or more lines, a gutter with line numbers shows. Press `Enter` to send every line separately, in order. Vosh drops blank lines.
+- Press `Enter` on an empty command line to send a bare line. Many MUD prompts go on when they get one. It echoes as your mark on its own line, or as a blank line when the mark is Off. So you see each one go out. After a prompt that ends in `>`, it ends that row and adds nothing.
+- Paste text with more than one line into the command line. A single line sends at once. Two or more lines become a paste burst. By default Vosh sends one line every 500 ms. A `paste N/M esc cancels` counter shows in the command line.
+- To cancel every line of a burst that hasn't gone out yet, press `Esc`. A new paste also cancels the old burst.
 
-When `Enter` does something else, the command line names it in a pill where your mark sits. It reads `Password` at a password prompt and `More` at the game's pager, where `Enter` shows the next page. While a walk goes it reads `Walking` with the steps left, and `Esc` stops it. In the game's editor it names your text, as Write your description shows.
+When `Enter` does something else, the command line names it in a pill where your mark sits. At a password prompt the pill reads `Password`. At the pager of the game it reads `More`, and `Enter` shows the next page. During a walk it reads `Walking` with the steps left, and `Esc` stops the walk. In the editor of the game it names your text, as Write your description shows.
 
-With `Keep last command` on under Input, then Command line, in Settings, a sent command stays in the box fully selected. Press `Enter` again to resend it, or start typing to replace it.
+When `Keep last command` is on in Settings under Input, then Command line, a command you send stays in the command line, fully selected. Press `Enter` again to send it again. Or start to type to replace it.
 
-Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Pick another mark in `Mark before your commands` under Input, then Sent commands, in Settings. Choose `>`, your own text of up to four characters such as `you:`, or Off to echo your commands bare. With `Use the same mark in the command line` on, as it starts, the line you type in starts with the same mark, and with the mark Off it starts with your text. Turn on `Dim sent commands` and your commands draw faint, so the game's lines stand out, while the mark keeps its color. A quick key and a macro echo the same way. Right after a prompt that ends in `>`, such as `Account name>` at login, a command echoes without its mark, whichever mark you picked, since the prompt marks it already.
+Each command you send echoes in the text after a grey `›`. So your commands are easy to tell apart from the lines the game sends. To choose another mark, use `Mark before your commands` in Settings under Input, then Sent commands. Choose `>`, your own text of up to four characters such as `you:`, or Off to echo your commands with no mark.
 
-Shape the line you type in under Input, then Command line, in Settings. `Caret blinks` is on at first, and with Reduce motion on in your system settings the caret holds still anyway. `Caret color` recolors the caret, which takes your theme's accent until you pick one, and `Text color` recolors what you type. `Background` keeps the theme's band, gives it a `Slight tint` of your theme's accent so the line stands apart from the game, or takes `Your own` color. `Size` starts at `Same as terminal`, and any size you pick changes only the line.
+When `Use the same mark in the command line` is on, the line you type in starts with the same mark. It is on at first. When the mark is Off, the line starts with your text.
 
-Turn on `Color commands as you type` and the first word of each line decides its color. An alias and a Vosh `#` command color that word, a chat line by the same list spell check uses colors whole, and a `#` command Vosh doesn't know turns red. Vosh colors only what it knows for sure, so game commands stay plain. The selection, spell check and the caret work as before.
+Turn on `Dim sent commands` to draw your commands faint, so the lines of the game are easier to see. The mark keeps its color. A quick key and a macro echo in the same way. Right after a prompt that ends in `>`, such as `Account name>` at login, a command echoes without its mark. This is true for every mark, because the prompt already marks the command.
 
-Set the delay in `Wait between pasted lines` under Input, then Advanced, in Settings, anywhere from 0 to 10000 ms.
+To change the line you type in, go to Settings under Input, then Command line. `Caret blinks` is on at first. When Reduce motion is on in your system settings, the caret doesn't blink in any case. `Caret color` changes the color of the caret. Until you choose a color, the caret has the accent color of your theme. `Text color` changes the color of what you type.
+
+`Background` has three choices. It can keep the band of the theme. It can give the band a `Slight tint` of the accent color of your theme, so the line is easy to tell apart from the game. Or it can take `Your own` color. `Size` starts at `Same as terminal`. A size you choose changes only the command line.
+
+Turn on `Color commands as you type` to color each line by its first word. An alias and a Vosh `#` command color that word. A chat line colors whole, from the same list that spell check uses. A `#` command that Vosh doesn't know turns red. Vosh colors only what it knows for sure, so game commands stay plain. The selection, spell check, and the caret work as before.
+
+To set the delay, use `Wait between pasted lines` in Settings under Input, then Advanced. It goes from 0 to 10000 ms.
 
 ### 2.2 Recall command history
 
 <!-- id: play.reuse-history -->
 
-Command history records every line you send during a session and replays it from the command line.
+Command history records every line you send during a session. You can get the lines back in the command line.
 
-- Press `ArrowUp` in an empty input to step back through sent commands, newest first.
-- Type a few characters before pressing `ArrowUp` to turn recall into a prefix search. Only lines starting with that text cycle past.
-- Press `ArrowDown` to step toward newer matches. One step past the newest restores exactly what you had typed before the search began.
-- Edit the recalled line at any point. Editing ends the search, and the next `ArrowUp` starts a fresh one from whatever is now in the box.
+- In an empty command line, press `ArrowUp` to go back through the commands you sent, newest first.
+- To search by prefix, type a few characters, then press `ArrowUp`. Only lines that start with that text come up.
+- Press `ArrowDown` to go toward newer matches. One step past the newest match puts back exactly what you typed before the search started.
+- You can edit the recalled line at any point. An edit ends the search. The next `ArrowUp` starts a new search from the text that is now in the command line.
 
-History skips consecutive duplicates and never records anything you type in password mode.
+History skips a line that is the same as the line before it. It never records what you type in password mode.
 
-With `Keep last command` on, the line you just sent stays in the box fully selected. `Enter` resends it and typing anything replaces it.
+When `Keep last command` is on, the line you just sent stays in the command line, fully selected. `Enter` sends it again, and when you type, your text replaces it.
 
-In a multi line compose the arrows do their normal job first. `ArrowUp` moves the caret up a line unless you are already on the first line, and `ArrowDown` moves it down unless you are on the last, so history recall fires only from the edges of the block.
+When you write more than one line, the arrows do their usual job first. `ArrowUp` moves the caret up a line, unless you are on the first line. `ArrowDown` moves it down a line, unless you are on the last line. So history recall starts only from the first or last line of the block.
 
-Example. Type `tell` and press `ArrowUp` to cycle through only the lines that start with `tell`.
+Example. Type `tell` and press `ArrowUp`. Only the lines that start with `tell` come up.
 
 ### 2.3 Complete names with Tab
 
 <!-- id: play.tab-complete -->
 
-Tab completion finishes a partly typed word in the command line from names Vosh already knows.
+Tab completion finishes a word you started to type in the command line. It uses names that Vosh already knows.
 
-- Type the first letters of the word anywhere in the command line.
-- Press `Tab`. Vosh completes the word under the caret with its best match.
-- Press `Tab` again to cycle through the remaining candidates, or `Shift+Tab` to cycle backward. The list wraps around.
-- Keep typing, or press any other key, and the cycle resets with the current completion left in place.
+- Type the first letters of the word, anywhere in the command line.
+- Press `Tab`. Vosh completes the word at the caret with its best match.
+- Press `Tab` again to go to the next candidate, or `Shift+Tab` to go back. After the last candidate, the list starts again.
+- When you type or press any other key, the cycle resets. The current completion stays in place.
 
-On an empty line, `Tab` moves on to the panel and `Shift+Tab` back to the terminal.
+On an empty line, `Tab` moves to the panel and `Shift+Tab` moves back to the terminal.
 
-Candidates come from three sources, checked in this order.
+Candidates come from three sources, in this order.
 
-- Words from commands you have typed, most recent first.
+- Words from commands you typed, most recent first.
 - Characters in your room, when the server sends `Room.Chars` over GMCP.
-- Capitalized names Vosh spotted in the output during the last 30 minutes.
+- Names with a capital letter that Vosh saw in the output during the last 30 minutes.
 
-Matching is a case insensitive prefix match, duplicates collapse, and Vosh skips a candidate identical to what you already typed. Completion works on the word under the caret, so you can edit the middle of a line without touching the rest.
+A candidate matches when it starts with the letters you typed, in any case. Vosh shows each candidate one time. It skips a candidate that is the same as what you already typed. Completion works on the word at the caret, so you can edit the middle of a line and keep the rest.
 
 ### 2.4 Scroll back through history
 
 <!-- id: play.scroll-back -->
 
-Scrollback opens in a split above the live terminal, so old output stays readable while new output keeps flowing underneath.
+Scrollback opens in a split above the live terminal. You can read old output while new output continues to come in below it.
 
-- Scroll the mouse wheel up over the terminal. The first notch opens the split with history above and the live tail below, and further scrolling walks the history line by line.
-- Or press `PageUp` to open the split and page upward, then `PageDown` to page back down. A Mac keyboard produces these with `Fn+Up` and `Fn+Down`.
-- Or press `Cmd+\` on macOS or `Ctrl+\` elsewhere to open the split, and press it again to close it. The View menu and the palette list it as `Split terminal`.
-- Read the count at the top right of the terminal, like `54 / 78`, to see how far back you are.
-- Drag the divider between the history and the live tail to resize the split. Its color lives in Settings under Layout, then Split terminal.
-- Return to live three ways. Scroll or page down until history reaches its bottom and the split closes itself. Press `Esc`. Or middle click the terminal.
+- Scroll the mouse wheel up over the terminal. The first notch opens the split, with history above and the live tail below. When you scroll more, the history moves line by line.
+- Or press `PageUp` to open the split and go up a page. Press `PageDown` to go down a page. On a Mac keyboard these keys are `Fn+Up` and `Fn+Down`.
+- Or press `Cmd+\` on macOS or `Ctrl+\` on Windows and Linux to open the split. Press it again to close the split. The View menu and the palette call it `Split terminal`.
+- To see how far back you are, read the count at the top right of the terminal, such as `54 / 78`.
+- To change the size of the split, drag the divider between the history and the live tail. To set its color, go to Settings under Layout, then Split terminal.
+- There are three ways back to live. Scroll or page down to the bottom of the history, and the split closes on its own. Or press `Esc`. Or middle click the terminal.
 
-The live tail never scrolls away while the split is open. New output keeps landing there, and the lines you type show in the history too, so the record stays continuous.
+While the split is open, the live tail never scrolls away. New output continues to come in there. The lines you type also show in the history, so the record has no gaps.
 
-The terminal keeps 10,000 lines to scroll back through. To keep more or fewer, open Settings, choose Logs, and pick a size from 1,000 to 100,000 lines in `Scrollback size`. Both renderers and the scrollback Vosh restores at your next launch follow it, and a smaller size drops the oldest lines. Each character keeps its own. Times stay in the session log, under Settings, Logs, then `Search logs…`.
+The terminal keeps 10,000 lines of scrollback. To keep more or fewer, open Settings and choose Logs. Then choose a size from 1,000 to 100,000 lines in `Scrollback size`.
 
-Turn on `Collapse repeated lines` in Settings under Appearance, then Terminal text, and a line the game sends again and again takes one row. A line that reads exactly as the line right above it, colors included, joins it, and the row shows a gray count in front, like `(3) You are hungry.` The count climbs in place as more arrive. Any other line ends the run, a blank one too, and so do the lines you type, a reply from Vosh itself and a prompt that stays in the text. A pinned prompt leaves the text, so a run goes on past it. Type `compact` in Aabahran to drop the blank line before each prompt, and a run goes on from one round to the next. Your session log keeps every line, and your triggers fire on each one. It is off until you turn it on.
+Both renderers follow this size. The scrollback that Vosh restores at your next launch also follows it. A smaller size drops the oldest lines. Each character keeps its own size.
 
-Two rows under it set what collapses around a fight. `In a fight` covers every line that arrives while you are fighting, and starts on `Collapse`. Pick `Show every line` and each line of a fight keeps its own row. `Attack lines` covers each hit and miss the game shows you, yours, the ones on you and the ones you watch, in a fight or not. It starts on `Show every line`, so two blows show as two lines and never as `(2) Your slash DISMEMBERS a Blackwatch guard!`, where the count is easy to miss. While `In a fight` shows every line, attack lines show every line too, and the row says so.
+Times stay in the session log, in Settings under Logs, then `Search logs…`.
 
-With the xterm renderer the divider snaps to whole terminal rows. It also answers the keyboard, arrow keys nudge it 16px and `Shift` with an arrow jumps 64px. The native renderer splits its own grid, and a middle click at the live tail opens the split a page up.
+Turn on `Collapse repeated lines` in Settings under Appearance, then Terminal text. A line that the game sends again and again then takes one row. A line that is exactly the same as the line above it, colors included, joins it. The row shows a gray count in front, such as `(3) You are hungry.` The count goes up in place as more lines come in.
+
+Any other line ends the run, and so does a blank line. The lines you type end it too, and so do a reply from Vosh and a prompt that stays in the text. A pinned prompt leaves the text, so a run continues past it.
+
+In Aabahran, type `compact` to drop the blank line before each prompt. A run then continues from one round to the next. Your session log keeps every line, and your triggers fire on each line. This setting is off until you turn it on.
+
+Two rows under it set what collapses during a fight. `In a fight` covers every line that comes in while you fight. It starts on `Collapse`. Choose `Show every line` to give each line of a fight its own row.
+
+`Attack lines` covers each hit and miss that the game shows you, in a fight or not. That is your hits and misses, the ones on you, and the ones you watch. It starts on `Show every line`. So two blows show as two lines, and never as `(2) Your slash DISMEMBERS a Blackwatch guard!`, where the count is easy to miss. While `In a fight` shows every line, attack lines also show every line, and the row tells you so.
+
+With the xterm renderer, the divider snaps to whole terminal rows. You can also move it with the keyboard. The arrow keys move it 16px, and `Shift` with an arrow moves it 64px. The native renderer splits its own grid. A middle click at the live tail opens the split a page up.
 
 ### 2.5 Find text
 
 <!-- id: play.find-text -->
 
-The find bar searches the whole session scrollback. It floats over the top right of the terminal.
+The find bar searches all of the session scrollback. It floats over the top right of the terminal.
 
-- Press `Cmd+F` on macOS or `Ctrl+F` elsewhere. The find bar opens even while you are typing in the command line, and pressing it again puts the caret back in its field.
-- Type your query into the `Find in scrollback` field.
-- Press `Enter` for the next match and `Shift+Enter` for the previous one. The up and down arrow buttons do the same jobs.
-- Read the count beside the field. It shows `2 of 6` while you step through matches and `No matches` when the query finds nothing.
-- Narrow the query with the three toggles. `Match case` makes it case sensitive, `Whole word` matches whole words only, and `Regular expression` treats the query as a regular expression.
-- Press `Esc` or the close button to close the bar, clear every highlight, and return focus to the command line.
+- Press `Cmd+F` on macOS or `Ctrl+F` on Windows and Linux. The find bar opens even while you type in the command line. When you press the key again, the caret goes back to its field.
+- Type your query in the `Find in scrollback` field.
+- Press `Enter` for the next match and `Shift+Enter` for the previous match. The up and down arrow buttons do the same.
+- Read the count beside the field. It shows `2 of 6` while you go through the matches. It shows `No matches` when the query finds nothing.
+- To make the query narrower, use the three toggles. `Match case` makes it case sensitive. `Whole word` matches only whole words. `Regular expression` reads the query as a regular expression.
+- To close the bar, press `Esc` or the close button. This clears every highlight and puts the focus back in the command line.
 
-With the xterm renderer, a match above the visible screen opens the scrollback split with the match near the top of the history. A match already on screen closes any open split instead. The native renderer scrolls its own grid to each match.
+With the xterm renderer, a match above the visible screen opens the scrollback split. The match shows near the top of the history. A match that is already on screen closes an open split instead. The native renderer scrolls its own grid to each match.
 
-The find bar also opens from `Find in scrollback…` in the terminal right click menu, the Edit menu, and the `Cmd+K` palette.
+You can also open the find bar from `Find in scrollback…` in the right click menu, the Edit menu, and the command palette (`Cmd+K`).
 
 ### 2.6 Copy terminal text
 
 <!-- id: play.copy-text -->
 
-Terminal text copies to the system clipboard through a drag selection.
+To copy terminal text to the system clipboard, select it with a drag.
 
-- Drag across the output you want. An active text selection stops the usual click from refocusing the command line, so the selection stays put.
-- Press `Cmd+C` on macOS or `Ctrl+C` elsewhere.
+- Drag across the output you want. While text is selected, a click doesn't put the focus back in the command line, so the selection stays.
+- Press `Cmd+C` on macOS or `Ctrl+C` on Windows and Linux.
 - Or right click the terminal and choose `Copy`. The menu shows its shortcut beside it.
-- To copy everything, press `Cmd+A` on macOS or `Ctrl+A` elsewhere while the command line is empty, or choose `Select all` in the right click menu. It selects the whole terminal, scrollback included, and `Cmd+C` then copies it.
+- To copy everything, press `Cmd+A` on macOS or `Ctrl+A` on Windows and Linux while the command line is empty. Or choose `Select all` in the right click menu. This selects the whole terminal, scrollback included. Then `Cmd+C` copies it.
 
-One priority rule. When the command line itself holds a selection, `Cmd+C` copies that selection rather than the terminal. Clear its selection, or choose `Copy` in the right click menu, when the terminal text is what you want.
+One rule decides what copies. When the command line itself holds a selection, `Cmd+C` copies that selection and not the terminal. When you want the terminal text, clear that selection first, or choose `Copy` in the right click menu.
 
-`Paste` in the right click menu inserts the clipboard into the command line without sending anything. Edit the line as needed, then press `Enter` yourself.
+`Paste` in the right click menu puts the clipboard in the command line and sends nothing. Edit the line if you need to, then press `Enter` yourself.
 
-The right click menu also offers `Clear scrollback`, which empties what you can scroll back through, now and at your next launch. Your session log keeps every line.
+The right click menu also has `Clear scrollback`. It empties what you can scroll back through, now and at your next launch. Your session log keeps every line.
 
 ### 2.7 Use the command palette
 
 <!-- id: play.palette -->
 
-The command palette runs Vosh commands from the keyboard. It covers the View and Session commands, the Settings pages, your prompt, your aliases, and your sessions.
+The command palette runs Vosh commands from the keyboard. It has the View and Session commands, the Settings pages, your prompt, your aliases, and your sessions.
 
-- Press `Cmd+K` on macOS or `Ctrl+K` elsewhere, or click the search button at the right end of the title band. The same shortcut closes it again.
-- With nothing typed it lists the last few commands you ran under Recent, then View and Session.
-- Type a few letters to search every command. Entries whose title starts with your text rank first, then titles that hold it anywhere, then the other words each entry answers to.
-- Move the selection with the arrow keys and press `Enter` to run the highlighted entry. A row with a list behind it, like `Choose theme`, opens the list on `Enter` or `ArrowRight`, and `ArrowLeft` or `Backspace` steps back out.
-- Press `Esc` to step out of a list, or to close the palette without running anything.
+- Press `Cmd+K` on macOS or `Ctrl+K` on Windows and Linux. You can also click the search button at the right end of the title band. The same shortcut closes the palette again.
+- With nothing typed, it lists the last few commands you ran under Recent. Then it lists View and Session.
+- Type a few letters to search every command. Entries with a title that starts with your text come first. Then come titles that hold your text anywhere. Then come the other words each entry answers to.
+- Move the selection with the arrow keys. Press `Enter` to run the highlighted entry. Some rows have a list behind them, such as `Choose theme`. `Enter` or `ArrowRight` opens the list. `ArrowLeft` or `Backspace` goes back out.
+- Press `Esc` to go out of a list, or to close the palette and run nothing.
 
 The palette sorts what it finds into five sections.
 
-- Input. `Customize prompt…`, `Draw your prompt`, `Edit prompt as text…`, and a row for each text the writing card takes, like `Write a note…`, `Report a bug…` and `Edit your description…`.
-- View. `Show panel`, `Split terminal`, `Choose theme`, a row for each pane like `Show map`, the rows that pick where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Get started`, `Open settings`, and a row for each Settings page, like `Open trigger settings`.
-- Aliases. Every alias that is on. One that takes no arguments runs the moment you pick it. One that takes arguments puts its name in the command line instead, so you finish the line and press `Enter`.
-- Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open, `Close session`, `Hide sessions` or `Show sessions` with two or more, `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect sits last, and the palette never opens with it selected.
-- Go to. Every open session by the name its row shows, with the world beside a character, while two or more are open. The one in front has a check, and the first nine show their keys, `Cmd+1` to `Cmd+9`. Pick one to bring it to the front, or type a name or a port to find it.
+- Input. `Customize prompt…`, `Draw your prompt`, and `Edit prompt as text…`. Also a row for each text that the writing card takes, such as `Write a note…`, `Report a bug…`, and `Edit your description…`.
+- View. `Show panel`, `Split terminal`, `Choose theme`, and a row for each pane, such as `Show map`. Also the rows that choose where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Get started`, and `Open settings`. Also a row for each Settings page, such as `Open trigger settings`.
+- Aliases. Every alias that is on. An alias that takes no arguments runs as soon as you choose it. An alias that takes arguments puts its name in the command line instead. You then finish the line and press `Enter`.
+- Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open. Also `Close session`, and `Hide sessions` or `Show sessions` with two or more sessions. Also `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect is always last, and the palette never opens with it selected.
+- Go to. Every open session by the name its row shows, while two or more are open. A character shows with the world beside it. The session in front has a check, and the first nine show their keys, `Cmd+1` to `Cmd+9`. Choose a session to bring it to the front. Or type a name or a port to find it.
 
 ### 2.8 Use the right click menu
 
 <!-- id: play.right-click-menu -->
 
-The terminal right click menu collects the terminal's everyday actions in one place.
+The right click menu of the terminal holds the everyday actions of the terminal in one place.
 
 - Right click anywhere on the terminal to open it.
-- `Customize prompt…` opens Customize prompt over your prompt, where you design how Vosh draws it.
-- `Write` opens a list of what you can write, a note, a journal entry, an application, an idea, a bug or typo report, your description or your history. Each opens the writing card, as Write your description at 2.9 and Write in the game at 2.10 show.
-- `Copy` copies the current selection, and `Paste` inserts the clipboard into the command line. Nothing sends until you press `Enter` yourself.
+- `Customize prompt…` opens Customize prompt over your prompt. There you design how Vosh draws your prompt.
+- `Write` opens a list of the things you can write. They are a note, a journal entry, an application, an idea, a bug or typo report, your description, and your history. Each one opens the writing card, as Write your description at 2.9 and Write in the game at 2.10 show.
+- `Copy` copies the current selection. `Paste` puts the clipboard in the command line. Nothing goes out until you press `Enter` yourself.
 - `Select all` selects the whole terminal, scrollback included.
 - `Find in scrollback…` opens the find bar.
-- `Save a scene…` opens Save a scene in Settings on the newest log of the session in front, with its last 15 minutes. It does nothing while `Log sessions` is off for the profile, since that profile saves nothing to share.
+- `Save a scene…` opens Save a scene in Settings on the newest log of the session in front, with its last 15 minutes. It does nothing while `Log sessions` is off for the profile, because that profile saves nothing to share.
 - `Settings` opens a list beside the menu. `Triggers`, `Aliases`, `Macros`, and `Timers` open Settings under Automation on that list. `General`, `Appearance`, `Accessibility`, `Layout`, `Vitals`, `Prompt`, `Input`, `Automation`, `Scripts`, `Logs`, and `Characters` open that page of Settings. `Help` opens the Help window.
-- `Clear scrollback` empties what you can scroll back through, and Vosh restores none of it at your next launch. Your session log keeps every line.
+- `Clear scrollback` empties what you can scroll back through. Vosh restores none of it at your next launch. Your session log keeps every line.
 
-Items with a shortcut show it on the right, and `Settings` shows an arrow. The arrow keys move through the menu and `Enter` picks an item. `ArrowRight` or `Enter` on `Settings` opens its list on the first row, and `ArrowLeft` steps back out. Pointing at `Settings` opens the list too. `Esc` closes the list first, then the menu. The menu also closes on a click anywhere outside it, or the instant you pick an item. It keeps itself inside the window, so a right click near a corner never opens it half off screen. Near the right edge the Settings list opens on the left of the menu, and near the bottom it rises from its row.
+Items with a shortcut show it on the right, and `Settings` shows an arrow. The arrow keys move through the menu, and `Enter` chooses an item. `ArrowRight` or `Enter` on `Settings` opens its list on the first row. `ArrowLeft` goes back out. When you point at `Settings`, the list also opens. `Esc` closes the list first, then the menu.
+
+The menu also closes when you click anywhere outside it, and at once when you choose an item. It always stays inside the window, so a right click near a corner never opens it half off the screen. Near the right edge, the Settings list opens on the left of the menu. Near the bottom, it opens upward from its row.
 
 ### 2.9 Write your description
 
 <!-- id: play.write-description -->
 
-Vosh's writing card helps you write the description others see when they look at you, and sends it to the game for you.
+The writing card of Vosh helps you write the description that others see when they look at you. It also sends the description to the game for you.
 
-- Right click the terminal and choose `Write`, then `Your description…`, or type `desc` in the `Cmd+K` palette and pick `Edit your description…`.
-- With no draft, the card reads your description from the game once the game's prompt shows. The game's answer prints in the terminal under the card.
-- The box keeps every line to 75 columns, as help description asks. A paragraph flows as you type, and a break you make with `Return` stays. Whatever runs past 75 shows in red, and the footer offers `Rewrap paragraph` while the caret sits on that line.
-- The footer counts your lines with text against the help's ten to thirty, and names the empty ones apart.
-- A paste wraps each long line at 75, and turns curly quotes, long dashes and the ellipsis into the plain ones the game keeps. The footer says what changed, and `Undo` puts it back.
-- `Guide` shows the help's reminders beside your text, and `Read help description` asks the game for the help itself while the card folds to its header.
-- `Send to game` sends your text through the game's own editor, one line at a time, and checks off each line the game takes. Vosh then checks what the game holds, mends any line that differs, leaves the editor and reads your description back.
-- While Vosh sends, your triggers, timers, Lua and `#walk` wait, and a chip at the command line counts them. A line you type still goes at once, so you can act in a fight.
-- Your description doesn't need approval to change. Send it to the game as often as you like, and when you're ready, pick `Send for approval…` in the card's `⋯` menu. It sends `dcheck` after you confirm, and the game takes one check at a time. A check that's waiting keeps the text you sent with it, so when you send again, the footer reminds you. The game doesn't always say when the immortals decide, so the footer says it with an if.
+- Right click the terminal and choose `Write`, then `Your description…`. Or type `desc` in the command palette (`Cmd+K`) and choose `Edit your description…`.
+- When there is no draft, the card reads your description from the game when the prompt of the game shows. The answer of the game prints in the terminal under the card.
+- The box keeps every line to 75 columns, as help description asks. A paragraph flows as you type, and a break you make with `Return` stays. Text past column 75 shows in red. While the caret is on that line, the footer offers `Rewrap paragraph`.
+- The footer counts your lines with text against the ten to thirty lines that the help asks for. It counts the empty lines separately.
+- A paste wraps each long line at 75. It changes curly quotes, long dashes, and the ellipsis to the plain ones that the game keeps. The footer tells you what changed, and `Undo` puts it back.
+- `Guide` shows the reminders of the help beside your text. `Read help description` asks the game for the help itself, and the card folds to its header.
+- `Send to game` sends your text through the editor of the game, one line at a time. It checks off each line that the game takes. Vosh then checks what the game holds and corrects each line that is different. Then it leaves the editor and reads your description back.
+- While Vosh sends, your triggers, timers, Lua, and `#walk` wait, and a chip at the command line counts them. A line you type still goes at once, so you can act in a fight.
+- Your description doesn't need approval to change. Send it to the game as often as you want. When you're ready, choose `Send for approval…` in the `⋯` menu of the card. It sends `dcheck` after you confirm. The game takes one check at a time.
+- A check that waits keeps the text you sent with it. So when you send again, the footer reminds you. The game doesn't always tell you when the immortals decide, so the footer says it with an if.
 - A werebeast of level 15 and up gets a `Beast` switch beside the title for the beast description.
-- Drag the card by its header to put it anywhere in the window. Double click the header, or pick `Put the card back` in the `⋯` menu, and it goes back over the terminal.
-- Drag the grip on the card's edge to make the box taller or shorter. It runs along the top while the card sits over the terminal and along the bottom once you've moved it. Double click it and the box grows with your text again.
-- Drag the grip in the box's bottom right corner to make the box taller or wider, as you would any text area. It never gets narrower than 75 columns, and whatever runs past 75 still shows however wide you make it. Double click it and the box goes back to 80 columns and grows with your text.
-- The pin beside `Close` moves the card into a Writing pane in the panel, so the whole terminal stays in view. Press it again to float the card over the terminal. Vosh remembers where you put the card, how big you made the box and whether you pinned it.
+- To put the card anywhere in the window, drag it by its header. To put it back over the terminal, double click the header or choose `Put the card back` in the `⋯` menu.
+- To make the box taller or shorter, drag the grip on the edge of the card. The grip is along the top while the card is over the terminal. It is along the bottom after you move the card. Double click the grip, and the box grows with your text again.
+- To make the box taller or wider, drag the grip in its bottom right corner. It works as in any text area. The box never gets narrower than 75 columns. Text past column 75 still shows at any width. Double click the grip, and the box goes back to 80 columns and grows with your text.
+- The pin beside `Close` moves the card into a Writing pane in the panel, so you can see the whole terminal. Click the pin again to float the card over the terminal. Vosh remembers where you put the card, the size of the box, and whether you pinned it.
 
-Vosh never writes, rewrites or suggests a word. The red underlines come from your system's own spell check, and `Check spelling` in the card's `⋯` menu turns them off.
+Vosh never writes, rewrites, or suggests a word. The red underlines come from the spell check of your system. `Check spelling` in the `⋯` menu of the card turns them off.
 
-Your drafts stay in writing.toml in your data folder, one for each character on each world, and save as you type. Close the card at any time and your draft waits for you. With no connection the card still opens, and `Send to game` waits for a session that plays the character.
+Your drafts are in writing.toml in your data folder, one for each character on each world. They save as you type. You can close the card at any time, and your draft waits for you. With no connection the card still opens, and `Send to game` waits for a session that plays the character.
 
-When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Write this in Vosh?`. `Open in Vosh` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed. The command line names your text and the line you're on, such as `Description · 4 of 30`, in amber past thirty. The tick still marks column 75, and what runs past it takes a wash. Click the name for `Open in the writing card`, which opens the card on your text, or `Finish`, which sends `@` and closes the game's editor. You can also type `@` on a blank line to finish. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
+When you type `description edit` yourself, the game opens its own editor as usual. A notice then offers `Write this in Vosh?`. `Open in Vosh` leaves the editor of the game with no change and opens the card on your text. `Keep typing` keeps you in the editor of the game, where each line you type goes out as you type it.
+
+The command line then names your text and the line you're on, such as `Description · 4 of 30`. Past thirty, it shows in amber. The tick still marks column 75, and text past it gets a wash. Click the name to choose `Open in the writing card` or `Finish`. `Open in the writing card` opens the card on your text. `Finish` sends `@` and closes the editor of the game.
+
+You can also type `@` on a blank line to finish. To turn the notice off, use `Offer the card when the game's editor opens` in Settings under Input.
 
 ### 2.10 Write in the game
 
 <!-- id: play.write-in-the-game -->
 
-The writing card writes on the game's boards too. Notes, journal entries, applications, ideas, bug and typo reports, and your history, personality and purpose all open in it.
+The writing card also writes on the boards of the game. Notes, journal entries, applications, ideas, and bug and typo reports all open in it. So do your history, personality, and purpose.
 
-- Right click the terminal and choose `Write`, then the kind you want, or find it in the palette, such as `Write a note…` or `Report a bug…`. The card's title opens your drafts and every other kind.
-- A note takes `To` and `Subject` over its text. A journal entry, idea, bug or typo goes to the immortals, so `To` reads `Immortal`. A bug or typo report names the room you stand in, which the game records when you post, so post it from where the bug happened.
-- `Write in a language` in the `⋯` menu adds a `Language` row to a note. The game decides whether you know the tongue well enough.
-- The game never rewraps a note, so readers see your lines as you break them. The card keeps them to 75 columns, and to 70 for a custom race application, as help qrace asks.
-- An application's guide reads your subject the way the game does and shows the help for it, such as help psi requirements. Pick `Custom race application` in the `⋯` menu for a custom race.
-- `Post…` asks first, since you can't change a note once it's posted. Turn on `Don't ask again` there, or turn off `Ask before you post` in Settings, Input, and the button reads `Post` and posts at once. A bug or typo report you began in another room still asks, since the game records the room you stand in now. Vosh sets `To` and `Subject`, sends your text through the game's editor, reads it back, and posts only when the game holds it as you wrote it. When the game says no, its reason prints under the card and your draft stays.
-- The game holds one note at a time. When you started one in the game yourself, Vosh keeps it in your drafts and asks before it clears it.
-- If you're disconnected mid send, the card shows how far it got once you're back, and `Post again` starts over. When the drop came as it posted, Vosh checks the board's list first, and it never posts again on its own.
-- Just before it posts, Vosh lists your own notes on that board, so you'll see the list in the terminal. If your connection drops right then, Vosh compares the board with that list, so an older note with the same subject never passes for the new one.
-- Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` in the `⋯` menu sends your history to the immortals, once. Send your history again later and the footer reminds you that a check still waiting reads the one you sent back then.
+- Right click the terminal and choose `Write`, then the kind you want. Or find it in the palette, such as `Write a note…` or `Report a bug…`. The title of the card opens your drafts and every other kind.
+- A note has `To` and `Subject` above its text. A journal entry, idea, bug, or typo goes to the immortals, so `To` reads `Immortal`.
+- A bug or typo report names the room you stand in. The game records it when you post. So post the report from the place where the bug happened.
+- `Write in a language` in the `⋯` menu adds a `Language` row to a note. The game decides whether you know the language well enough.
+- The game never rewraps a note, so readers see your lines as you break them. The card keeps them to 75 columns. For a custom race application it keeps them to 70, as help qrace asks.
+- The guide of an application reads your subject as the game does. It shows the help for that subject, such as help psi requirements. For a custom race, choose `Custom race application` in the `⋯` menu.
+- `Post…` asks first, because you can't change a note after you post it. To skip the question, turn on `Don't ask again` there, or turn off `Ask before you post` in Settings under Input. The button then reads `Post` and posts at once. A bug or typo report that you started in another room still asks, because the game records the room you stand in now.
+- When you post, Vosh sets `To` and `Subject` and sends your text through the editor of the game. Then it reads the text back. It posts only when the game holds the text as you wrote it. When the game says no, its reason prints under the card and your draft stays.
+- The game holds one note at a time. When you started a note in the game yourself, Vosh keeps it in your drafts. It asks before it clears it.
+- If you're disconnected during a send, the card shows how far it got when you're back. `Post again` starts again from the beginning. When the drop came during the post, Vosh checks the list of the board first. It never posts again on its own.
+- Just before it posts, Vosh lists your own notes on that board, so you see the list in the terminal. If your connection drops at that moment, Vosh compares the board with that list. So an older note with the same subject is never taken for the new one.
+- Your history, personality, and purpose share one card, with a switch beside its title. `Send to game` saves each one in the game. `Send for review…` in the `⋯` menu sends your history to the immortals, one time. When you send your history again later, the footer reminds you of one thing. A check that still waits reads the history you sent at that time.
 
-You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
+You can keep as many notes open as you want, and each one saves as you type. Each post moves to `Sent`. There Vosh keeps your last 20 posts for each character. So you can still read a bug report that the game won't show you again.
 
-You can move the card, resize its box and pin it to the panel for any kind, as Write your description shows.
+For any kind, you can move the card, change the size of its box, and pin it to the panel, as Write your description shows.
 
-Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does. Keep typing in a note and the command line reads like `Note · line 4`, since a note has no line limit.
+When you type `note edit`, `history edit`, or another opener yourself, you get the same `Write this in Vosh?` notice as for your description. When you keep typing in a note, the command line reads like `Note · line 4`, because a note has no line limit.
 
-The card doesn't take tomes, cabal votes, paper or your pet's description yet. When you open one with `scribe text`, `vote edit`, `write edit` or `petedit desc`, no notice comes. The command line still marks column 75 and reads like `Tome · line 4` as you type.
+The card doesn't take tomes, cabal votes, paper, or the description of your pet yet. When you open one of them with `scribe text`, `vote edit`, `write edit`, or `petedit desc`, no notice comes. The command line still marks column 75, and reads like `Tome · line 4` as you type.
 
 ### 2.11 Walk to a place
 
 <!-- id: play.walk -->
 
-`#walk` moves you along a string of directions, one step at a time. Vosh waits for the game to show each new room before it sends the next step, so a move that fails stops the walk where you stand.
+`#walk` moves you along a string of directions, one step at a time. Vosh waits for the game to show each new room before it sends the next step. So a move that fails stops the walk where you stand.
 
-- Type `#walk 3n2e` to go north three times, then east twice.
+- Type `#walk 3n2e` to go north three times, then east two times.
 - Use `n` `e` `s` `w` `u` and `d`. The game has no diagonal exits, so `ne` walks north, then east.
-- Put a count from 1 to 99 before a direction to repeat it. Spaces between parts are fine.
-- The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. While you walk, the command line shows `Walking · 2 steps left` beside the map's chip. Other `#` commands leave it going.
-- An alias or a macro can run `#walk`, so `#alias bank #walk 3n2e` walks you there by name. Commands after `#walk` in the same alias wait until you arrive, and drop if the walk stops early.
-- Click a room on the map to walk to it. Vosh shows the steps as a `#walk` string first. A new click or `#walk` while you walk takes over once the step on its way lands.
+- To do a direction more than one time, put a count from 1 to 99 before it. You can put spaces between the parts.
+- The walk stops when a move fails, when a fight starts, when you stop standing, or when you send the game a command. To stop it yourself, press `Esc` or type `#walk stop`.
+- During a walk, the command line shows `Walking · 2 steps left` beside the chip of the map. Other `#` commands don't stop the walk.
+- An alias or a macro can run `#walk`. So `#alias bank #walk 3n2e` walks you there by name. Commands after `#walk` in the same alias wait until you arrive. If the walk stops early, Vosh drops them.
+- To walk to a room on the map, click it. Vosh first shows the steps as a `#walk` string. A new click or `#walk` during a walk takes over when the current step is done.
 
 | You type     | Vosh sends                                                        |
 | ------------ | ----------------------------------------------------------------- |
