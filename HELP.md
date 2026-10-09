@@ -831,162 +831,193 @@ mud.on_gmcp("Char.State", function(data) state = data; draw() end)
 
 <!-- id: shape.arrange-panels -->
 
-The panel on the right holds your panes, the map over your affects at first, with your vitals pinned at its foot. You arrange it in the window itself, and Vosh keeps the arrangement for each character.
+The panel on the right holds your panes. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
 
-- Show or hide the panel with the panel button at the right end of the title band, with `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` elsewhere, or with `Show panel` in the View menu or the palette. While it is hidden your vitals move to the status line.
-- Add a pane with `Add a pane`, the plus button in the title band. It lists the panes the panel does not show yet, and the one you pick lands at the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues, which joins the list once the game sends it.
-- Open a pane's menu with the more button in its header. `Split right` and `Split down` put the first pane the panel does not show beside or under it, or another Chat pane once it shows them all. On a Chat pane they put in another Chat pane. `Show here instead` swaps in another pane, and `Close pane` takes it out. Closing a pane loses nothing.
-- Drag the line between two panes to share the space between them. Tab to a line and the arrow keys move it 8 points, or 32 with `Shift`.
-- Drag the panel's left edge to change its width, from 200 to 800 points, and double click the edge to go back to 300. Tab to the edge and the arrow keys move it 8 points. Settings has the same `Width` under Layout, then Panel.
-- Show or hide one pane with its row in the View menu or the palette, like `Show map`.
+- To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the palette. While the panel is hidden, your vitals move to the status line.
+- To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues. Staff queues joins the list when the game sends it.
+- To open the menu of a pane, click the more button in its header. `Split right` and `Split down` put the first pane that the panel doesn't show beside it or under it. When the panel shows all the panes, they put in another Chat pane. On a Chat pane they put in another Chat pane.
+- In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
+- To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
+- To change the width of the panel, drag its left edge. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
+- To show or hide one pane, use its row in the View menu or the palette, such as `Show map`.
 
-To start over, choose `Reset panel layout` in the View menu or the palette, or `Reset to default` under Characters, then Panel layout, in Settings. The panes go back to the map over your affects, and the panel keeps its width and whether it shows.
+To start again, choose `Reset panel layout` in the View menu or the palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects. The panel keeps its width, and it stays shown or hidden.
 
-Settings under Characters draws each character's panel under Panel layout, so you can see how each one is arranged.
+Settings under Characters draws the panel of each character under Panel layout. So you can see how each one is arranged.
 
-Open Settings with the gear at the right end of the title band, after the panel button, or press `Cmd+,` on macOS or `Ctrl+,` elsewhere. `Open settings` in the palette and the `Settings` list in the terminal right click menu reach it too.
+To open Settings, click the gear at the right end of the title band, after the panel button. You can also press `Cmd+,` on macOS or `Ctrl+,` on Windows and Linux. `Open settings` in the palette and the `Settings` list in the right click menu of the terminal also open it.
 
 ### 4.2 Use the map
 
 <!-- id: shape.use-the-map -->
 
-The Map pane draws the map the game sends. It sits at the top of the panel at first, and its header names the area you are in.
+The Map pane draws the map that the game sends. At first it is at the top of the panel. Its header names the area you are in.
 
-- Show or hide it with `Show map` in the View menu or the palette, or add it with `Add a pane` in the title band.
-- Read the rows under the drawing. The first names the room you stand in. The name takes the color the terminal shows it in, from your theme's colors, like gray for a room inside, yellow for a field, and blue for a lake you cannot swim. Where the panel would wash that color out, the pane draws it a shade lighter or darker. A few rooms take a color of their own from their area, which the game leaves out of `Room.Info`, so the pane shows the usual color for their terrain. The second row names the terrain and the region, like `Inside` and `Coastal North`, with the exits at its right. The rest list the people here, with a count beside a name more than one of them shares, and when more people are here than fit, the last row counts the others. A short pane gives up rows of people first, then the terrain row, and keeps the room, with its exits beside the name.
-- Point at the drawing and click the sliders button in its bottom right corner to open the map menu.
-- Pick `Squares`, `Glyphs`, `Tileset`, or `3D` to change how the map draws. In Squares and 3D, a short tick out of a room marks an exit that leads past the room beside it.
-- Scroll or pinch over the map to zoom it, in any style, or choose `Zoom in` or `Zoom out`. `Actual size` shows the zoom and goes back to 100%.
-- In Tileset, choose `Load tileset…` to use your own tile art and `Clear tileset` to drop it.
-- In 3D, drag the map to turn and tilt it. Double click it or choose `Reset view` to put north back at the top. You can also press `Tab` to reach the map and turn and tilt it with the arrow keys. While the map is turned, a compass in its top right corner points north.
-- In 3D, choose `Your floor`, `One floor up and down`, or `Every floor` to pick the floors it draws. The floors above you draw as outlines and the floors below fade, and `Every floor` numbers each floor by its steps from yours. Turn on `Terrain sprites` to paint the terrain of each room on its roof.
+- To show or hide the map, choose `Show map` in the View menu or the palette. Or add it with `Add a pane` in the title band.
+- Read the rows under the drawing. The first row names the room you stand in. The name takes the color that the terminal shows it in, from the colors of your theme. Examples are gray for a room inside, yellow for a field, and blue for a lake you can't swim.
+- When the panel would make that color hard to see, the pane draws it a little lighter or darker. A few rooms take a color of their own from their area. The game leaves that color out of `Room.Info`, so the pane shows the usual color for their terrain.
+- The second row names the terrain and the region, such as `Inside` and `Coastal North`. The exits show at its right. The other rows list the people here. A name that more than one person shares has a count beside it. When more people are here than fit, the last row counts the others.
+- A short pane removes rows of people first, then the terrain row. It keeps the room, with its exits beside the name.
+- To open the map menu, point at the drawing and click the sliders button in its bottom right corner.
+- To change how the map draws, choose `Squares`, `Glyphs`, `Tileset`, or `3D`. In Squares and 3D, a short tick out of a room marks an exit that goes past the room beside it.
+- To zoom, scroll or pinch over the map, in any style. Or choose `Zoom in` or `Zoom out`. `Actual size` shows the zoom and goes back to 100%.
+- In Tileset, choose `Load tileset…` to use your own tile art. Choose `Clear tileset` to remove it.
+- In 3D, drag the map to turn and tilt it. To put north back at the top, double click it or choose `Reset view`. You can also press `Tab` to get to the map, then turn and tilt it with the arrow keys. While the map is turned, a compass in its top right corner points north.
+- In 3D, choose the floors it draws with `Your floor`, `One floor up and down`, or `Every floor`. The floors above you draw as outlines, and the floors below fade. `Every floor` numbers each floor by its steps from yours. Turn on `Terrain sprites` to paint the terrain of each room on its roof.
 
-Vosh remembers the style, the zoom, the 3D view, and the tileset. Until the game sends `Map.Tiles` the pane says the map appears when your MUD sends it. `Room.Info` names the room, its exits, its terrain, its region, and the area, and `Room.Chars` lists the people.
+Vosh remembers the style, the zoom, the 3D view, and the tileset. Until the game sends `Map.Tiles`, the pane says that the map shows when your MUD sends it. `Room.Info` names the room, its exits, its terrain, its region, and the area. `Room.Chars` lists the people.
 
 ### 4.3 Use the chat pane
 
 <!-- id: shape.chat-pane -->
 
-The chat pane collects channel talk in its own buffer, one line per message. Add it with `Add a pane` in the title band, or pick `Show here instead` in any pane's menu.
+The chat pane collects channel talk in its own buffer, with one line for each message. To add it, use `Add a pane` in the title band. Or choose `Show here instead` in the menu of any pane.
 
-- Lines arrive on their own. `Comm.Channel` GMCP feeds the pane automatically.
-- Read a line as `[tell] Tolliver: meet at the bank`. The tag names the channel and the speaker is bold, even a name of several words like `a Blackwatch villager`. Wrapped lines hang two cells in, so the tags run down the left edge.
-- Each line takes the color the game prints that channel in, from your theme's terminal colors. Say is bright yellow, tell green, gtell bright magenta, yell cyan, pray bright white, cabal bright blue, clan bright cyan, faction yellow, newbie bright green, immortal bright red, and imp bright cyan. Switch themes and the chat follows. A color too faint to read on the pane goes lighter or darker, with its hue kept, until it reads clearly. The terminal still shows the theme's own color.
-- Recolor a channel from the pane's menu. Choose `Channel colors`, then the channel, then `Default` or one of your theme's 16 terminal colors. The pane follows at once, each profile keeps its own picks, and a theme switch carries them along. `Reset all` gives every channel its default again.
-- Point at a message to see when it arrived.
-- Filter with the channel select beside the pane's name. A lone chat pane shows `All`, or the channels you check. Check as many as you like, and the header names them, like `Gtell, Tell`. Each chat pane keeps its own filter, so you can split one off for tells alone.
-- Add a second chat pane and it starts on `Tell`. Your first pane turns to `Everything else` at the same moment, the channels no other chat pane checks, so each tell lands in one pane, and a note says so. With two or more panes, each one shows the channels you check in it or `Everything else`, and `All` steps aside. One pane at a time shows `Everything else`, so the menus of the others say it is in another pane. A later pane starts on `Tell` while no pane checks it, then on `Everything else` while no pane shows it, and with no channels otherwise for you to pick. Close the others and the last pane shows `All` again. The panel holds up to four chat panes.
-- Route trigger output in. On a trigger under Automation, then Triggers, put a name in `Send to pane` under `Advanced`. Those lines land in the chat pane under that name, in their own words.
-- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. A new install starts with every preset off. Each one reads `[tell] to Tolliver: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
+- Lines come in on their own. `Comm.Channel` GMCP fills the pane automatically.
+- A line reads like `[tell] Tolliver: meet at the bank`. The tag names the channel, and the speaker is bold. This is also true for a name of more than one word, such as `a Blackwatch villager`. Wrapped lines start two cells in, so the tags make a column at the left edge.
+- Each line takes the color that the game prints that channel in, from the terminal colors of your theme. Say is bright yellow, tell green, gtell bright magenta, and yell cyan. Pray is bright white, cabal bright blue, clan bright cyan, and faction yellow. Newbie is bright green, immortal bright red, and imp bright cyan.
+- When you change themes, the chat follows. A color too faint to read on the pane gets lighter or darker, with the same hue, until it is clear. The terminal still shows the color of the theme.
+- To change the color of a channel, open the menu of the pane. Choose `Channel colors`, then the channel, then `Default` or one of the 16 terminal colors of your theme. The pane changes at once. Each profile keeps its own choices, and they change when you change the theme. `Reset all` gives every channel its default again.
+- Point at a message to see when it came in.
+- To filter, use the channel select beside the name of the pane. A single chat pane shows `All`, or the channels you check. You can check as many as you want, and the header names them, such as `Gtell, Tell`. Each chat pane keeps its own filter, so you can split one off for only tells.
+- When you add a second chat pane, it starts on `Tell`. At the same moment, your first pane changes to `Everything else`. That is the channels that no other chat pane checks. So each tell goes to one pane, and a note tells you so.
+- With two or more panes, each one shows the channels you check in it, or `Everything else`, and `All` goes away. Only one pane at a time shows `Everything else`. The menus of the others say that it is in another pane.
+- A later pane starts on `Tell` while no pane checks it. Next, it starts on `Everything else` while no pane shows it. Otherwise it starts with no channels, for you to choose. When you close the others, the last pane shows `All` again. The panel holds up to four chat panes.
+- To send trigger output to the pane, open a trigger in Automation, then Triggers. Put a name in `Send to pane` under `Advanced`. Those lines go to the chat pane under that name, in their own words.
+- To see the tells you send, use the `Tells you send` preset. The game sends no GMCP for them, so the preset routes the line that the game prints for each one. Vosh turns it on for every profile, one time, unless you had turned every preset off. A new install starts with every preset off.
+- Each tell you send reads `[tell] to Tolliver: text`, and so does a tell that a telepath projects. The pane skips the `You tell your group` line, because your gtell already comes in over GMCP. To turn the preset off, go to Settings under Automation, then Presets.
 
-The buffer holds a rolling 500 lines, survives closing and reopening the pane, and empties only when you choose `Disconnect` or connect to another world. Every chat pane reads the same buffer. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
+The buffer holds the last 500 lines. It stays when you close and open the pane again. It empties only when you choose `Disconnect` or connect to another world.
+
+Every chat pane reads the same buffer. The pane stays at its newest line. To read back, scroll up. When you scroll to within 24px of the bottom, it stays at the newest line again.
 
 ### 4.4 Configure the vitals readout
 
 <!-- id: shape.read-vitals -->
 
-The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Moves each show the value with a thin meter under it. The meters stay quiet until a vital runs low. Under 20% its value and meter turn red, and they stay red until it climbs back to 25%. In a fight your opponent gets a row on top with its health.
+The vitals are at the bottom of the panel, under the panes. Health, Mana, and Moves each show the value with a thin meter under it. The meters stay quiet until a vital gets low. Under 20%, its value and meter turn red. They stay red until the vital goes back up to 25%. In a fight, your opponent gets a row on top with its health.
 
 - Open Settings and choose Vitals.
-- Under Style, pick a style from the gallery. Each tile draws your own vitals in its style, so you see the look before you pick it. `Rows` gives each vital a row, `One line` fits Health, Mana, and Moves on a single row, and `Ledger` sets them in columns. `Gauges` fills a pill for each, `Pips` lights ten discs, `Bands` lays a bar over quiet bands that mark low and worn, `Ladders` lights a row of segments, `Blocks` draws a bar of block characters in your game font, and `Traces` draws each vital over its last minute. `Dials` fills an open dial, `Rings` nests a ring for each vital in one glyph, `Vials` fills a small vial, `Orbs` fills a round orb from the bottom up, and `Candles` burns down like a candle whose flame dims when you run low. `Text` writes them with your prompt's codes. Use the arrow keys to move through the styles.
-- Set `Show your vitals in` to `Status line` to move them under the terminal, and the panes take the room at the foot of the panel.
-- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. In a fight your opponent keeps its row at the foot of the panel. Turn it off to keep them, or pick another place for your prompt, and they come back at once. They also come back while you have prompts off in the game, since the band then has no prompt to show.
-- Under `Customize vitals`, drag a vital by its grip to change the order every style draws them in. From the keyboard, press Space on a grip, move the vital with the Up and Down arrow keys, and press Space again to drop it, or Escape to put it back. Turn a vital's switch off to drop it from your vitals.
-- Click a vital's swatch to give it one of your theme's sixteen colors, or `Default`. The color tints the vital's label and its mark, never its number. A color you could mistake for the one a low vital turns says `Like low`, and while `Warn before you run low` is on, a color you could mistake for its warning says `Like warn`. Vosh checks both the way your `Color vision` under Accessibility sees them. You can still pick either, since the number still changes color.
-- Pick `On top` or `At the bottom` beside `Your opponent` for where your opponent's row sits in a fight, in every style. Turn its switch off to leave it out.
-- Set `Values` to `Current and max` to read `186 / 1020`, to `Current` to read `186`, or to `Percent` to read `18%`.
-- Set `Meter` to `Line` for the thin meter, to `Bar` for a thicker one you can read at a glance in a fight, or to `None` to keep only the numbers on tighter rows. Every style from `Gauges` to `Candles` draws its own mark, so it takes no meter.
-- Turn on `Warn before you run low` and a vital turns yellow under two thirds and red under one third, the way the Group pane shows your group's health.
-- Turn on `Show each hit` and the part a hit takes stays pale for a moment, then drains away. A heal shows the part it gains pale first, and the fill follows. `Ladders` also keeps the segment you stood at before the hit lit for a moment. It works in every style with a fill, your opponent's too. `Traces` already draws each hit in its line, and the status line and `Text` leave it out. With Reduce motion on in your system settings, the pale part just goes once it has held.
-- `Reset to default` puts every vital back on in the usual order, with your opponent on top, `Current and max`, `Line`, and the warning and `Show each hit` off. The button stays dimmed until you change something, and it leaves your style and where your vitals show alone. Under `Text`, your text decides all of this, so `Customize vitals` holds your text and a preview of it, and `Reset to default` puts back the text it started from. That's your 0.7 text if you had one on, and Vosh's text otherwise.
-- `Edit…` beside your text opens `Your vitals text` over the terminal, beside the panel. It works like `Customize prompt`. Click a part of your text in the footer to change it, or use `Insert value…` and `Edit as text`, and Command Z takes a change back. Every change saves as you make it. `Presets` holds Vosh's text, the text you opened the card with, the one before that, and your 0.7 text if you had one.
+- Under Style, choose a style from the gallery. Each tile draws your own vitals in its style, so you see the look before you choose it. Use the arrow keys to move through the styles.
+- `Rows` gives each vital a row. `One line` puts Health, Mana, and Moves on a single row. `Ledger` puts them in columns. `Gauges` fills a pill for each vital. `Pips` lights ten discs. `Bands` puts a bar over quiet bands that mark low and worn.
+- `Ladders` lights a row of segments. `Blocks` draws a bar of block characters in your game font. `Traces` draws each vital over its last minute. `Dials` fills an open dial. `Rings` puts a ring for each vital inside one glyph.
+- `Vials` fills a small vial. `Orbs` fills a round orb from the bottom up. `Candles` burns down like a candle, and the flame gets dim when you get low. `Text` writes the vitals with the codes of your prompt.
+- To move your vitals under the terminal, set `Show your vitals in` to `Status line`. The panes then take the space at the foot of the panel.
+- Leave `Hide vitals while your prompt is pinned` on, and the panel removes its vitals while `Where your prompt shows` is `Pinned`. The panes then take their space. In a fight, your opponent keeps its row at the foot of the panel.
+- To keep the vitals, turn it off, or choose another place for your prompt. They then come back at once. They also come back while prompts are off in the game, because the band then has no prompt to show.
+- To change the order in which every style draws your vitals, drag a vital by its grip under `Customize vitals`. With the keyboard, press Space on a grip. Move the vital with the Up and Down arrow keys. Press Space again to drop it, or Escape to put it back. To remove a vital from your vitals, turn off its switch.
+- To give a vital one of the sixteen colors of your theme, or `Default`, click its swatch. The color tints the label of the vital and its mark, never its number.
+- A color that looks like the color of a low vital says `Like low`. While `Warn before you run low` is on, a color that looks like its warning says `Like warn`. Vosh checks both as your `Color vision` under Accessibility sees them. You can still choose either one, because the number still changes color.
+- To set where the row of your opponent shows in a fight, choose `On top` or `At the bottom` beside `Your opponent`. This works in every style. To leave the row out, turn off its switch.
+- Set `Values` to `Current and max` to read `186 / 1020`. Set it to `Current` to read `186`, or to `Percent` to read `18%`.
+- Set `Meter` to `Line` for the thin meter. Set it to `Bar` for a thicker meter that is easy to read in a fight. Set it to `None` to keep only the numbers, on smaller rows. Every style from `Gauges` to `Candles` draws its own mark, so it takes no meter.
+- Turn on `Warn before you run low` to make a vital yellow under two thirds and red under one third. The Group pane shows the health of your group in the same way.
+- Turn on `Show each hit` to keep the part that a hit takes pale for a moment before it drains away. A heal first shows the part it gains as pale, and then the fill follows. `Ladders` also keeps the segment you were at before the hit lit for a moment.
+- `Show each hit` works in every style with a fill, and for your opponent too. `Traces` already draws each hit in its line. The status line and `Text` don't show it. When Reduce motion is on in your system settings, the pale part goes away after it holds.
+- `Reset to default` puts every vital back on in the usual order, with your opponent on top. It sets `Current and max` and `Line`, and turns the warning and `Show each hit` off. The button stays dim until you change something. It doesn't change your style or the place your vitals show.
+- With `Text`, your text decides all of this. So `Customize vitals` holds your text and a preview of it. `Reset to default` puts back the text it started from. That is your 0.7 text if you had one on, and the text of Vosh if not.
+- `Edit…` beside your text opens `Your vitals text` over the terminal, beside the panel. It works like `Customize prompt`. To change a part of your text, click it in the footer. Or use `Insert value…` and `Edit as text`. Command Z takes a change back. Every change saves when you make it.
+- `Presets` holds the text of Vosh and the text you opened the card with. It also holds the text before that, and your 0.7 text if you had one.
 
-Right click your vitals, at the foot of the panel or on the status line, to change them without opening Settings. `Style` and `Values` each open a list with a check beside what you use now, and a pick takes effect at once. `Style` lists the styles in the gallery's order, with a line between each family. `Customize vitals…` opens Settings at `Customize vitals`. Under `Text`, `Edit your text…` opens `Your vitals text` over the terminal, and `Values` stays dimmed since your text writes its own values. The keyboard can't reach this menu, but it reaches every choice in it through Settings, under Vitals, then Style and `Customize vitals`.
+To change your vitals without Settings, right click them, at the foot of the panel or on the status line. `Style` and `Values` each open a list with a check beside your current choice. A choice takes effect at once. `Style` lists the styles in the order of the gallery, with a line between each family. `Customize vitals…` opens Settings at `Customize vitals`.
 
-Each default draws the panel you already know, so nothing changes until you pick something. One line drops the Health, Mana, and Moves labels only when they no longer fit beside the values, under about 360 pt with four digit health, and keeps the values and meters. `Current` and `Percent` keep the labels even on a narrow panel. A panel too narrow for even the values stacks them in rows.
+With `Text`, `Edit your text…` opens `Your vitals text` over the terminal. `Values` stays dim, because your text writes its own values. The keyboard can't open this menu. But each choice in it is also in Settings, under Vitals, then Style and `Customize vitals`.
 
-Turn off `Show the panel` under Layout and your vitals move to the status line. There they follow `Values` and `Warn before you run low` but never draw a meter. In a fight your opponent follows them with its health in yellow. When the target you set is the mob you fight, the two share one item, and a target on another mob keeps its own after it. When the line runs short, your opponent's name gives way first, then the labels, then each value falls back to the current number, then the moons, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
+Each default draws the panel you already know, so nothing changes until you choose something. One line drops the Health, Mana, and Moves labels only when they don't fit beside the values. This happens under about 360 pt with health of four digits. It keeps the values and meters. `Current` and `Percent` keep the labels, even on a narrow panel. A panel too narrow for even the values puts them in rows.
 
-When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health or sends none, and so does its health on the status line.
+When you turn off `Show the panel` under Layout, your vitals move to the status line. There they follow `Values` and `Warn before you run low`, but they never draw a meter. In a fight your opponent comes after them, with its health in yellow. When the target you set is the mob you fight, the two share one item. A target on another mob keeps its own item after it.
+
+When the line is too short, things give way in this order. First the name of your opponent, then the labels. Then each value falls back to the current number. Then the moons, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
+
+When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter. This is the same in the panel and on the status line. Nothing turns yellow or red while they are hidden. Your numbers come back with the next update that the game sends. In a fight, the opponent row reads `?` in the same way when the game hides its health or sends none. Its health on the status line does the same.
 
 ### 4.5 Watch your group and affects
 
 <!-- id: shape.group-affects -->
 
-The Group pane shows the health of everyone in your group. The Affects pane shows what affects you and the hours each has left. Add either one with `Add a pane` in the title band.
+The Group pane shows the health of each member of your group. The Affects pane shows what affects you and the hours each affect has left. To add either one, use `Add a pane` in the title band.
 
-- Read the Group rows. Each member gets a row with the name, a `lead` tag on the leader, a thin health meter, and the percent. The meter and the percent stay quiet at 67% and up, turn yellow down to 34%, and turn red below that. The header counts the members.
-- Pick the affects you track in Settings under Characters, then Tracked affects. Choose `Add affect…` and pick one of the affects on you now, or type its name. Matching ignores case and extra spaces. Under Advanced you can give a tracked affect a short label like `sanc` to show in its place, and set the order of your slots.
-- Pick how the affects pane draws in Settings under Layout, then Affects, or from the pane's own menu under `Style` and `Marker`. Each character keeps its own. `Timers first` is the default. `Countdown` lists every affect by the hours it has left. `Grouped chips` puts what to recast first. `Draining chips` does the same and colors only the hours a chip has left.
-- In `Timers first`, read the affects pane in two columns. Each entry shows the hours left, then the name exactly as the game sends it. `+` means permanent and `-` means you do not have it, the same marks the game uses in its own affects bar. A pane narrower than about 360 pt shows one column.
-- Your tracked affects fill the top rows in your order and keep their places as the hours change. The dot beside each agrees with its hours. Green is up, yellow is running out, and red is almost gone. Unless you change them, that is two hours or fewer for yellow and one hour or none for red. A hollow red ring and a red name mean you are missing it.
-- Everything else sits under a thin line. Harmful affects like `faerie fire` come first, with a red diamond and a red name. The rest follow by hours left, down the left column and then down the right.
-- In `Countdown`, the tracked affects you are missing come first, then every affect by the hours left, down the left column and then down the right. A thin meter under each drains as its hours run down.
-- In `Grouped chips`, `Recast` holds the tracked affects you are missing and the ones running out, `Tracked` the rest you track, and `Other` everything else. A missing affect is a dotted red chip. A tracked chip is filled, and the fill drains from the left as its hours run down. One running out turns yellow, and red once it is almost gone. Other affects sit in outlined chips, and harmful ones in red.
-- `Draining chips` groups and orders the chips the same way. A chip running out keeps no tint of its own. A thin outline shows its full width, and yellow or red fills only the share that matches the hours it has left, the whole chip while it is at full.
-- The meters and the fills measure each affect against the most hours Vosh has seen for it since you last cast it, and Vosh remembers that for each character between logins. An affect Vosh first sees partway through starts full, and a permanent one stays full.
-- `Marker` sets the mark beside each affect you track in `Timers first` and `Countdown`. Pick a dot, a square, plus and minus, or none. Plus and minus shows a plus while you have the affect and a minus while you miss it. The color shows the state in every shape, and with none the hours and the red names still do.
-- Turn on `Tint what to recast` to put a missing affect on a red wash and one about to drop on yellow or red, in `Timers first` and `Countdown`. Both chip styles always mark what to recast.
-- The hours follow the game unless you change them. One hour or none reads in bold red, and two in yellow. Set `Running out at` and `Almost gone at` in Settings under Layout, then Affects, or choose `Change when affects warn…` in the pane's menu. Each takes whole hours, and almost gone never goes over running out, so the same number for both skips the yellow. Each character keeps its own. The header counts the tracked affects you are missing and the ones running out.
-- The pane shows whole rows only. When some do not fit, the last entry says how many more there are, like `5 more`. Click it to scroll to them, and point away to scroll back.
+- Read the Group rows. Each member gets a row with the name, a `lead` tag on the leader, a thin health meter, and the percent. The meter and the percent stay quiet at 67% and up. They turn yellow down to 34%, and red below that. The header counts the members.
+- To choose the affects you track, go to Settings under Characters, then Tracked affects. Choose `Add affect…`, and choose one of the affects on you now or type its name. Matching ignores case and extra spaces.
+- Under Advanced, you can give a tracked affect a short label to show in its place, such as `sanc`. You can also set the order of your slots.
+- To choose how the affects pane draws, go to Settings under Layout, then Affects. Or use `Style` and `Marker` in the menu of the pane. Each character keeps its own choice.
+- `Timers first` is the default. `Countdown` lists every affect by the hours it has left. `Grouped chips` puts what to recast first. `Draining chips` does the same and colors only the hours a chip has left.
+- In `Timers first`, the affects pane has two columns. Each entry shows the hours left, then the name exactly as the game sends it. `+` means permanent, and `-` means you don't have it. The game uses the same marks in its own affects bar. A pane narrower than about 360 pt shows one column.
+- Your tracked affects fill the top rows in your order. They keep their places as the hours change. The dot beside each one agrees with its hours. Green is up, yellow is running out, and red is almost gone.
+- Unless you change them, yellow is two hours or fewer, and red is one hour or none. A hollow red ring and a red name mean the affect is missing.
+- All the other affects are under a thin line. Harmful affects such as `faerie fire` come first, with a red diamond and a red name. The rest follow by hours left, down the left column and then down the right column.
+- In `Countdown`, the tracked affects you are missing come first. Then every affect follows by the hours left, down the left column and then down the right column. A thin meter under each affect drains as its hours go down.
+- In `Grouped chips`, `Recast` holds the tracked affects that are missing or running out. `Tracked` holds the other affects you track. `Other` holds all the other affects.
+- A missing affect is a dotted red chip. A tracked chip is filled, and the fill drains from the left as its hours go down. A chip that is running out turns yellow, then red when it is almost gone. Other affects are in outlined chips, and harmful ones are red.
+- `Draining chips` groups and orders the chips in the same way. A chip that is running out has no tint of its own. A thin outline shows its full width. Yellow or red fills only the part that matches the hours it has left, and the whole chip when it is full.
+- The meters and the fills measure each affect against the most hours Vosh saw for it since you last cast it. Vosh remembers this for each character between logins. An affect that Vosh first sees part of the way through starts full. A permanent affect stays full.
+- `Marker` sets the mark beside each affect you track in `Timers first` and `Countdown`. Choose a dot, a square, plus and minus, or none. Plus and minus shows a plus while you have the affect and a minus while it is missing. In every shape, the color shows the state. With none, the hours and the red names still show it.
+- Turn on `Tint what to recast` to tint the affects to recast. A missing affect gets a red wash. An affect that will soon drop gets a yellow or red wash. This works in `Timers first` and `Countdown`. Both chip styles always mark what to recast.
+- The hours follow the game unless you change them. One hour or none shows in bold red, and two hours shows in yellow. To change this, set `Running out at` and `Almost gone at` in Settings under Layout, then Affects. Or choose `Change when affects warn…` in the menu of the pane.
+- Each setting takes whole hours. Almost gone is never more than running out. So the same number for both skips the yellow. Each character keeps its own settings. The header counts the tracked affects that are missing and the ones running out.
+- The pane shows only whole rows. When some rows don't fit, the last entry tells how many more there are, such as `5 more`. Click it to scroll to them. Point away to scroll back.
 
-Group data arrives from `Group.Info`. Affects come from `Char.Affects`, which the game sends when you log in, whenever an affect changes, and every tick. With no group the pane says your group appears when you join one.
+Group data comes from `Group.Info`. Affects come from `Char.Affects`. The game sends it when you log in, when an affect changes, and every tick. With no group, the pane says that your group shows when you join one.
 
-When the game hides your affects or your group, as it does under lamented tears, the pane says so in place of its rows. The affects pane marks no tracked affect missing, and the group pane shows no member health from before. Each fills in again with the next update the game sends.
+When the game hides your affects or your group, as it does under lamented tears, the pane tells you so in place of its rows. The affects pane marks no tracked affect as missing. The group pane shows no member health from before. Each pane fills in again with the next update that the game sends.
 
 ### 4.6 Watch the staff queues
 
 <!-- id: shape.imm-board -->
 
-The Staff queues pane lists the staff queues that need you, worst first. The game sends them to immortals alone.
+The Staff queues pane lists the staff queues that need you, with the worst first. The game sends them only to immortals.
 
-- Log in on an immortal. The game sends `Imm.Queues` at login, and `Show staff queues` joins the View menu, the palette, and `Add a pane`.
-- Add the pane with `Add a pane` in the title band, or choose `Show staff queues`. Until the queues arrive it says they appear when you log in as an immortal.
-- Read top down. Only queues with work show. Anything past its deadline sorts first, then anything in the last quarter before it, then the rest, the bigger backlog first. The queues are Description checks, Applications, Journals, Votes, Notes, Bugs, Penalties, Ideas, and Typos.
-- Read the asides. A row says how many are overdue or nearing their deadline, Applications adds how many are unread, and Journals adds how many are unawarded. Point at a row to read what it counts and its deadline.
+- Log in on an immortal. The game sends `Imm.Queues` at login. `Show staff queues` then shows in the View menu, the palette, and `Add a pane`.
+- To add the pane, use `Add a pane` in the title band, or choose `Show staff queues`. Until the queues come in, the pane says that they show when you log in as an immortal.
+- Read from the top down. Only queues with work show. Items past their deadline come first. Then come items in the last quarter before the deadline. Then come the rest, with the bigger backlog first.
+- The queues are Description checks, Applications, Journals, Votes, Notes, Bugs, Penalties, Ideas, and Typos.
+- Read the asides. A row tells how many items are overdue or near their deadline. Applications adds how many are unread. Journals adds how many have no award. Point at a row to read what it counts and its deadline.
 
-The header sums the overdue items, or else the nearing ones. With nothing waiting the pane says no staff queue needs you right now.
+The header adds up the overdue items. If there are none, it adds up the items near their deadline. When nothing waits, the pane says that no staff queue needs you now.
 
 ### 4.7 Choose where your prompt shows
 
 <!-- id: shape.prompt-show -->
 
-Once Vosh reads your prompt, you choose where it shows. Open Settings, choose Prompt, and pick a place under `Where your prompt shows`.
+When Vosh reads your prompt, you choose where it shows. Open Settings, choose Prompt, and choose a place under `Where your prompt shows`.
 
-- `In the text` shows each prompt where the game sends it. The terminal reads as it always has.
-- `Lifted` keeps every prompt in the text on a raised band in the selected row color of your theme, scrollback included. A prompt that ends on a character gains one space after its band, so your echo never touches it.
-- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band is only as tall as your prompt. When a fight adds a row, the text above gives up its top line to make room and gets it back when the fight ends, so one blank line always sits between your newest line and the band, as the game leaves one before each prompt. Every prompt still reaches the session log and your Prompts triggers. While your prompt is pinned, the panel hides its vitals and gives their room to the panes, all but your opponent's row in a fight. Turn off `Hide vitals while your prompt is pinned` under Vitals, then Style, to keep them.
+- `In the text` shows each prompt where the game sends it. The terminal reads as it always did.
+- `Lifted` keeps every prompt in the text, on a raised band in the selected row color of your theme. This includes the scrollback. A prompt that ends on a character gets one space after its band, so your echo never touches it.
+- `Pinned` takes your prompts out of the text. It shows your newest prompt on a band above the command line. The band is only as tall as your prompt.
+- When a fight adds a row to a pinned prompt, the text above gives up its top line to make room. It gets the line back when the fight ends. So one blank line always stays between your newest line and the band, as the game leaves one before each prompt.
+- Every prompt still goes to the session log and your Prompts triggers. While your prompt is pinned, the panel hides its vitals and gives their space to the panes. Only the row of your opponent in a fight stays. To keep the vitals, turn off `Hide vitals while your prompt is pinned` under Vitals, then Style.
 
-At the foot of Customize prompt, the button beside `Draw your prompt` names where your prompt shows now. Click it and pick another place, and Customize prompt moves with your prompt.
+At the foot of Customize prompt, the button beside `Draw your prompt` names where your prompt shows now. Click it and choose another place. Customize prompt moves with your prompt.
 
-From the command line, `#prompt show lifted` picks the same place, and `text` or `pinned` in its place picks the others. `#prompt` alone also says where your prompt shows.
+In the command line, `#prompt show lifted` chooses the same place. Use `text` or `pinned` in its place to choose the others. `#prompt` alone also tells you where your prompt shows.
 
-The choice needs Vosh to read your prompt. Until it does, the row stays off and says what to do first, and `#prompt show` tells you to type `#prompt game` with your prompt setting in braces. While you have prompts off in the game, the pinned band says so and shows nothing else.
+To choose a place, Vosh must read your prompt. Until it does, the row stays off and tells you what to do first. `#prompt show` tells you to type `#prompt game` with your prompt setting in braces. While prompts are off in the game, the pinned band tells you so and shows nothing else.
 
-With the xterm renderer, the newest 1000 prompts keep their bands and older ones show plain. The split history pane shows them plain too. The native renderer keeps a band on every prompt in the scrollback.
+With the xterm renderer, the newest 1000 prompts keep their bands, and older ones show plain. The split history pane also shows them plain. The native renderer keeps a band on every prompt in the scrollback.
 
-The choice saves in the `[prompt]` table of your profile as `show`. An older version of Vosh ignores it and shows your prompt in the text. When that version saves your profile, the choice is gone, so pick it again here.
+The choice saves in the `[prompt]` table of your profile as `show`. An older version of Vosh ignores it and shows your prompt in the text. When that version saves your profile, the choice is lost. So choose it again here.
 
 ### 4.8 Watch a player with snoop
 
 <!-- id: shape.snoop -->
 
-When you snoop a player in the game, a split opens at the top of the terminal column with what their screen shows, in the game's colors. Your own terminal stays under it, next to your command line, and your caret stays where it was. Vosh asks the game for snoop on every connection, so there is nothing to turn on, and a character who never snoops sees no change.
+When you snoop a player in the game, a split opens at the top of the terminal column. It shows what the screen of that player shows, in the colors of the game. Your own terminal stays under it, next to your command line, and your caret stays where it was. Vosh asks the game for snoop on every connection, so you have nothing to turn on. A character who never snoops sees no change.
 
-- Read one tab for each player you snoop. A green dot marks a snoop that runs and a ring one that ended. A tab behind the one in front brightens and takes a dot when new lines arrive. Point at a tab to see how long that player has been quiet.
-- Click `Stop` to send `snoop stop Tolliver` for the player in front. The tab goes once the game says the snoop ended. `Stop every snoop` in the more menu sends `snoop stop`, which ends them all.
-- When a snoop ends any other way, because you typed the command, Tolliver quit, or your link dropped, the tab stays with the last thing it showed and says when it ended. Click `Close` to drop it. Snoop Tolliver again and the same tab picks up.
-- Each tab keeps 5,000 lines in your terminal's font and size, wrapped at words like your own. `Find` in the more menu, or `Cmd+F` while you're in the snoop, searches the tab in front, and `Cmd+C` copies what you select there.
-- Your triggers, highlights, gags and sounds never act on snoop text, since you wrote them for your own screen. Your Lua still hears `Snoop.Start`, `Snoop.Stop` and `Snoop.Output` like any other GMCP.
-- Drag the line under the split to resize it. It starts at 40 percent of the column, and your profile keeps the size you pick. It keeps four rows and always leaves you six. Drag it to the top, choose `Fold` in the more menu, or double click the line to fold it to its strip, and double click again to open it.
-- Press `Cmd+J` on macOS or `Ctrl+J` elsewhere to move into the snoop, and again to step to the next tab. Press `Escape`, or just start typing, and you're back on the command line, so what you type always goes to your own character.
-- Choose `Open in a window` in the more menu to move the tabs to a window of their own, say on a second screen. `Cmd+J` brings that window forward. Your profile remembers where you put the window and its size. Close it and the tabs come back to the split.
+- There is one tab for each player you snoop. A green dot marks a snoop that runs, and a ring marks a snoop that ended. A tab behind the front tab gets brighter and gets a dot when new lines come in. Point at a tab to see how long that player has been quiet.
+- To stop the snoop of the player in front, click `Stop`. It sends `snoop stop Tolliver`. The tab goes away when the game says that the snoop ended. `Stop every snoop` in the more menu sends `snoop stop`, which ends all of them.
+- A snoop can end in other ways, such as when you type the command, when Tolliver quits, or when your connection drops. Then the tab stays with the last thing it showed and tells when it ended. To remove it, click `Close`. When you snoop Tolliver again, the same tab continues.
+- Each tab keeps 5,000 lines in the font and size of your terminal, wrapped at words like your own terminal. `Find` in the more menu searches the tab in front. So does `Cmd+F` while you're in the snoop. `Cmd+C` copies what you select there.
+- Your triggers, highlights, gags, and sounds never act on snoop text, because you wrote them for your own screen. Your Lua still gets `Snoop.Start`, `Snoop.Stop`, and `Snoop.Output` like any other GMCP.
+- To change the size of the split, drag the line under it. It starts at 40 percent of the column, and your profile keeps the size you choose. It keeps four rows and always leaves you six.
+- To fold the split to its strip, drag the line to the top. Or choose `Fold` in the more menu, or double click the line. Double click again to open it.
+- To move into the snoop, press `Cmd+J` on macOS or `Ctrl+J` on Windows and Linux. Press it again to go to the next tab. To go back to the command line, press `Escape` or start to type. So what you type always goes to your own character.
+- To move the tabs to a window of their own, choose `Open in a window` in the more menu. This is useful on a second screen. `Cmd+J` brings that window to the front. Your profile remembers the place and size of the window. When you close it, the tabs go back to the split.
 
-Each session keeps its own snoops, and its row in the sessions sidebar shows an eye and how many run. A disconnect ends every snoop on that session.
+Each session keeps its own snoops. Its row in the sessions sidebar shows an eye and how many snoops run. A disconnect ends every snoop on that session.
 
-The session log keeps each line of a snoop, starting with the player's name, like `Tolliver|`. Search your logs for `^Tolliver\|` to read it again once the tab is gone.
+The session log keeps each line of a snoop. The line starts with the name of the player, such as `Tolliver|`. To read it again after the tab is gone, search your logs for `^Tolliver\|`.
 
-While a snoop is open, type `snoop` in the palette to reach `Go to snoop`, `Next snoop`, `Stop snooping Tolliver`, `Stop every snoop`, `Open snoop in a window` and `Close ended snoops`. Snoop has no row in Settings.
+While a snoop is open, type `snoop` in the palette. You then get `Go to snoop`, `Next snoop`, `Stop snooping Tolliver`, `Stop every snoop`, `Open snoop in a window`, and `Close ended snoops`. Snoop has no row in Settings.
 
 ## Tick and target
 
