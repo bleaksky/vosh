@@ -23,6 +23,9 @@ export interface KindInfo {
   kind: WritingKind;
   /** The card's title. */
   title: string;
+  /** Its short name, on the command line's pill while the game's editor
+   *  holds it. */
+  pill: string;
   /** The row under Write in the terminal's menu. */
   menu: string;
   /** The palette's row, named for what you do. */
@@ -38,6 +41,8 @@ export interface KindInfo {
   room: boolean;
   /** A help sets the width, so a line past it reads in danger. */
   helpWidth: boolean;
+  /** The most lines its help allows, or null where no help sets one. */
+  maxLines: number | null;
   /** The command that sends the text for its review, once. */
   check: 'dcheck' | 'history check' | null;
   /** The level a character needs to write it, from Char.Status. */
@@ -113,6 +118,7 @@ const base = {
   language: false,
   room: false,
   helpWidth: false,
+  maxLines: null,
   check: null,
   level: 0,
 };
@@ -122,6 +128,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'note',
     title: 'Note',
+    pill: 'Note',
     menu: 'Note…',
     palette: 'Write a note…',
     keywords: 'note board letter post',
@@ -132,6 +139,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'journal',
     title: 'Journal entry',
+    pill: 'Journal entry',
     menu: 'Journal entry…',
     palette: 'Write a journal entry…',
     keywords: 'journal rp points diary',
@@ -147,6 +155,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'application',
     title: 'Application',
+    pill: 'Application',
     menu: 'Application…',
     palette: 'Write an application…',
     keywords: 'application apply psi crusader cabal noble royal warcry qrace race',
@@ -156,6 +165,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'idea',
     title: 'Idea',
+    pill: 'Idea',
     menu: 'Idea…',
     palette: 'Write an idea…',
     keywords: 'idea suggest suggestion',
@@ -171,6 +181,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'bug',
     title: 'Bug report',
+    pill: 'Bug report',
     menu: 'Bug report…',
     palette: 'Report a bug…',
     keywords: 'bug report broken',
@@ -182,6 +193,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'typo',
     title: 'Typo report',
+    pill: 'Typo report',
     menu: 'Typo report…',
     palette: 'Report a typo…',
     keywords: 'typo report spelling mistake',
@@ -193,6 +205,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'news',
     title: 'News',
+    pill: 'News',
     menu: 'News…',
     palette: 'Write news…',
     keywords: 'news board immortal staff',
@@ -203,6 +216,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'changes',
     title: 'Changes',
+    pill: 'Changes',
     menu: 'Changes…',
     palette: 'Write changes…',
     keywords: 'changes board immortal staff',
@@ -213,6 +227,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     ...base,
     kind: 'penalty',
     title: 'Penalty',
+    pill: 'Penalty',
     menu: 'Penalty…',
     palette: 'Write a penalty…',
     keywords: 'penalty board immortal staff',
@@ -224,10 +239,12 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     kind: 'description',
     board: false,
     title: 'Your description',
+    pill: 'Description',
     menu: 'Your description…',
     palette: 'Edit your description…',
     keywords: 'description desc look dcheck',
     helpWidth: true,
+    maxLines: 30,
     check: 'dcheck',
     guide: DESCRIPTION_GUIDE,
   },
@@ -236,10 +253,12 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     kind: 'beast',
     board: false,
     title: 'Your description',
+    pill: 'Beast description',
     menu: 'Your beast description…',
     palette: 'Edit your beast description…',
     keywords: 'beast beastdesc werebeast description',
     helpWidth: true,
+    maxLines: 30,
     level: 15,
     guide: BEAST_GUIDE,
   },
@@ -248,6 +267,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     kind: 'history',
     board: false,
     title: 'Your history',
+    pill: 'History',
     menu: 'Your history…',
     palette: 'Edit your history…',
     keywords: 'history personality purpose background story',
@@ -259,6 +279,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     kind: 'personality',
     board: false,
     title: 'Your history',
+    pill: 'Personality',
     menu: 'Your personality…',
     palette: 'Edit your personality…',
     keywords: 'personality history quirks',
@@ -269,6 +290,7 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     kind: 'purpose',
     board: false,
     title: 'Your history',
+    pill: 'Purpose',
     menu: 'Your purpose…',
     palette: 'Edit your purpose…',
     keywords: 'purpose history goal',

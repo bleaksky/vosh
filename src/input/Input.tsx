@@ -23,6 +23,8 @@ import { pasted } from '../writing/text';
 import { looksLikeChat } from './chatLine';
 import { editorLineOf, heldLine, useFieldCell, washPast } from './editorLine';
 import { EditorMarks } from './EditorMarks';
+import { modeOf, type ModePill as Pill } from './modePill';
+import { LinePill } from './LinePill';
 import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import {
   draftAfterMaskChange,
@@ -42,6 +44,7 @@ import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { getPasswordMode, subscribePasswordMode } from '../stores/session/inputModeStore';
 import { getSelected, useSelected } from '../stores/session/sessionsStore';
 import { getTargetState } from '../stores/session/targetStore';
+import { useWalk } from '../stores/session/walkStore';
 
 export interface InputHandle {
   focus: () => void;
@@ -84,6 +87,15 @@ function writingHolds(session: number): boolean {
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+/** The color of the pill's edge and wash: the accent for the editor and
+ *  warn past its limit, success for a walk, and secondary where the game
+ *  asks, at a password prompt and at its pager. */
+function modeColor(pill: Pill): string {
+  if (pill.mode === 'editor') return pill.warn ? 'var(--warn)' : 'var(--accent)';
+  if (pill.mode === 'walk') return 'var(--success)';
+  return 'var(--secondary)';
+}
 
 /** The row's look classes and the colors and size you picked, which
  *  input.css reads as --caret, --line-text and --line-ground. At the
@@ -241,6 +253,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   }, []);
   const cell = useFieldCell(editing ? field : null);
   const editorText = value.split('\n').pop() ?? '';
+  // What Enter does now, named in the pill in place of the mark.
+  const walk = useWalk();
+  const pill = modeOf({ password: passwordMode, writing, walk: walk.progress });
 
   useImperativeHandle(
     ref,
@@ -639,18 +654,26 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // or a line of the game's editor, once Vosh has said what it knows.
   const typedWords = typeColors.on && !passwordMode && !editor ? knownWords : null;
 
+  const rowStyle = pill
+    ? ({ ...look.style, '--input-mode': modeColor(pill) } as CSSProperties)
+    : look.style;
+
   return (
     <div
-      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}`}
-      style={look.style}
+      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}${pill ? ' is-mode' : ''}`}
+      style={rowStyle}
     >
-      {lineMark && (
-        <span
-          className={[...lineMark].length > 1 ? 'prompt input-mark-wide' : 'prompt'}
-          aria-hidden="true"
-        >
-          {lineMark}
-        </span>
+      {pill ? (
+        <LinePill pill={pill} />
+      ) : (
+        lineMark && (
+          <span
+            className={[...lineMark].length > 1 ? 'prompt input-mark-wide' : 'prompt'}
+            aria-hidden="true"
+          >
+            {lineMark}
+          </span>
+        )
       )}
       {lineCount > 1 && (
         <div className="input-gutter" aria-hidden="true" ref={gutterRef}>
@@ -684,7 +707,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="current-password"
-          placeholder="password"
           aria-label="password input"
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -708,6 +730,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           value={value}
           spellCheck={editor ? writingFile.spelling : spellcheckPrompt && looksLikeChat(value)}
           style={editor ? washPast(editorText, editor, cell) : undefined}
+          placeholder={pill?.hint ?? undefined}
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
@@ -732,9 +755,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         <TypeColorLayer field={field} value={value} words={typedWords} colors={typeColors} />
       )}
       {!passwordMode && <div className="input-caret-mirror" aria-hidden="true" ref={mirrorRef} />}
-      {!passwordMode && editor && (
-        <EditorMarks field={field} cell={cell} line={editorText} editor={editor} />
-      )}
+      {!passwordMode && editor && <EditorMarks field={field} cell={cell} editor={editor} />}
       {writing.held > 0 && (
         <span className="wr-held" aria-live="polite">
           <span className="wr-held-dot dot is-warn" aria-hidden="true" />

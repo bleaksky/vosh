@@ -151,6 +151,22 @@ async function mountLine(enabled = false) {
     },
     spellCheck: () =>
       findAll(host, (el) => el.tagName === 'TEXTAREA')[0]?.getAttribute('spellcheck'),
+    /** The pill as its face, with no pill as null. */
+    pill: () => {
+      const el = byClass('input-pill');
+      if (!el) return null;
+      return findAll(el, (n) => n.getAttribute('aria-hidden') === 'true')
+        .map((n) => n.textContent)
+        .join(' ');
+    },
+    /** What the pill reads to a screen reader. */
+    pillLabel: () => byClass('visually-hidden')?.textContent ?? null,
+    pillCount: () => byClass('input-pill-count')?.getAttribute('class') ?? null,
+    placeholder: () =>
+      findAll(host, (el) => el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')[0]?.getAttribute(
+        'placeholder',
+      ) ?? null,
+    has: (name: string) => byClass(name) !== undefined,
     type: (text: string) =>
       act(async () => {
         handle.current?.insert(text);
@@ -194,6 +210,79 @@ describe('the mark at the start of the command line', () => {
     expect(line.mark()).toBeNull();
     await lineMark(true);
     expect(line.mark()).toBe('prompt|>');
+    await line.unmount();
+  });
+});
+
+/** Where the writer stands in session 1, idle unless `state` says. */
+const writingAt = (state: object) =>
+  act(async () =>
+    fire('session://writing', {
+      session: 1,
+      game: 'unknown',
+      editor: null,
+      offer: null,
+      lines: null,
+      job: null,
+      held: 0,
+      done: null,
+      ...state,
+    }),
+  );
+const walkAt = (progress: object) =>
+  act(async () => fire('session://walk', { session: 1, ...progress }));
+const passwordAt = (password: boolean) =>
+  act(async () => fire('session://input-mode', { session: 1, password }));
+
+describe('the mode pill', () => {
+  it('takes the mark’s place in the game’s editor, counting the line you are on', async () => {
+    const line = await mountLine();
+    await pick({ mark: 'chevron' });
+    await writingAt({ game: 'editor', editor: 'description', lines: 3 });
+    expect(line.mark()).toBeNull();
+    expect(line.pill()).toBe('Description · 4 of 30');
+    expect(line.pillLabel()).toBe('Description, line 4 of 30');
+    expect(line.row()).toBe('input-row is-mode');
+    expect(line.rowStyle()).toBe('--input-mode:var(--accent)');
+    expect(line.placeholder()).toBe('Type @ on a blank line to finish');
+    expect(line.has('wr-cl-count')).toBe(false);
+    await writingAt({ game: 'editor', editor: 'description', lines: 30 });
+    expect(line.pill()).toBe('Description · 31 of 30');
+    expect(line.pillCount()).toBe('input-pill-count is-warn');
+    expect(line.rowStyle()).toBe('--input-mode:var(--warn)');
+    await writingAt({});
+    expect(line.pill()).toBeNull();
+    expect(line.mark()).toBe('prompt|\u203a');
+    expect(line.row()).toBe('input-row');
+    expect(line.placeholder()).toBeNull();
+    await line.unmount();
+  });
+
+  it('shows More at the pager and Walking while a walk runs', async () => {
+    const line = await mountLine();
+    await writingAt({ game: 'pager' });
+    expect(line.pill()).toBe('More');
+    expect(line.placeholder()).toBe('Press Enter for the next page');
+    expect(line.rowStyle()).toBe('--input-mode:var(--secondary)');
+    await writingAt({});
+    await walkAt({ kind: 'walking', done: 1, total: 2, left: 'w', route: false });
+    expect(line.pill()).toBe('Walking · 1 step left');
+    expect(line.pillLabel()).toBe('Walking, 1 step left');
+    expect(line.placeholder()).toBe('Esc stops the walk');
+    expect(line.rowStyle()).toBe('--input-mode:var(--success)');
+    await walkAt({ kind: 'idle' });
+    expect(line.pill()).toBeNull();
+    await line.unmount();
+  });
+
+  it('names a password prompt in place of the placeholder', async () => {
+    const line = await mountLine();
+    await passwordAt(true);
+    expect(line.pill()).toBe('Password');
+    expect(line.placeholder()).toBeNull();
+    expect(line.rowStyle()).toBe('--input-mode:var(--secondary)');
+    await passwordAt(false);
+    expect(line.pill()).toBeNull();
     await line.unmount();
   });
 });
@@ -310,19 +399,21 @@ describe('coloring as you type', () => {
         game: 'editor',
         editor: 'description',
         offer: null,
+        lines: null,
         job: null,
         held: 0,
         done: null,
       }),
     );
     expect(line.layer()).toBeNull();
-    expect(line.row()).toBe('input-row');
+    expect(line.row()).toBe('input-row is-mode');
     await act(async () =>
       fire('session://writing', {
         session: 1,
         game: 'unknown',
         editor: null,
         offer: null,
+        lines: null,
         job: null,
         held: 0,
         done: null,

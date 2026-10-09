@@ -1,34 +1,24 @@
-import { editorCount, type EditorLine } from './editorLine';
+import type { EditorLine } from './editorLine';
 
-// The tick at the right edge of the width and the count at the command
-// line's right, while the game's editor holds a text Vosh names. Past
-// the width the count turns danger or warn, and what runs past the tick
-// takes the same wash.
+// The tick at the right edge of the width, while the game's editor holds
+// a text Vosh names. What runs past it takes a wash (washPast), and the
+// pill at the line's start counts the lines.
 
 export function EditorMarks({
   field,
   cell,
-  line,
   editor,
 }: {
   field: HTMLElement | null;
   cell: number;
-  line: string;
   editor: EditorLine;
 }) {
-  const count = editorCount(line, editor);
+  if (cell === 0) return null;
   return (
-    <>
-      {cell > 0 && (
-        <span
-          className="wr-tick"
-          aria-hidden="true"
-          style={{ left: (field?.offsetLeft ?? 0) + editor.width * cell }}
-        />
-      )}
-      <span className={`wr-cl-count${count.tone ? ` is-${count.tone}` : ''}`} aria-live="polite">
-        {count.text}
-      </span>
-    </>
+    <span
+      className="wr-tick"
+      aria-hidden="true"
+      style={{ left: (field?.offsetLeft ?? 0) + editor.width * cell }}
+    />
   );
 }
