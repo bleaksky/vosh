@@ -22,8 +22,21 @@ const fonts = vi.hoisted(() => {
   return { pending, resolve: (list: SystemFontEntry[]) => resolve(list) };
 });
 
+// font_sizing says the one family below holds two strikes, and every
+// other font scales.
+const BITMAP_FAMILY = 'Fixed Strikes Vosh Test';
 const invoke = vi.hoisted(() =>
-  vi.fn((cmd: string) => (cmd === 'fonts_list' ? fonts.pending : Promise.resolve(undefined))),
+  vi.fn((cmd: string, args?: { family?: string }) => {
+    if (cmd === 'fonts_list') return fonts.pending;
+    if (cmd === 'font_sizing') {
+      return Promise.resolve(
+        args?.family === 'Fixed Strikes Vosh Test'
+          ? { half_sizes: false, strikes: [12, 16] }
+          : { half_sizes: true, strikes: [] },
+      );
+    }
+    return Promise.resolve(undefined);
+  }),
 );
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
@@ -612,7 +625,7 @@ describe('AppearancePage', () => {
     ]);
 
     // Size starts at 12, offers Same as terminal and the sizes the
-    // terminal Size offers, and saves your pick.
+    // terminal Size offers, a half step apart, and saves your pick.
     const size = await panelRow('panel-size', config(), '0');
     expect(size.label).toContain('Size');
     expect(size.label).toContain('The headers, the rows, and the status line grow with it.');
@@ -620,11 +633,19 @@ describe('AppearancePage', () => {
     expect(size.options.map((o) => o.label)).toEqual([
       'Same as terminal',
       '11 pt',
+      '11.5 pt',
       '12 pt',
+      '12.5 pt',
       '13 pt',
+      '13.5 pt',
       '14 pt',
+      '14.5 pt',
       '15 pt',
+      '15.5 pt',
       '16 pt',
+      '16.5 pt',
+      '17 pt',
+      '17.5 pt',
       '18 pt',
     ]);
     expect(size.options[0].value).toBe('0');
@@ -633,9 +654,46 @@ describe('AppearancePage', () => {
     const following = await panelRow('panel-size', { ...config(), panel_font_size: 0 }, '16');
     expect(following.value).toBe('0');
     expect(following.saved?.panel_font_size).toBe(16);
+    const half = await panelRow('panel-size', config(), '12.5');
+    expect(half.saved?.panel_font_size).toBe(12.5);
     const own = await panelRow('panel-size', { ...config(), panel_font_size: 20 });
     expect(own.value).toBe('20');
     expect(own.options.at(-1)).toEqual({ label: '20 pt', value: '20' });
+  });
+
+  it('steps Size by a half for a font that scales and keeps a bitmap font to its strikes', async () => {
+    const sizeRow = (container: FakeNode) => {
+      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === 'size');
+      const [select] = findAll(row, (el) => el.nodeName === 'SELECT');
+      return { row, select, values: select.options.map((o) => o.value) };
+    };
+    const bitmap = `"${BITMAP_FAMILY}", Menlo, monospace`;
+
+    // A font that scales offers each half step and says nothing more.
+    const page = await openPage({ ...config(), font_size: 13.5, input_line_size: 15.5 });
+    const scaled = sizeRow(page.container);
+    expect(scaled.values.slice(0, 4)).toEqual(['11', '11.5', '12', '12.5']);
+    expect(scaled.values).toContain('13.5');
+    expect(scaled.row.textContent).not.toContain('This font comes in');
+    // Picking 14.5 saves it as it is.
+    await act(async () => {
+      change(scaled.select, { target: { value: '14.5' } });
+    });
+    expect(page.shown().font_size).toBe(14.5);
+    // Picking the bitmap font moves your half sizes onto its strikes.
+    const [fontRow] = findAll(page.container, (el) => el.getAttribute('data-st-anchor') === 'font');
+    const [fontSelect] = findAll(fontRow, (el) => el.nodeName === 'SELECT');
+    await act(async () => {
+      change(fontSelect, { target: { value: bitmap } });
+    });
+    expect(page.shown().font_family).toBe(bitmap);
+    expect(page.shown().font_size).toBe(16);
+    expect(page.shown().input_line_size).toBe(16);
+    // The row then offers the strikes alone and says so.
+    const snapped = sizeRow(page.container);
+    expect(snapped.values).toEqual(['12', '16']);
+    expect(snapped.row.textContent).toContain('This font comes in 12 and 16 pt only.');
+    await page.close();
   });
 
   /** The page on `start`, under the config the Settings window keeps.

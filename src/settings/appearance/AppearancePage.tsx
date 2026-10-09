@@ -9,8 +9,15 @@ import {
   themeCaption,
 } from '../../theme/appearanceSettings';
 import { type ColorVision } from '../../theme/gameFit';
-import { normalizePanelFont } from '../../panel/panelFont';
+import {
+  normalizePanelFont,
+  PANEL_FONT_DESIGNED,
+  PANEL_FONT_SYSTEM,
+  PANEL_FONT_TERMINAL,
+} from '../../panel/panelFont';
 import { normalizePanelSize } from '../../panel/panelSize';
+import { snapTextSize, textSizeNote, type FontSizing } from '../../lib/textSize';
+import { loadFontSizing, useFontSizing } from '../useFontSizing';
 import type { CustomTheme } from '../../ipc/theme';
 import {
   listSystemFonts,
@@ -214,6 +221,14 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   const follow = config ? themeFollowOf(config) : 'off';
   useSyncExternalStore(follow === 'game' ? subscribeDaylight : hearNothing, getDaylight);
 
+  // What sizes the terminal font and the panel font draw at, for the
+  // Size rows.
+  const terminalStack = config?.font_family || BUNDLED_FONTS[0].value;
+  const termSizing = useFontSizing(terminalStack);
+  const panelSizing = useFontSizing(
+    panelFontStack(normalizePanelFont(config?.panel_font), terminalStack),
+  );
+
   if (!config) return null;
 
   const themes = galleryThemes(BUILTIN_THEMES, config.custom_themes.map(customToAppTheme));
@@ -317,6 +332,38 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
 
   const fontValue = config.font_family || BUNDLED_FONTS[0].value;
 
+  // A font that keeps to some sizes takes the sizes it draws at, so a
+  // half size you picked for another font lands on one it holds. The
+  // command line draws in the terminal font, and so does the panel when
+  // it follows it.
+  const pickFont = async (family: string) => {
+    const sizing = await loadFontSizing(family);
+    const current = configRef.current ?? config;
+    const panelSize = normalizePanelSize(current.panel_font_size);
+    update(
+      {
+        font_family: family,
+        ...snapped('font_size', current.font_size, sizing),
+        ...snapped('input_line_size', current.input_line_size, sizing),
+        ...(normalizePanelFont(current.panel_font) === PANEL_FONT_TERMINAL &&
+          snapped('panel_font_size', panelSize, sizing)),
+      },
+      { now: true },
+    );
+  };
+  const pickPanelFont = async (pick: string) => {
+    const current = configRef.current ?? config;
+    const stack = panelFontStack(pick, current.font_family || BUNDLED_FONTS[0].value);
+    const sizing = await loadFontSizing(stack);
+    update(
+      {
+        panel_font: pick,
+        ...snapped('panel_font_size', normalizePanelSize(current.panel_font_size), sizing),
+      },
+      { now: true },
+    );
+  };
+
   return (
     <>
       <Section
@@ -419,13 +466,13 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Select
             value={fontValue}
             options={fontChoices(fontValue, installedFonts)}
-            onChange={(family) => update({ font_family: family }, { now: true })}
+            onChange={(family) => void pickFont(family)}
           />
         </Row>
-        <Row anchor="size" label="Size">
+        <Row anchor="size" label="Size" description={textSizeNote(termSizing)}>
           <Select
             value={String(config.font_size)}
-            options={sizeChoices(config.font_size)}
+            options={sizeChoices(config.font_size, termSizing)}
             onChange={(size) => update({ font_size: Number(size) }, { now: true })}
           />
         </Row>
@@ -468,17 +515,25 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Select
             value={normalizePanelFont(config.panel_font)}
             options={panelFontChoices(config.panel_font, installedFonts)}
-            onChange={(pick) => update({ panel_font: pick }, { now: true })}
+            onChange={(pick) => void pickPanelFont(pick)}
           />
         </Row>
         <Row
           anchor="panel-size"
           label="Size"
-          description="The headers, the rows, and the status line grow with it."
+          description={[
+            'The headers, the rows, and the status line grow with it.',
+            textSizeNote(panelSizing),
+          ]
+            .filter(Boolean)
+            .join(' ')}
         >
           <Select
             value={String(normalizePanelSize(config.panel_font_size))}
-            options={sizeChoicesWithTerminal(normalizePanelSize(config.panel_font_size))}
+            options={sizeChoicesWithTerminal(
+              normalizePanelSize(config.panel_font_size),
+              panelSizing,
+            )}
             onChange={(size) => update({ panel_font_size: Number(size) }, { now: true })}
           />
         </Row>
@@ -492,4 +547,21 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
       />
     </>
   );
+}
+
+/** The font list the panel draws in for the Panel text Font pick, or
+ *  null for As designed and the system font, which scale. */
+function panelFontStack(pick: string, terminal: string): string | null {
+  if (pick === PANEL_FONT_TERMINAL) return terminal;
+  if (pick === PANEL_FONT_DESIGNED || pick === PANEL_FONT_SYSTEM) return null;
+  return pick;
+}
+
+type SizeField = 'font_size' | 'panel_font_size' | 'input_line_size';
+
+/** `{ [field]: size }` on a size a font with `sizing` draws at, or
+ *  nothing when `size` is one already. */
+function snapped(field: SizeField, size: number, sizing: FontSizing): Partial<UiConfig> {
+  const next = snapTextSize(size, sizing);
+  return next === size ? {} : { [field]: next };
 }

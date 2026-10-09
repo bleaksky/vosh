@@ -420,6 +420,7 @@ fn name_from_file(file_name: &str) -> (Option<String>, bool) {
 mod tests {
     use super::*;
     use crate::profile::tests::{claim, set_with_profiles};
+    use crate::profile::text_size::TextPx;
 
     const WORLD: &str = "play.theforsakenlands.com";
     const FULL: &str = include_str!("../../../fixtures/config/profile.full.toml");
@@ -666,7 +667,7 @@ mod tests {
             .file
             .ui;
         assert_eq!(own.theme, "custom-dusk");
-        assert_eq!(own.font_size, 16);
+        assert_eq!(own.font_size, TextPx::whole(16));
         assert_eq!(own.custom_themes.len(), 1);
     }
 

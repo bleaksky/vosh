@@ -501,9 +501,11 @@ fn native_baseline_matches_xterm_at_every_line_height() {
     for bold in [false, true] {
         let font = Font::from_bytes(bundled_face(bold).unwrap(), 0).unwrap();
         let m = font.metrics();
-        for css_px in 11..=18u32 {
+        // Every half step from 11 to 18, since a size can be 13.5.
+        for halves in 22..=36u32 {
+            let css_px = f64::from(halves) / 2.0;
             for dpr in [1u32, 2] {
-                let scale = f64::from(css_px * dpr) / f64::from(m.units_per_em);
+                let scale = css_px * f64::from(dpr) / f64::from(m.units_per_em);
                 let ascent = f64::from(m.ascent) * scale;
                 let descent = -f64::from(m.descent) * scale;
                 let char_h = (ascent + descent).ceil() as u32;
@@ -551,6 +553,37 @@ fn a_taller_cell_drops_each_glyph_to_the_centered_baseline() {
     // No report yet means the font's own cell and no drop.
     let unreported = GlyphAtlas::from_fonts(jetbrains(), 28.0, None, Some(37));
     assert_eq!(unreported.glyph_top, 0);
+}
+
+#[test]
+fn a_half_size_keeps_whole_pixel_cells_between_its_neighbors() {
+    // 13.5 px on a 2x screen draws at 27 device px. The cell the font
+    // gives is whole pixels and sits between 13 and 14 px, and a cell
+    // xterm reports is taken as is, so the grid never drifts off it.
+    hand_in_bundled_jetbrains();
+    let jetbrains =
+        || AtlasFonts::load("JetBrainsMono Bundled").expect("Vosh bundles JetBrains Mono");
+    let at = |px: f32| GlyphAtlas::from_fonts(jetbrains(), px, None, None);
+    let (low, half, high) = (at(26.0), at(27.0), at(28.0));
+    assert!(low.cell_w() <= half.cell_w() && half.cell_w() <= high.cell_w());
+    assert!(low.cell_h() <= half.cell_h() && half.cell_h() <= high.cell_h());
+    assert!(low.cell_h() < high.cell_h());
+    // xterm floors 13.5 * 0.6 * 2 = 16.2 to a 16 px cell.
+    let mut reported = GlyphAtlas::from_fonts(jetbrains(), 27.0, Some((16, 39)), Some(36));
+    assert_eq!((reported.cell_w(), reported.cell_h()), (16, 39));
+    assert_eq!(reported.glyph_top, 2);
+    assert!(reported.baseline() < reported.cell_h());
+    // 'H' draws inside its slot, its ink ending on the baseline row.
+    let _ = reported.glyph_uv('H', false, false);
+    let (sx, sy, w, h) = slot_rect(0, reported.cols, reported.slot_w, reported.cell_h);
+    let ink =
+        |y: u32| (sx..sx + w).any(|x| reported.pixels[(y * reported.atlas_w + x) as usize] > 0);
+    let lowest = (sy..sy + h).rev().find(|&y| ink(y)).expect("H has ink") - sy;
+    assert!(
+        lowest.abs_diff(reported.baseline()) <= 1,
+        "ink {lowest}, baseline {}",
+        reported.baseline()
+    );
 }
 
 #[test]

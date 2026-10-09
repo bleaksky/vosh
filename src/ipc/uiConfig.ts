@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { normalizePanelFont } from '../panel/panelFont';
 import { normalizePanelSize } from '../panel/panelSize';
+import { SCALABLE, type FontSizing } from '../lib/textSize';
 import { toColorVision, type ColorVision } from '../theme/gameFit';
 import {
   DEFAULT_LIGHT_THEME_ID,
@@ -69,6 +70,24 @@ export async function listSystemFonts(): Promise<SystemFontEntry[]> {
     return Array.isArray(entries) ? entries : [];
   } catch {
     return [];
+  }
+}
+
+/** The sizes the font `family` draws at, one family name and not a
+ *  font list. A font Vosh cannot judge, or a failed call, takes half
+ *  sizes. */
+export async function fontSizing(family: string): Promise<FontSizing> {
+  try {
+    const sizing = await invoke<FontSizing>('font_sizing', { family });
+    if (typeof sizing?.half_sizes !== 'boolean') return SCALABLE;
+    return {
+      half_sizes: sizing.half_sizes,
+      strikes: Array.isArray(sizing.strikes)
+        ? sizing.strikes.filter((s) => typeof s === 'number')
+        : [],
+    };
+  } catch {
+    return SCALABLE;
   }
 }
 

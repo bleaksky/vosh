@@ -240,7 +240,7 @@ Turn on `Dim sent commands` to draw your commands faint, so the lines of the gam
 
 To change the line you type in, go to Settings under Input, then Command line. `Caret blinks` is on at first. When Reduce motion is on in your system settings, the caret doesn't blink in any case. `Caret color` changes the color of the caret. Until you choose a color, the caret has the accent color of your theme. `Text color` changes the color of what you type.
 
-`Background` has three choices. It can keep the band of the theme. It can give the band a `Slight tint` of the accent color of your theme, so the line is easy to tell apart from the game. Or it can take `Your own` color. `Size` starts at `Same as terminal`. A size you choose changes only the command line.
+`Background` has three choices. It can keep the band of the theme. It can give the band a `Slight tint` of the accent color of your theme, so the line is easy to tell apart from the game. Or it can take `Your own` color. `Size` starts at `Same as terminal`. A size you choose changes only the command line. Half sizes such as 13.5 work, unless your terminal font is a bitmap font with fixed sizes.
 
 Turn on `Color commands as you type` to color each line by its first word. An alias and a Vosh `#` command color that word. A chat line colors whole, from the same list that spell check uses. A `#` command that Vosh doesn't know turns red. Vosh colors only what it knows for sure, so game commands stay plain. The selection, spell check, and the caret work as before.
 
@@ -1161,13 +1161,14 @@ The terminal font is in Settings under Appearance, then Terminal text. The panel
 
 - Open Settings and choose Appearance.
 - Under Terminal text, choose a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every computer. The rest of the list holds the monospace fonts installed on your computer.
-- Choose a size in `Size`, from 11 to 18 pt. The default is 14.
+- Choose a size in `Size`, from 11 to 18 pt. The default is 14. Half sizes such as 13.5 work too, and the arrow keys move a half step at a time.
+- Some fonts are bitmap fonts. They have only some fixed sizes. For such a font, `Size` offers only those sizes, and a line under `Size` says so. When you choose a bitmap font, a half size moves to the nearest size the font has.
 - Choose `Compact`, `Default`, or `Loose` in `Line height`.
 - Under Panel text, choose a font in `Font`. It sets the font of every pane in the panel and of the status line.
 - `As designed` is the default. It keeps the fonts the panes were designed in. The headers, labels, counts, and rows use the font of the menus and Settings. The game text in your affects, the chips, and chat uses your terminal font.
 - `Same as terminal` draws all of it in your terminal font. `System font` draws all of it in the font of the menus and Settings. The rest of the list holds the fonts that the terminal `Font` offers.
 - Choose a size in `Size` under Panel text. The headers, the labels, the rows, chat, the map labels, and the status line all get larger or smaller with it. So the panel reads as one size.
-- The size starts at 12 pt, the size the panes were designed at. `Same as terminal` follows your terminal size. The menus, the title band, Settings, and Help keep their sizes.
+- The size starts at 12 pt, the size the panes were designed at. Half sizes work here too. `Same as terminal` follows your terminal size. The menus, the title band, Settings, and Help keep their sizes.
 - To set a whole list of fonts, open `Advanced` and type it in `Font stack`, such as `"Fira Code", "JetBrainsMono Bundled", monospace`. Vosh uses the first font in the list that you have.
 - To draw bright colors in the bold weight of your font, turn on `Bright text in bold` under Advanced. It works on macOS.
 - To stop text that your MUD or your prompt sets to blink, turn off `Blinking text` under Accessibility, then Motion. It starts off when your system reduces motion.

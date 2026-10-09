@@ -196,11 +196,19 @@ describe('InputPage', () => {
     expect(options).toEqual([
       'Same as terminal',
       '11 pt',
+      '11.5 pt',
       '12 pt',
+      '12.5 pt',
       '13 pt',
+      '13.5 pt',
       '14 pt',
+      '14.5 pt',
       '15 pt',
+      '15.5 pt',
       '16 pt',
+      '16.5 pt',
+      '17 pt',
+      '17.5 pt',
       '18 pt',
     ]);
     expect(size).toContain('width:180px');

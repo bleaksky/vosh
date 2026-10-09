@@ -41,6 +41,39 @@ describe('the grid at the bottom of its pane', () => {
   });
 });
 
+// A half size such as 13.5 changes no fit math: xterm measures the glyph
+// at the fractional size and then cuts its cell to whole device pixels,
+// and every sum here runs on that cell.
+describe('a half size', () => {
+  /** xterm's device cell height: the glyph box rounded up to device
+   *  pixels, then times the line height, rounded down. */
+  const deviceCell = (glyphCss: number, dpr: number, lineHeight: number) =>
+    Math.floor(Math.ceil(glyphCss * dpr) * lineHeight);
+
+  it('keeps whole device pixel cells and whole device pixel bounds', () => {
+    // JetBrains Mono at 13.5 px draws a glyph box about 17.8 px tall.
+    const glyph = 13.5 * 1.32;
+    for (const dpr of [1, 2]) {
+      const cell = deviceCell(glyph, dpr, 1.2);
+      expect(Number.isInteger(cell)).toBe(true);
+      const cellCss = cell / dpr;
+      const rows = Math.floor(753 / cellCss);
+      const spare = spareAbove(753, rows, cellCss, dpr);
+      expect(Number.isInteger(spare * dpr)).toBe(true);
+      expect(spare).toBeLessThan(cellCss);
+      const b = nativeBottomBounds(38, 753, dpr, cell);
+      expect(Number.isInteger(b.spare * dpr)).toBe(true);
+      expect(Math.floor(Math.round(b.height * dpr) / cell)).toBe(rows);
+      // The pinned band lends rows the same way at any size.
+      expect(keptRows(rows, 2)).toBe(rows - 2);
+    }
+    // The cell sits between the cells of 13 and 14 px.
+    const at = (px: number) => deviceCell(px * 1.32, 2, 1.2);
+    expect(at(13)).toBeLessThanOrEqual(at(13.5));
+    expect(at(13.5)).toBeLessThanOrEqual(at(14));
+  });
+});
+
 describe('the rows the live pane keeps', () => {
   it('gives up the rows it lends, and keeps at least one', () => {
     expect(keptRows(20, 0)).toBe(20);
