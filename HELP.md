@@ -480,238 +480,321 @@ The card doesn't take tomes, cabal votes, paper, or the description of your pet 
 
 <!-- id: automate.first-alias -->
 
-Aliases expand a short name into one or more commands. They live in Settings under Automation, then Aliases, and the command line defines them too.
+An alias expands a short name into one or more commands. Aliases are in Settings under Automation, then Aliases. You can also make them in the command line.
 
-- Open Settings, choose Automation, and pick `Aliases` in the switcher at the top.
+- Open Settings, choose Automation, and choose `Aliases` in the switcher at the top.
 - Click `New alias` in the bar at the bottom.
-- Enter a name in `Name`.
-- Enter the expansion in `Expansion`. `;` splits the expansion into separate commands and `\;` keeps a literal semicolon.
+- Type a name in `Name`.
+- Type the expansion in `Expansion`. `;` splits the expansion into separate commands. `\;` keeps a literal semicolon.
 - Click `Save`. The bar shows `Saved`.
 
-Captures pull words from the line you typed. `%1` through `%9` pull the first through ninth word after the alias name. `%0` pulls the whole tail, `%1-` pulls word one through the end with spacing intact, and a missing word expands to nothing. `%%` gives a literal percent.
+Captures take words from the line you typed. `%1` through `%9` take the first through ninth word after the alias name. `%0` takes all the words after the name. `%1-` takes word one through the end, with the spaces kept. A missing word expands to nothing. `%%` gives a literal percent.
 
-Give related aliases a shared name in `Group` to turn them on and off together, with the switch on the heading of their group or with `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion, with the words you typed in its captures table.
+To turn related aliases on and off together, give them the same name in `Group`. Then use the switch on the heading of their group, or `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion. The words you typed are in its captures table.
 
-Triggers, Aliases, Macros, and Timers each list your items under a heading for every group, and Presets under a heading for each category. The items with no group sit at the top under no heading. Click a heading to fold its group away, and click it again to open it. The chevron turns down while the group is open, and a folded heading counts the items it holds. With a heading in focus, `ArrowLeft` folds it and `ArrowRight` opens it, and `ArrowUp` and `ArrowDown` move through the headings and items as one list. Each list remembers the groups you fold. Type in the filter and every folded group with a match opens until you clear it. Pick an item from the matches and its group stays open.
+Triggers, Aliases, Macros, and Timers each list your items under a heading for each group. Presets lists them under a heading for each category. The items with no group are at the top, under no heading. Click a heading to fold its group, and click it again to open it. The chevron points down while the group is open. A folded heading shows how many items it holds.
 
-The switch after a group heading turns the whole group on and off at once, the same as `#group`, and each item keeps its own `Enabled`. A group is on or off for its whole profile, so the switch and `#group` reach every session that plays the profile. It acts as you flip it, with no `Save`, and a group you just named gets its switch once you save it. `Tab` from a heading reaches its switch, and `Space` flips it. A timer takes a `Group` too, and a timer in a group that is off waits, then starts a whole interval once the group comes back on. In loadout mode, while an active loadout lists groups or while you keep the catalog dormant, the loadouts decide each group of triggers, aliases, and macros. The switch still turns such a group, and so does `#group`. A note under the heading names the loadouts that decide it, or says every loadout is off. Once you turn the group yourself, the note says they turn it back when you next launch Vosh, switch profiles or save Loadouts.
+When a heading has the focus, `ArrowLeft` folds it and `ArrowRight` opens it. `ArrowUp` and `ArrowDown` move through the headings and items as one list. Each list remembers the groups you fold. When you type in the filter, every folded group with a match opens until you clear the filter. When you choose an item from the matches, its group stays open.
 
-Example. An alias named `kk` with the expansion `kick %1; backstab %1` turns `kk dragon` into `kick dragon` followed by `backstab dragon`.
+The switch after a group heading turns the whole group on and off at once, the same as `#group`. Each item keeps its own `Enabled`. A group is on or off for its whole profile. So the switch and `#group` reach every session that plays the profile. The switch acts at once, with no `Save`. A group that you just named gets its switch after you save it.
 
-The command line defines aliases too. `#alias gc get all corpse` sets one and echoes `alias gc set`, `#aliases` lists every alias, and `#unalias gc` removes one. Setting an alias again, with `#alias`, `#endrec`, or `mud.alias` in Lua, keeps it in its group.
+`Tab` from a heading goes to its switch, and `Space` turns the switch on or off. A timer also takes a `Group`. A timer in a group that is off waits. When the group comes back on, the timer starts a full interval.
+
+In loadout mode, the loadouts decide each group of triggers, aliases, and macros. This is true while an active loadout lists groups, or while you keep the catalog dormant. The switch still turns such a group on or off, and so does `#group`. A note under the heading names the loadouts that decide the group, or says every loadout is off. After you turn the group on or off yourself, the note tells you more. The loadouts set it back when you next launch Vosh, change profiles, or save Loadouts.
+
+Example. An alias named `kk` with the expansion `kick %1; backstab %1` changes `kk dragon` into `kick dragon` and then `backstab dragon`.
+
+You can also make aliases in the command line. `#alias gc get all corpse` sets one and echoes `alias gc set`. `#aliases` lists every alias, and `#unalias gc` removes one. When you set an alias again with `#alias`, `#endrec`, or `mud.alias` in Lua, it stays in its group.
 
 ### 3.2 Create a trigger
 
 <!-- id: automate.first-trigger -->
 
-Triggers watch incoming lines and run actions when a pattern matches. They live in Settings under Automation, then Triggers, and a trigger pairs one visual with any number of effects.
+A trigger watches the lines that come in and runs actions when a pattern matches. Triggers are in Settings under Automation, then Triggers. A trigger has one visual and any number of effects.
 
 - Open Settings and choose Automation, then Triggers.
 - Click `New trigger`.
-- Enter a name and a pattern, and pick how the pattern matches. `Text` matches a line that is exactly the pattern, `Starts with` matches any line that starts with it, and `Regex` reads it as a regular expression. Under `Advanced`, `Add pattern` in More patterns adds another in the same mode, and the trigger fires when any pattern that is on matches.
-- Leave `Priority` under `Advanced` at `5`, the default for a new trigger, or raise it to run before other triggers. Higher priority triggers run first. Leave `Match` on `Lines`.
-- Pick `Room` in `Match` to match only the armies, things and people a room lists after its exits line. The game sends `Room.Chars` and `Room.Items` packets with each look, and Vosh counts the lines from them, so a say or an arrival after the look stays a plain line.
-- Pick `Your target` in `Match` to match only the line of the one you target with `tar`, when a room lists them. Vosh finds that line by where your target stands in the room, the place `tar` marks with `>`, so `tar 3` finds the third person even when their line words the name another way. When more than one person in the room fits what you gave `tar`, the first of them is your target, so one line matches.
-- Pick a `Style`. The choices are `None`, `Highlight`, `Wash`, `Replace`, and `Hide`.
-- Put a command in `Then send`. `Send to pane` and `Lua script` sit under `Advanced`. Send and replace templates reach capture groups with `$1` through `$9` or `${name}`, and `;` splits a send into separate commands.
-- Press `Banner`, `Sound` or `Bounce` in `Alert` to have the trigger get your attention when it matches. Each one presses on and off on its own. `Banner` posts a system banner, `Sound` plays a chime, and `Bounce` bounces the Dock icon. On Windows `Bounce` reads `Flash` and flashes the taskbar, and on Linux it reads `Mark` and marks the window as wanting you. At first an alert rings only while you are not looking at its session.
-- Open `Advanced` to tune the alert in the four rows at the end of the card. `Sound` picks `Chime`, `Bell`, `Knock` or `Low`, and the play button beside it plays the tone it shows. `Bounce` picks `Once` or `Until you return`, and reads `Flash` on Windows and `Mark` on Linux. `Banner shows` starts on `Title only`, and `Title and words` adds what was said. `Only while you are not looking at its session` starts on, so the alert rings only while you look elsewhere. Turn it off and it rings while you watch too. A pick in `Sound` or `Bounce` turns that part on. For a tell, your name, a fight, low health or the link, turn on an alert preset instead, as Get alerts at 3.9 shows.
+- Type a name and a pattern, and choose how the pattern matches. `Text` matches a line that is exactly the pattern. `Starts with` matches any line that starts with the pattern. `Regex` reads the pattern as a regular expression.
+- To add another pattern in the same mode, open `Advanced` and click `Add pattern` in More patterns. The trigger fires when any pattern that is on matches.
+- Leave `Priority` under `Advanced` at `5`, the default for a new trigger. Or make it higher to run before other triggers. Triggers with a higher priority run first. Leave `Match` on `Lines`.
+- Choose `Room` in `Match` to match only the armies, things, and people that a room lists after its exits line. The game sends `Room.Chars` and `Room.Items` packets with each look. Vosh counts the lines from them. So a say or an arrival after the look stays a plain line.
+- Choose `Your target` in `Match` to match only the line of the one you target with `tar`. This works when a room lists them. Vosh finds that line by the place of your target in the room. That is the place that `tar` marks with `>`. So `tar 3` finds the third person even when their line gives the name in another way. When more than one person in the room fits what you gave `tar`, the first of them is your target. So one line matches.
+- Choose a `Style`. The choices are `None`, `Highlight`, `Wash`, `Replace`, and `Hide`.
+- Put a command in `Then send`. `Send to pane` and `Lua script` are under `Advanced`. Send and replace templates get capture groups with `$1` through `$9` or `${name}`. `;` splits a send into separate commands.
+- To make the trigger get your attention when it matches, click `Banner`, `Sound`, or `Bounce` in `Alert`. Each one turns on and off by itself. `Banner` posts a system banner. `Sound` plays a chime. `Bounce` bounces the Dock icon.
+- On Windows `Bounce` reads `Flash` and flashes the taskbar. On Linux it reads `Mark` and marks the window as needing you. At first an alert rings only while you aren't looking at its session.
+- To tune the alert, open `Advanced` and use the four rows at the end of the card. `Sound` chooses `Chime`, `Bell`, `Knock`, or `Low`. The play button beside it plays the tone it shows. `Bounce` chooses `Once` or `Until you return`. It reads `Flash` on Windows and `Mark` on Linux.
+- `Banner shows` starts on `Title only`. `Title and words` adds what was said. `Only while you are not looking at its session` starts on, so the alert rings only while you look somewhere else. Turn it off, and it also rings while you watch. A choice in `Sound` or `Bounce` turns that part on.
+- For a tell, your name, a fight, low health, or the connection, use an alert preset instead. Get alerts at 3.9 shows how.
 - Click `Save`. Vosh shows `Saved` in the bar at the bottom.
 
-`Text` and `Starts with` skip spaces at the start of the line, and `Text` skips them at the end too, so a line you copy from a look matches with or without the five spaces before it. Neither needs escaping, and neither fills `$1`. A `Regex` pattern needs literal punctuation escaped, and its groups fill `$1` and on. A new trigger starts in `Text`, and older triggers read as `Regex`. The mode covers every pattern of the trigger. In `Edit all as JSON…` a `Text` or `Starts with` row reads `text`, so a change to its `pattern` alone, there or by hand in the file, changes nothing.
+`Text` and `Starts with` ignore spaces at the start of the line. `Text` also ignores them at the end. So a line you copy from a look matches with or without the five spaces before it. Neither mode needs escapes, and neither fills `$1`. A `Regex` pattern needs escapes for literal punctuation. Its groups fill `$1` and on.
 
-Example. To match the line `You feel better.`, type `You feel better.` in `Text`, `You feel better` in `Starts with`, or `You feel better\.$` in `Regex`. Pick `Regex` for the pattern `(\w+) is DEAD!`, and a send of `get all corpse` loots each kill as the death line arrives.
+A new trigger starts in `Text`, and older triggers read as `Regex`. The mode covers every pattern of the trigger. In `Edit all as JSON…` a `Text` or `Starts with` row reads `text`. So if you change only its `pattern`, there or by hand in the file, nothing changes.
 
-A preset adds its triggers under `From presets`, and you edit one as you edit your own, every row but `Name`, since Vosh finds the trigger in its preset by that name. The note at the top names the preset, and a click on its name opens its card in Presets. Each row you changed says `Changed` and what the preset has, `Advanced` counts the rows under it that you changed, and a pencil marks the trigger in the list. Vosh keeps only the rows you change, so a fix Vosh ships for the preset still reaches the rest, as Highlight lines at 3.3 shows. A preset trigger has no `Delete`, so turn off `Enabled` to stop it. `Reset to preset` under the card puts back the rows of that trigger, and like every change it waits for `Save`. A trigger of your own cannot take the name of a preset trigger, its preset on or off, and `Edit all as JSON…` lists only your own triggers.
+Example. To match the line `You feel better.`, type `You feel better.` in `Text`, `You feel better` in `Starts with`, or `You feel better\.$` in `Regex`. Choose `Regex` for the pattern `(\w+) is DEAD!`. Then a send of `get all corpse` loots each kill when the death line comes in.
 
-The command line builds triggers too. `#trigger name {pattern} send command` creates one with a `Regex` pattern at priority 0 on the `line` target, `#triggers` lists everything by priority, and `#untrigger name` removes one. Vosh rejects an invalid regex and names the broken pattern.
+A preset adds its triggers under `From presets`. You edit a preset trigger as you edit your own, every row but `Name`. Vosh finds the trigger in its preset by that name. The note at the top names the preset. Click its name to open its card in Presets.
+
+Each row you changed says `Changed` and shows what the preset has. `Advanced` counts the rows under it that you changed. A pencil marks the trigger in the list. Vosh keeps only the rows you change, so a fix that Vosh ships for the preset still reaches the other rows. Highlight lines at 3.3 tells more.
+
+A preset trigger has no `Delete`. To stop it, turn off `Enabled`. `Reset to preset` under the card puts back the rows of that trigger. Like every change, it waits for `Save`. A trigger of your own can't have the name of a preset trigger, whether that preset is on or off. `Edit all as JSON…` lists only your own triggers.
+
+You can also make triggers in the command line. `#trigger name {pattern} send command` makes one with a `Regex` pattern at priority 0 on the `line` target. `#triggers` lists all of them by priority. `#untrigger name` removes one. Vosh refuses a regex that isn't valid and names the broken pattern.
 
 ### 3.3 Highlight lines
 
 <!-- id: automate.highlight-lines -->
 
-A highlight trigger restyles every line that matches a pattern. Define one from the command line with `#trigger` or in Settings under Automation, then Triggers.
+A highlight trigger changes the style of every line that matches a pattern. Make one in the command line with `#trigger`, or in Settings under Automation, then Triggers.
 
-- Type `#trigger <name> {pattern} highlight <color> [styles]`. Every line matching the pattern renders in that color and style.
-- Add `wash` to the style list to tint the whole line instead of restyling the text alone.
-- Type `#triggers` to confirm the pattern and action. Defining a trigger under an existing name replaces it.
+- Type `#trigger <name> {pattern} highlight <color> [styles]`. Every line that matches the pattern shows in that color and style.
+- To tint the whole line and not only the text, add `wash` to the list of styles.
+- To check the pattern and the action, type `#triggers`. A new trigger with the name of an existing trigger replaces it.
 
-A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent. A wash marks the whole line. The line text takes the highlight color, and a dim field in that color fills the row edge to edge. The field follows your theme palette, so a washed line sits with the colors around it instead of fighting them.
+A plain highlight changes the style of the matched words. The rest of the line keeps the colors that the game sent. A wash marks the whole line. The text of the line takes the highlight color. A dim field in that color fills the row from edge to edge. The field follows the palette of your theme, so a washed line goes well with the colors around it.
 
-Colors take the sixteen ANSI names. `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, and `white`, plus a `bright_` variant of each. `purple` maps to magenta and `gray` to `bright_black`. Stack `bold`, `underline`, and `inverse` freely, and add `bg:<color>` for a background.
+Colors take the sixteen ANSI names. They are `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, and `white`, plus a `bright_` variant of each. `purple` gives magenta and `gray` gives `bright_black`. You can use `bold`, `underline`, and `inverse` together. Add `bg:<color>` for a background.
 
-Example. `#trigger tell-glow {tells you} highlight bright_yellow bold` renders every tell bright yellow and bold. `#trigger tell-glow {tells you} highlight bright_yellow wash` replaces it with a full line wash.
+Example. `#trigger tell-glow {tells you} highlight bright_yellow bold` shows every tell in bright yellow and bold. `#trigger tell-glow {tells you} highlight bright_yellow wash` replaces it with a wash on the full line.
 
-The Triggers editor under Automation in Settings offers the same options. Pick `Highlight` or `Wash` in `Style`, then open `Advanced` to set `Text color` and `Background`, with `Bold`, `Underline`, and `Inverse` beside them.
+The Triggers editor in Settings under Automation has the same options. Choose `Highlight` or `Wash` in `Style`. Then open `Advanced` to set `Text color` and `Background`, with `Bold`, `Underline`, and `Inverse` beside them.
 
-Settings under Automation, then Presets, holds ready made colors for lines the game prints. Each card shows a sample under `Looks like`, drawn in your theme the way the terminal draws it. A preset suggested for the game you connect to wears a ring in the accent color while it is off, and its card names the game under `Suggested`. Turn a preset on or off and click `Save`.
+Settings under Automation, then Presets, holds colors for the lines the game prints. Each card shows a sample under `Looks like`. Vosh draws it in your theme, as the terminal draws it. While a preset for the game you connect to is off, it has a ring in the accent color. Its card names the game under `Suggested`. Turn a preset on or off and click `Save`.
 
-A preset that paints lines shows a swatch under `Colors` for each color it paints, named for what it marks, such as `The line` or `The damage verb`. A swatch paints every trigger of the preset that uses its color. Most swatches take any color, and while you leave one empty it shows the color of the preset, such as `Theme red`. A swatch whose color sits in a highlight picks from the sixteen colors of your theme. `Looks like` redraws the sample in your colors. A swatch you changed says `Back to` and the color of the preset under it, and a press there puts that color back.
+A preset that colors lines shows a swatch under `Colors` for each color it uses. Each swatch has the name of what it marks, such as `The line` or `The damage verb`. A swatch colors every trigger of the preset that uses its color. Most swatches take any color. While you leave one empty, it shows the color of the preset, such as `Theme red`. A swatch with a color in a highlight takes one of the sixteen colors of your theme.
 
-A preset you changed wears a pencil beside its dot in the list. Its card closes with `Your changes`, which names each color and trigger you changed, or counts them past two, and a click on a trigger opens it in Triggers. `Reset to preset` under the card takes back every color and trigger you changed in that preset. A swatch and a reset wait for `Save`, and `Discard` brings your changes back. Turn a preset off and your changes wait for it, so it comes back on in your colors, and `Reset to preset` works while it is off. A description keeps the words of the preset, so one that names a color still names the color the preset ships.
+`Looks like` draws the sample again in your colors. A swatch you changed says `Back to` and shows the color of the preset under it. Click there to put that color back.
 
-Vosh keeps only what you change and lays it over the preset each time a profile opens, so a fix Vosh ships later still reaches the parts you left alone. When a fix lands on a row you changed, your change stays. The trigger card says a fix changed a row you edited, the row shows what the preset now has, and `Take the fix` and `Keep mine` sit under it. A swatch whose color a fix changed wears a warning ring with the same two choices. Your pick waits for `Save`. A change the fix now matches drops away on its own. At the launch that finds a fix, a notice in the corner says `A preset fix changed a row you edited` and names the trigger. `Show` opens it in Settings, and `Close` hides the notice and keeps the marks. When a fix takes away a trigger you changed, the notice says `A preset fix removed a trigger you edited`. Vosh tells you about each fix once.
+A preset you changed has a pencil beside its dot in the list. Its card ends with `Your changes`. This names each color and trigger you changed, or counts them when there are more than two. Click a trigger there to open it in Triggers. `Reset to preset` under the card takes back every color and trigger you changed in that preset. A swatch and a reset wait for `Save`, and `Discard` brings your changes back.
 
-The `Room, time and weather colors` preset colors a room look, the clock and the weather. The exits line turns green, the armies, things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so turn off its `Enabled` in Triggers to keep your target yellow, or pick another color for `Your target` on the card of the preset. Each one is a terminal color from your theme, so a theme switch carries them along. A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue. That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` under Accessibility darkens it on a light theme until it reads. The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors. The magenta covers the WiZNET tag alone, so the message after it keeps its colors too. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. A new install starts with every preset off. Turn it on or off in Settings under Automation, then Presets.
+When you turn a preset off, your changes wait for it. So it comes back on in your colors. `Reset to preset` works while the preset is off. A description keeps the words of the preset. So a description that names a color still names the color that the preset ships.
+
+Vosh keeps only what you change. It puts your changes over the preset each time a profile opens. So a fix that Vosh ships later still reaches the parts you didn't change. When a fix changes a row you changed, your change stays. The trigger card says that a fix changed a row you edited. The row shows what the preset now has, with `Take the fix` and `Keep mine` under it.
+
+A swatch with a color that a fix changed has a warning ring with the same two choices. Your choice waits for `Save`. A change that the fix now matches goes away on its own. At the launch that finds a fix, a notice in the corner says `A preset fix changed a row you edited` and names the trigger. `Show` opens it in Settings. `Close` hides the notice and keeps the marks.
+
+When a fix removes a trigger you changed, the notice says `A preset fix removed a trigger you edited`. Vosh tells you about each fix one time.
+
+The `Room, time and weather colors` preset colors a room look, the clock, and the weather. The exits line turns green. The armies, things, and people that the room lists turn yellow. The day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target is easy to see in the room.
+
+That red is the `room.target` trigger. To keep your target yellow, turn off its `Enabled` in Triggers. Or choose another color for `Your target` on the card of the preset. Each of these colors is a terminal color from your theme, so the colors change when you change the theme.
+
+A change in the weather turns pale blue, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.` That blue is `#8fa7d9`. It is a color of its own, separate from the blue and cyan of your theme. It is readable on every built in dark theme. On a light theme, `Keep highlight colors readable` under Accessibility makes it darker until it is readable.
+
+The exits, room, and target colors fill only the text that the game left with no color. So an aura, a red `[AFK]`, and the red `+` of a trap you see keep their own colors. The magenta covers only the WiZNET tag, so the message after it also keeps its colors. A say or a tell that quotes the same words stays as it was.
+
+Vosh turns the preset on for every profile, one time, unless you had turned every preset off. A new install starts with every preset off. Turn it on or off in Settings under Automation, then Presets.
 
 ### 3.4 Route lines to a pane
 
 <!-- id: automate.route-chat -->
 
-A route effect sends matching lines to a named pane. Build one on a trigger in Settings under Automation, then Triggers.
+A route effect sends matching lines to a named pane. Add one to a trigger in Settings under Automation, then Triggers.
 
 - Open Settings, choose Automation, then Triggers, and click `New trigger`.
-- Enter a name.
-- Enter a pattern. Under `Advanced`, `Add pattern` in More patterns adds another. The trigger fires when any pattern that is on matches.
-- Under `Advanced`, enter the pane's name in `Send to pane`, like `chat`.
+- Type a name.
+- Type a pattern. To add another pattern, open `Advanced` and click `Add pattern` in More patterns. The trigger fires when any pattern that is on matches.
+- Under `Advanced`, type the name of the pane in `Send to pane`, such as `chat`.
 - Click `Save`.
 
-Route is an effect, so it stacks with anything else on the trigger. Pair it with the `Highlight` style to color the line, or put a command in `Then send` beside it.
+Route is an effect, so you can use it with anything else on the trigger. Use it with the `Highlight` style to color the line. Or put a command in `Then send` beside it.
 
-Matching lines land in the Chat pane, tagged with the pane name you gave. Show the Chat pane with `Add a pane` in the title band or `Show chat` in the View menu, and pick that name in its channel select to read those lines alone.
+Matching lines go to the Chat pane, tagged with the pane name you gave. To show the Chat pane, use `Add a pane` in the title band or `Show chat` in the View menu. To read only those lines, choose that name in the channel select of the pane.
 
 Example. A trigger named `chat-feed` with the patterns `tells you '` and `gossips '` and a route to `chat` collects tells and gossip in the chat pane.
 
-The inline form is `#trigger chat-feed {tells you '} route chat`. It creates a single pattern trigger, so build multi pattern feeds in Settings under Automation.
+In the command line, type `#trigger chat-feed {tells you '} route chat`. This makes a trigger with a single pattern. So make feeds with more than one pattern in Settings under Automation.
 
 ### 3.5 Set and use variables
 
 <!-- id: automate.variables -->
 
-Variables store values you reference in commands as `$name`. Set them from the command line with `#var`, and Vosh expands them in the lines you type before they leave.
+A variable stores a value that you use in commands as `$name`. Set variables in the command line with `#var`. Vosh expands them in the lines you type, before the lines go out.
 
-- Type `#var <name> <value>` to set a variable. Vosh echoes `var <name> set`.
-- Reference it in any command as `$name`. The line expands before it leaves, so the server receives the value.
-- Type `#var <name>` to check a value, `#vars` to list them all, and `#unvar <name>` to remove one.
+- To set a variable, type `#var <name> <value>`. Vosh echoes `var <name> set`.
+- To use it in any command, type `$name`. The line expands before it goes out, so the server gets the value.
+- To check a value, type `#var <name>`. To list all variables, type `#vars`. To remove one, type `#unvar <name>`.
 
-`$name` works when the name ends at whitespace or punctuation. Wrap the name in braces, as `${name}`, when letters follow immediately. `$$` sends a literal dollar sign, and unknown names pass through untouched, so `$100` reaches the server as typed.
+`$name` works when the name ends at a space or at punctuation. When letters come right after the name, put it in braces, as `${name}`. `$$` sends a literal dollar sign. Unknown names go out as they are, so `$100` gets to the server as you typed it.
 
-Interpolation runs on the line you type, before alias expansion, and Vosh does not interpolate alias output again. Put variables in the line you type, or resolve them in a Lua script body instead.
+Vosh expands variables in the line you type, before it expands aliases. It doesn't expand variables in the output of an alias again. So put variables in the line you type, or get their values in a Lua script body.
 
-`#var` writes session scope, which clears when the next connection opens, so a session value never outlives its connection. Profile variables persist across restarts in your profile TOML under `profile_vars`, and a session value shadows a profile value of the same name. Each session keeps its own session variables, and the sessions on one profile share its profile variables. `#unvar` takes the name out of both scopes, so the profile value goes for every session on the profile.
+`#var` writes in session scope. Session scope clears when the next connection opens, so a session value never lasts longer than its connection. Profile variables stay across restarts in your profile TOML under `profile_vars`. A session value hides a profile value with the same name. Each session keeps its own session variables, and the sessions on one profile share its profile variables. `#unvar` removes the name from both scopes, so the profile value goes away for every session on the profile.
 
-Vosh also fills session variables on its own. GMCP binds `hp`, `maxhp`, `char_name`, `room_name`, `target_name`, and more, and setting a target with `tar` mirrors it into `$target`.
+Vosh also fills session variables on its own. GMCP sets `hp`, `maxhp`, `char_name`, `room_name`, `target_name`, and more. When you set a target with `tar`, Vosh also puts it in `$target`.
 
-Trigger send templates use `${name}` for regex capture groups, not this store, and trigger sends skip interpolation entirely.
+Trigger send templates use `${name}` for regex capture groups, not for this store. Trigger sends don't expand variables at all.
 
-Example. `#var potion yellow` followed by `quaff $potion` sends `quaff yellow` to the server. With a target set, `cast dispel $target` aims at your current mark.
+Example. `#var potion yellow` and then `quaff $potion` sends `quaff yellow` to the server. When a target is set, `cast dispel $target` aims at your current target.
 
 ### 3.6 Bind keys to macros
 
 <!-- id: automate.macros -->
 
-Macros bind a key to a command that fires while the command line has focus. They live in Settings under Automation, then Macros.
+A macro binds a key to a command. It fires while the command line has the focus. Macros are in Settings under Automation, then Macros.
 
-- Open Settings, choose Automation, and pick `Macros` in the switcher at the top.
+- Open Settings, choose Automation, and choose `Macros` in the switcher at the top.
 - Click `New macro` in the bar at the bottom.
 - Click the `Key` field. It reads `Press a key` until you press one.
-- Press the key you want. The field records its canonical name. Capture accepts function keys, modifier combos like `Ctrl+N`, numpad keys like `Numpad7`, and plain printable keys.
-- Enter the command in `Command`. `;` chains several commands.
-- Put a name in `Group` to turn the macro on and off with others, then click `Save`.
+- Press the key you want. The field records its canonical name. It takes function keys, combinations with modifiers such as `Ctrl+N`, numpad keys such as `Numpad7`, and plain printable keys.
+- Type the command in `Command`. `;` chains more than one command.
+- To turn the macro on and off with others, put a name in `Group`. Then click `Save`.
 
-A macro fires only while the command line has focus. On macOS the `Cmd` shortcuts belong to Vosh and `Ctrl` belongs to your macros.
+A macro fires only while the command line has the focus. On macOS the `Cmd` shortcuts belong to Vosh, and `Ctrl` belongs to your macros.
 
-Turn on `Show the commands your macros send` under Input, then Sent commands, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
+To show what each press sent, turn on `Show the commands your macros send` in Settings under Input, then Sent commands. `#group <name> on|off` turns a whole group of macros on and off from the command line. It also turns the alias, trigger, and timer groups with the same name on and off.
 
-To walk with the numpad, turn on `Numpad movement` in Settings under Automation, then Presets. It adds six macros under `From presets` in Macros, where only their group changes. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. Vosh reads the key itself, so NumLock does not matter and the digit row still types.
+To walk with the numpad, turn on `Numpad movement` in Settings under Automation, then Presets. It adds six macros under `From presets` in Macros. There you can change only their group. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1`, and `Numpad5` stay free. Vosh reads the key itself, so NumLock has no effect and the digit row still types.
 
-A key one of your macros uses stays yours, and the preset's macro on it waits. Both macros say so in Macros, where a ring marks yours, and the preset's card marks the key. The direction takes the key once you move or delete your macro. In loadout mode a macro of yours in a group your character keeps off leaves the key to the preset, so a character whose `Numpad3` went down still does after another brought its own `Numpad3` to the shared catalog. Turning the preset off removes its six and none of yours.
+When one of your macros uses a key, the key stays yours, and the macro of the preset on it waits. Both macros tell you so in Macros, where a ring marks yours. The card of the preset marks the key. The direction gets the key after you move or delete your macro.
 
-Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends both commands.
+In loadout mode, a macro of yours in a group that your character keeps off leaves the key to the preset. So a character whose `Numpad3` went down still goes down after another character brought its own `Numpad3` to the shared catalog. When you turn the preset off, Vosh removes its six macros and none of yours.
 
-`#record` builds something different. It captures the commands you type in its session and saves them as an alias you invoke by name, not by key. The alias joins the profile, so every session on the profile has it. Use Automation, then Macros when you want a key, `#record` when you want a word.
+Example. Bind `F1` to `stand; flee`. When you press `F1` in the command line, Vosh sends both commands.
+
+`#record` does something different. It records the commands you type in its session and saves them as an alias. You use the alias by its name, not by a key. The alias goes into the profile, so every session on the profile has it. Use Automation, then Macros when you want a key. Use `#record` when you want a word.
 
 ### 3.7 Use slash commands
 
 <!-- id: automate.slash-commands -->
 
-Slash commands drive Vosh from the command line without opening Settings. Vosh handles every line that starts with `#` locally, and it never reaches the MUD.
+Slash commands control Vosh from the command line, without Settings. Vosh handles every line that starts with `#` itself, and the line never goes to the MUD.
 
-- Type `#help` any time for the full list, or `#help <words>` to open Help on those words.
+- Type `#help` at any time for the full list, or `#help <words>` to open Help on those words.
 - Manage aliases with `#alias <name> <expansion>`, `#unalias <name>`, and `#aliases`.
 - Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.
-- Tell Vosh how to read your prompt with `#prompt game {setting}` and `#prompt fight {setting}`, the codes you type in the game, or with `#prompt {regex}`, each named group like `(?<hp>\d+)` a value. `#prompt` alone says how Vosh reads it, and `#unprompt` stops.
-- Turn drawing your design on or off with `#prompt draw on|off`. With drawing off you see the game's own prompt, and your design stays. With no design of your own, Vosh draws your prompt as the game does and follows each change you make to it in the game.
-- Pick where your prompt shows with `#prompt show text|lifted|pinned`.
-- Use Vosh's default prompt design with `#prompt default`. It takes the place of the design in this profile, and Vosh keeps yours as an earlier design.
-- Flip whole folders with `#group <name> on|off` and inspect them with `#groups`.
-- Tune the tick with `#tick`, `#tick interval <secs>`, `#tick warn at <secs>`, and the rest listed under `#help`.
-- Check how long the game takes to answer with `#lag`, which also lists each stall since you connected.
-- Record a command sequence with `#record <name>`, finish with `#endrec`, abort with `#record cancel`.
-- Configure quick keys with `#qkey <name> <verb>` and list them with `#qkeys`.
-- Drive Lua with `#script load <name>`, `#script reload`, `#scripts`, and `#lua <code>`.
-- Snapshot with `#profile save`, `#profile load`, and `#profile reset`.
+- To tell Vosh how to read your prompt, use `#prompt game {setting}` and `#prompt fight {setting}`, with the codes you type in the game. Or use `#prompt {regex}`, where each named group such as `(?<hp>\d+)` is a value. `#prompt` alone tells you how Vosh reads your prompt. `#unprompt` stops it.
+- To turn the drawing of your design on or off, use `#prompt draw on|off`. With drawing off, you see the prompt of the game, and your design stays. With no design of your own, Vosh draws your prompt as the game does. It follows each change you make to the prompt in the game.
+- To choose where your prompt shows, use `#prompt show text|lifted|pinned`.
+- To use the default prompt design of Vosh, use `#prompt default`. It replaces the design in this profile. Vosh keeps your design as an earlier design.
+- Turn whole groups on and off with `#group <name> on|off`, and see them with `#groups`.
+- Tune the tick with `#tick`, `#tick interval <secs>`, `#tick warn at <secs>`, and the other commands that `#help` lists.
+- To check how long the game takes to answer, use `#lag`. It also lists each stall since you connected.
+- Record a sequence of commands with `#record <name>`. Finish with `#endrec`, or stop with `#record cancel`.
+- Set quick keys with `#qkey <name> <verb>`, and list them with `#qkeys`.
+- Control Lua with `#script load <name>`, `#script reload`, `#scripts`, and `#lua <code>`.
+- Make and use snapshots with `#profile save`, `#profile load`, and `#profile reset`.
 - Import TinTin++ files with `#import-tintin <path>`.
-- Clear old passwords out of your session log with `#logs forget-passwords`, then `#logs forget-passwords now`.
-- Work targets with `#target <args>`, or bare `tar`, `tarn`, `tarp`, and `tarclear` with no `#` at all.
-- Switch renderers on macOS with `#nativesurface on|off|default`, applied on restart.
+- To remove old passwords from your session log, use `#logs forget-passwords`, then `#logs forget-passwords now`.
+- Work with targets with `#target <args>`. Or use `tar`, `tarn`, `tarp`, and `tarclear` with no `#`.
+- On macOS, change the renderer with `#nativesurface on|off|default`. The change applies when you restart.
 
-An unknown command echoes a pointer to `#help`, and errors come back wrapped in square brackets.
+An unknown command echoes a pointer to `#help`. Errors come back in square brackets.
 
 ### 3.8 Script Vosh with Lua
 
 <!-- id: automate.lua-scripts -->
 
-Lua scripts run inside Vosh and register automation through the global `mud` table. Script files live in the `scripts` folder under the app data directory, `~/Library/Application Support/com.aabahran.vosh/scripts/` on macOS.
+Lua scripts run inside Vosh. They add automation through the global `mud` table. Script files are in the `scripts` folder in the app data folder. On macOS that is `~/Library/Application Support/com.aabahran.vosh/scripts/`.
 
 - Save a `.lua` file in the `scripts` folder.
-- Type `#script load <name>` to load it. Vosh appends `.lua` to a bare name, so `combat` and `combat.lua` load one script.
-- Type `#scripts` to see loaded scripts and the triggers they registered, each with the script that made it.
-- After editing a file, type `#script reload`. Vosh reads every loaded script and plugin from disk again and runs them in the order they first loaded, and an error in one stops none after it.
-- Run one liners with `#lua <code>`.
+- To load it, type `#script load <name>`. Vosh adds `.lua` to a bare name, so `combat` and `combat.lua` load the same script.
+- To see the loaded scripts and the triggers they added, type `#scripts`. Each trigger shows the script that made it.
+- After you edit a file, type `#script reload`. Vosh reads every loaded script and plugin from disk again. It runs them in the order they first loaded. An error in one script stops none of the scripts after it.
+- Run one line of Lua with `#lua <code>`.
 
-Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`. A plugin can draw a pane of its own with `mud.pane`, as Make a pane with Lua at 3.10 shows.
+Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes directly to the server. `mud.input(text)` goes through the input pipeline again. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` add automation. In the callback, `captures[1]` holds the full match, and `captures[2]` and on hold the groups.
 
-`mud.alert(title, options)` posts a banner with the title while you are not looking at the session the Lua runs in. In `options`, `sound = 'chime'`, `'bell'`, `'knock'` or `'low'` plays that tone, `attention = 'once'` bounces the Dock once and `'until'` until you come back, or flashes the taskbar on Windows, `background = false` rings while you look too, and `words = true` with a `text` adds a line under the title. One title from one script rings at most once in 10 seconds, and on macOS turning a plugin off takes back the banners it posted. macOS shows a banner only once you allow Vosh to post them, and Vosh asks for that the first time you turn on a `Banner` in Settings, as Get alerts at 3.9 shows. It also needs a signed Vosh, so a dev build you run from the source shows none there.
+`mud.on_gmcp(package, callback)` gives you server data as a table. `mud.timer(secs, callback)` schedules work that you can cancel with `mud.cancel_timer`. A plugin can draw a pane of its own with `mud.pane`, as Make a pane with Lua at 3.10 shows.
 
-Each script and each plugin owns the triggers, GMCP handlers, and timers it registers, those its callbacks register later included. Loading it again, with `#script reload` or `#script load`, takes all of them back once it runs without an error, so nothing doubles and a trigger you deleted from the file goes. A load with an error keeps what the script had. Variables it set and groups it turned on or off stay. Two scripts may each have a trigger of the same name. A new `mud.on_gmcp` handler runs at once on the last packet of its package, so it sees your `Char.Status` without waiting for your next login. A new `Comm.Channel` handler waits for the next message instead, since each chat packet is one message and not a state.
+`mud.alert(title, options)` posts a banner with the title while you aren't looking at the session that runs the Lua. These are the `options`.
 
-Loads from `#script load` last until you close the session or quit Vosh, and only that session runs them. For autoload, make a plugin. Open Settings and choose Scripts to see your plugins. `New plugin` asks for a name of letters, digits and underscores, makes a folder of that name in `plugins` under the app data directory with a `manifest.toml` and a `main.lua`, turns the plugin on for the profile of the session in front and opens its page. The switch on each row turns a plugin on or off for that profile, and the plugin starts or stops at once in each session that plays it. A plugin Vosh stopped reads `Stopped` there. A plugin folder you named by hand with other characters, like `weather-pane`, still loads and shows there, and its row asks you to rename the folder. Until you do, its switch only turns it off, and its page does not open. Every plugin a profile turns on loads in each session that plays the profile, as the session opens it. When you switch profiles, the plugins the next profile lists turn on and the others turn off as you play, and one both profiles list keeps running. A switch in one session changes the plugins of that session alone.
+- `sound = 'chime'`, `'bell'`, `'knock'`, or `'low'` plays that tone.
+- `attention = 'once'` bounces the Dock one time, and `'until'` bounces it until you come back. On Windows it flashes the taskbar.
+- `background = false` also rings while you look.
+- `words = true` with a `text` adds a line under the title.
 
-Press a plugin under Scripts to open its page. The editor holds the file the plugin runs first, and `Manifest` holds its version, its author, its description and `Runs first`, the file it loads first. `Save and reload` writes both to the plugin folder and loads the plugin again at once in every session whose profile turns it on, and `Discard` puts back what you saved last. Vosh asks before you leave the page or close Settings with changes you have not saved. `Show in Finder` under `Manifest` opens the plugin folder, and reads `Show in Explorer` on Windows and `Show the folder` on Linux.
+One title from one script rings at most one time in 10 seconds. On macOS, when you turn a plugin off, Vosh removes the banners it posted. macOS shows a banner only after you let Vosh post banners. Vosh asks for this the first time you turn on a `Banner` in Settings, as Get alerts at 3.9 shows. Banners also need a signed Vosh. So a dev build that you run from the source shows none.
 
-Each plugin row has a menu of its own. `Reload` reads the plugin from its folder again and loads it in every session whose profile turns it on, so edits you make in another editor take effect, and it ends a stop. `Show in Finder` opens its folder. `Export to Downloads` saves the plugin as a `.zip` in your Downloads folder for you to share, and the line under the list names the file. `Remove…` asks first, then deletes the plugin folder and turns the plugin off in every profile.
+Each script and each plugin owns the triggers, GMCP handlers, and timers it adds. This includes those that its callbacks add later. When you load it again with `#script reload` or `#script load`, Vosh removes all of them, if the script runs with no error. So nothing doubles, and a trigger you deleted from the file goes away. A load with an error keeps what the script had. Variables it set and groups it turned on or off stay.
 
-`Install…` takes a `.zip` a friend shared, and you can drop a plugin folder or a `.zip` on the Scripts list instead. Vosh names the plugin, its version and its author and asks once before it installs. A plugin can send commands to the game and read everything the game sends, so install plugins only from people you trust. An install starts off for every profile. Installing over a plugin of the same name replaces it and turns it off everywhere, so new code never runs until you turn it on. Vosh refuses a plugin with no `manifest.toml`, one with a file outside its own folder, and one over 5 MB or 200 files, and says why above the page.
+Two scripts can each have a trigger with the same name. A new `mud.on_gmcp` handler runs at once on the last packet of its package. So it sees your `Char.Status` and doesn't wait for your next login. A new `Comm.Channel` handler waits for the next message instead. This is because each chat packet is one message and not a state.
 
-Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other, and it reads the standard libraries such as `string` and `table` but cannot change them. It starts from fresh globals each time it loads, and a line it hands `mud.input` runs no `#` command but `#echo`. An alias a plugin makes lasts while the plugin runs, and Vosh never saves it. It works only in the session whose plugin made it. It takes the place of your own alias of that name until the plugin turns off, and turning a plugin off takes back its aliases with all else it registered. Your `#lua` lines, the Lua in your triggers and aliases, and scripts from `#script load` share one set of globals in each session, and an alias they make is one you keep, which every session on the profile runs. They reach the globals of a plugin through `plugins.<name>`, a view you can read but not change, like `plugins.helpers.rescue("Orla")` to call a function the plugin helpers defines.
+A script you load with `#script load` stays loaded until you close the session or quit Vosh. Only that session runs it. For a script that loads automatically, make a plugin. To see your plugins, open Settings and choose Scripts.
 
-Every Lua error and every `print` shows in the terminal of its session after a gray `[lua]` tag. An error names its place, like `combat.lua:3:` for line 3 of `combat.lua`, and shows in red. What a plugin prints as it loads in a session shows once you connect or type a line there. The Console under Scripts in Settings shows the same lines for the session in front, each with its time, and runs the Lua you type in its field in that session the way `#lua` does. `Clear` empties the Console and leaves the terminal as it is. A plugin's page shows the lines of that plugin under `Output`, and its field runs Lua inside the plugin, where it sees the plugin's globals and its own `mud` table. The line its newest error or stop names since it last loaded shows tinted in the editor, and a hover over it shows the error.
+`New plugin` asks for a name of letters, digits, and underscores. It makes a folder with that name in `plugins` in the app data folder, with a `manifest.toml` and a `main.lua`. It turns the plugin on for the profile of the session in front and opens the page of the plugin.
 
-Lua runs between the lines the game sends, so Vosh keeps each call short. It stops a call that runs past 100 ms, uses 32 MB more than it began with, or takes your scripts past 128 MB in all, and `pcall` cannot catch the stop. The time limit reaches inside string patterns and the `table` functions too, so a pattern that backtracks over a long line stops like a loop. A stopped call sends nothing it queued, and a red `[lua]` line says what Vosh stopped. A plugin then stays off until you save it under Scripts in Settings or restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh. Each stays off only in the session where Vosh stopped it, and every other session on the profile keeps running it. The page of a plugin Vosh stopped says why above its editor. Each plugin and each script from `#script load` also gets 100 ms in all for one game line, one packet, the last packets its new handlers get, or one round of timers that fall due together. Once it has used them, Vosh skips the rest of its triggers and handlers for that line or packet, holds the rest of its timers a quarter second, and says so in a red `[lua]` line. One call may queue 100 actions, such as sends and echoes, and Vosh drops the rest with a line that says so. A line to send holds 1 KB at most, an echo 64 KB, and one call 256 KB of text in all. Vosh runs 100 `mud.input` lines at most for one game line, packet, timer, or line you type, those their own Lua asks for included.
+The switch on each row turns a plugin on or off for that profile. The plugin starts or stops at once in each session that plays the profile. A plugin that Vosh stopped reads `Stopped` there. A plugin folder that you named by hand with other characters, such as `weather-pane`, still loads and shows there. Its row asks you to rename the folder. Until you do, its switch can only turn it off, and its page doesn't open.
 
-The sandbox strips file, process, and environment access. `require`, `io`, `os.execute`, `os.getenv`, and `os.setlocale` are gone, and Vosh refuses a `__gc` method, which runs where Vosh cannot stop it. `#script load` reads only from the `scripts` folder. `mud.input` cannot run `#script load`, `#script reload`, `#import-tintin`, or `#profile`, which run only when you type them, and it cannot set a quick key or the tick command to a `#` command.
+Every plugin that a profile turns on loads in each session that plays the profile, when the session opens it. When you change profiles, the plugins of the next profile turn on and the others turn off. A plugin that both profiles list keeps running. A switch in one session changes the plugins of that session only.
 
-Example. `#script load combat` loads `combat.lua` from the scripts folder, and `#lua mud.echo("hello")` prints a line locally.
+To open the page of a plugin, click the plugin under Scripts. The editor holds the file that the plugin runs first. `Manifest` holds its version, its author, its description, and `Runs first`, the file it loads first. `Save and reload` writes both to the plugin folder. It loads the plugin again at once in every session whose profile turns it on. `Discard` puts back what you saved last.
+
+Vosh asks before you leave the page or close Settings with changes you haven't saved. `Show in Finder` under `Manifest` opens the plugin folder. It reads `Show in Explorer` on Windows and `Show the folder` on Linux.
+
+Each plugin row has a menu of its own. `Reload` reads the plugin from its folder again. It loads the plugin in every session whose profile turns it on. So edits you make in another editor take effect. It also ends a stop.
+
+`Show in Finder` opens its folder. `Export to Downloads` saves the plugin as a `.zip` in your Downloads folder, so you can share it. The line under the list names the file. `Remove…` asks first. Then it deletes the plugin folder and turns the plugin off in every profile.
+
+`Install…` takes a `.zip` that a friend shared. You can also drop a plugin folder or a `.zip` on the Scripts list. Vosh names the plugin, its version, and its author, and asks one time before it installs. A plugin can send commands to the game and read everything the game sends. So install plugins only from people you trust.
+
+A new install of a plugin starts off for every profile. When you install over a plugin with the same name, it replaces that plugin and turns it off everywhere. So new code never runs until you turn it on. Vosh refuses a plugin with no `manifest.toml`, a plugin with a file outside its own folder, and a plugin over 5 MB or 200 files. It tells you why above the page.
+
+Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other. A plugin can read the standard libraries, such as `string` and `table`, but it can't change them. It starts from new globals each time it loads. A line that it gives to `mud.input` runs no `#` command except `#echo`.
+
+An alias that a plugin makes lasts while the plugin runs, and Vosh never saves it. It works only in the session whose plugin made it. It replaces your own alias with that name until the plugin turns off. When you turn a plugin off, Vosh removes its aliases and all else it added.
+
+Your `#lua` lines, the Lua in your triggers and aliases, and scripts from `#script load` share one set of globals in each session. An alias that they make is one you keep, and every session on the profile runs it. They get to the globals of a plugin through `plugins.<name>`. This is a view that you can read but not change. An example is `plugins.helpers.rescue("Orla")`, which calls a function that the plugin helpers defines.
+
+Every Lua error and every `print` shows in the terminal of its session after a gray `[lua]` tag. An error names its place, such as `combat.lua:3:` for line 3 of `combat.lua`, and shows in red. What a plugin prints as it loads in a session shows after you connect or type a line there.
+
+The Console under Scripts in Settings shows the same lines for the session in front, each with its time. It runs the Lua you type in its field in that session, as `#lua` does. `Clear` empties the Console and doesn't change the terminal.
+
+The page of a plugin shows the lines of that plugin under `Output`. Its field runs Lua inside the plugin, where it sees the globals of the plugin and its own `mud` table. The line that its newest error or stop names since it last loaded shows tinted in the editor. Point at it to see the error.
+
+Lua runs between the lines the game sends, so Vosh keeps each call short. It stops a call that runs longer than 100 ms. It also stops a call that uses 32 MB more than it started with, or that takes your scripts past 128 MB in total. `pcall` can't catch the stop. The time limit also works inside string patterns and the `table` functions. So a pattern that backtracks over a long line stops like a loop.
+
+A stopped call sends nothing that it queued, and a red `[lua]` line tells you what Vosh stopped. A plugin then stays off until you save it under Scripts in Settings or restart Vosh. A script from `#script load` stays off until `#script reload`. A trigger or alias whose Lua ran too long stays off until you save it or restart Vosh.
+
+Each one stays off only in the session where Vosh stopped it. Every other session on the profile keeps running it. The page of a plugin that Vosh stopped tells why above its editor.
+
+Each plugin and each script from `#script load` also gets 100 ms in total for each of these. That is one game line, one packet, the last packets that its new handlers get, or one round of timers that are due together. When it has used them, Vosh skips the rest of its triggers and handlers for that line or packet. It holds the rest of its timers for a quarter second. A red `[lua]` line tells you so.
+
+One call can queue up to 100 actions, such as sends and echoes. Vosh drops the rest and shows a line that tells you so. A line to send holds 1 KB at most, and an echo holds 64 KB. One call holds 256 KB of text in total. For one game line, packet, timer, or line you type, Vosh runs 100 `mud.input` lines at most. This includes the lines that their own Lua asks for.
+
+The sandbox removes access to files, processes, and the environment. `require`, `io`, `os.execute`, `os.getenv`, and `os.setlocale` aren't there. Vosh refuses a `__gc` method, because it runs where Vosh can't stop it.
+
+`#script load` reads only from the `scripts` folder. `mud.input` can't run `#script load`, `#script reload`, `#import-tintin`, or `#profile`. These run only when you type them. `mud.input` also can't set a quick key or the tick command to a `#` command.
+
+Example. `#script load combat` loads `combat.lua` from the scripts folder. `#lua mud.echo("hello")` prints a line locally.
 
 ### 3.9 Get alerts
 
 <!-- id: automate.alerts -->
 
-Alert presets get your attention when the game needs you, while you play another session or work in another app. They live in Settings under Automation, then Presets, under `Alerts`.
+Alert presets get your attention when the game needs you. They work while you play another session or work in another app. They are in Settings under Automation, then Presets, under `Alerts`.
 
-- `Tells you get` rings when someone sends you a tell, and the banner reads `Tell from` and their name.
-- `Your name` rings when a line from the game names you, as a whole word with its capital. It waits until the game says who you are after you log in, and lines that start with `You` stay quiet.
-- `Being attacked` rings when someone starts a fight with you. It stays quiet when a groupmate other than you tanks the fight, and when a command of yours went out in the 2 seconds before, since you most likely started it.
-- `Low health` rings when your health falls under 20 percent, and again only after it climbs back to 25 percent and falls once more. It never rings while the game hides your vitals.
-- `Connection` rings when your link to the game drops while you play, when a redial reaches the login, and when Vosh stops trying.
+- `Tells you get` rings when someone sends you a tell. The banner reads `Tell from` and their name.
+- `Your name` rings when a line from the game names you, as a whole word with its capital letter. It waits until the game tells Vosh who you are after you log in. Lines that start with `You` don't ring.
+- `Being attacked` rings when someone starts a fight with you. It doesn't ring when a groupmate other than you tanks the fight. It also doesn't ring when you sent a command in the 2 seconds before, because then you most likely started the fight.
+- `Low health` rings when your health falls under 20 percent. It rings again only after your health goes back up to 25 percent and falls again. It never rings while the game hides your vitals.
+- `Connection` rings when your connection to the game drops while you play, when a reconnect gets to the login, and when Vosh stops trying.
 
-All five start off. Turn one on with its switch and click `Save`. Each starts with `Banner` pressed in its `Alert` row, and `Sound` and `Bounce` press on and off as they do on a trigger. The rows for the parts you press show under it. `Banner shows` waits for Tells you get and Your name, where `Title and words` adds what was said or the line that named you. `Only while you are not looking at its session` starts on, so a preset rings only while you look at another session or another app. Turn it off and it rings while you watch too. A preset whose `Alert` row you changed wears a pencil in the list, and `Reset to preset` on its card puts the row back as the preset ships.
+All five start off. To turn one on, use its switch and click `Save`. Each one starts with `Banner` on in its `Alert` row. You turn `Sound` and `Bounce` on and off as on a trigger. The rows for the parts that are on show under it.
 
-While Vosh is in front and you look at another session, an alert from a session behind shows a notice at the bottom right, such as `Tell from Maren` with `to Tolliver` beside it. Click `Show` to go to that session. `Close` puts the notice away and leaves the count on the row of that session in the sidebar until you look there.
+`Banner shows` is there only for Tells you get and Your name. There, `Title and words` adds what was said or the line that named you.
 
-The first time you turn on a `Banner`, on a preset or on a trigger, Vosh asks before macOS does. Click `Continue` and macOS asks whether Vosh may post banners. `Not now` keeps `Banner` on and asks no more until you close Settings. If banners from Vosh are off in System Settings, `Banner` wears a warning ring on every `Alert` row, and each alert preset says so at the top of its card. `Sound` and `Bounce` still work. `Open notification settings` takes you to the page where you turn banners back on, and the ring goes once you come back to Settings. On Windows the note names Windows Settings and `Flash`. A dev build you run from the source shows no banners, so it asks nothing and wears no ring.
+`Only while you are not looking at its session` starts on. So a preset rings only while you look at another session or another app. Turn it off, and it also rings while you watch. A preset with an `Alert` row that you changed has a pencil in the list. `Reset to preset` on its card puts the row back as the preset ships.
 
-Each preset rings at most once in 10 seconds, so a burst rings once. Tells you get counts each sender on their own, so three tells from Tolliver ring once and a tell from Maren still rings. Connection counts the drop, the login and the stop apart, so each one rings.
+While Vosh is in front and you look at another session, an alert from a session behind shows a notice at the bottom right. An example is `Tell from Maren` with `to Tolliver` beside it. Click `Show` to go to that session. `Close` removes the notice. The count stays on the row of that session in the sidebar until you look there.
 
-To ring on a line of your own choosing, press a part in the `Alert` row of a trigger, as Create a trigger at 3.2 shows.
+The first time you turn on a `Banner`, on a preset or on a trigger, Vosh asks before macOS does. Click `Continue`, and macOS asks if Vosh can post banners. `Not now` keeps `Banner` on, and Vosh doesn't ask again until you close Settings.
+
+If banners from Vosh are off in System Settings, `Banner` has a warning ring on every `Alert` row. Each alert preset also tells you so at the top of its card. `Sound` and `Bounce` still work.
+
+`Open notification settings` takes you to the page where you turn banners back on. The ring goes away when you come back to Settings. On Windows the note names Windows Settings and `Flash`. A dev build that you run from the source shows no banners, so it asks nothing and shows no ring.
+
+Each preset rings at most one time in 10 seconds, so a burst rings one time. Tells you get counts each sender separately. So three tells from Tolliver ring one time, and a tell from Maren still rings. Connection counts the drop, the login, and the stop separately, so each one rings.
+
+To ring on a line that you choose, use a trigger. Turn on a part in its `Alert` row, as Create a trigger at 3.2 shows.
 
 ### 3.10 Make a pane with Lua
 
 <!-- id: automate.lua-panes -->
 
-A plugin can draw its own pane. You send Vosh rows, gauges and lines, and Vosh draws them in the pane's style. Every value shows as plain text.
+A plugin can draw its own pane. You send Vosh rows, gauges, and lines, and Vosh draws them in the style of the pane. Every value shows as plain text.
 
 ```lua
 -- weather_pane/main.lua
