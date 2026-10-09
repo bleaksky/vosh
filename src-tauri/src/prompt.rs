@@ -332,10 +332,14 @@ fn unknown_vitals(c: &Connection) -> Vec<vosh_prompt::card::report::GmcpName> {
 /// A Line trigger that matched your prompt as a line, for the card's row
 /// after it saves a capture, since a Line trigger no longer sees a prompt
 /// the profile reads. `pattern` is its first pattern, and `preset` says a
-/// highlight preset installed it, which only the preset changes.
+/// highlight preset installed it, which only the preset changes. `group`
+/// is its group, None for no group, since two groups may each hold a
+/// trigger of one name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct LineTrigger {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     pub pattern: String,
     pub preset: bool,
 }
@@ -368,11 +372,15 @@ pub(crate) fn line_triggers(
                 vosh_automation::trigger::MatchScope::Line,
                 c.stop_key,
             ) {
-                if out.iter().any(|t| t.name == trigger.name) {
+                if out
+                    .iter()
+                    .any(|t| t.name == trigger.name && t.group == trigger.group)
+                {
                     continue;
                 }
                 out.push(LineTrigger {
                     name: trigger.name.clone(),
+                    group: trigger.group.clone(),
                     pattern: trigger.first_pattern().to_string(),
                     preset: trigger.preset.is_some(),
                 });

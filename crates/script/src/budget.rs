@@ -157,11 +157,7 @@ mod tests {
     #[test]
     fn your_own_lua_keeps_the_limits_of_one_call_alone() {
         let mut budget = Budget::new(Event::Timers);
-        for owner in [
-            Owner::Typed,
-            Owner::Trigger("tells".into()),
-            Owner::alias("heal"),
-        ] {
+        for owner in [Owner::Typed, Owner::trigger("tells"), Owner::alias("heal")] {
             budget.charge(&owner, Duration::from_secs(1));
             assert!(budget.allows(&owner), "{owner:?}");
         }

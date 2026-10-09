@@ -128,7 +128,7 @@ fn read_again(
                     format!("Vosh could not read plugin {name} and left it as it was.")
                 })
         }
-        Owner::Typed | Owner::Trigger(_) | Owner::Alias { .. } => return None,
+        Owner::Typed | Owner::Trigger { .. } | Owner::Alias { .. } => return None,
     })
 }
 

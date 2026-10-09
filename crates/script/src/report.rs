@@ -139,12 +139,9 @@ pub(crate) fn stop_lines(owner: &Owner, site: &Site, stop: &Stop) -> Vec<Action>
                 ),
             },
         ],
-        (Owner::Trigger(name), _) => vec![error(format!(
-            "{what} {name} stays off until you save it or restart Vosh."
-        ))],
-        (Owner::Alias { .. }, _) => vec![error(format!(
+        (Owner::Trigger { .. } | Owner::Alias { .. }, _) => vec![error(format!(
             "{what} {} stays off until you save it or restart Vosh.",
-            owner.alias_label()
+            owner.item_label()
         ))],
         (Owner::Script(_), _) => vec![error(format!("{what} It stays off until #script reload."))],
         (Owner::Typed, Site::LuaTrigger { .. } | Site::Gmcp { .. }) => {
@@ -215,8 +212,8 @@ pub(crate) fn budget_line(owner: &Owner, event: &Event) -> String {
 fn subject(owner: &Owner, site: &Site) -> String {
     match owner {
         Owner::Plugin(name) | Owner::Script(name) => name.clone(),
-        Owner::Trigger(name) => format!("the Lua in trigger {name}"),
-        Owner::Alias { .. } => format!("the Lua in alias {}", owner.alias_label()),
+        Owner::Trigger { .. } => format!("the Lua in trigger {}", owner.item_label()),
+        Owner::Alias { .. } => format!("the Lua in alias {}", owner.item_label()),
         Owner::Typed => match site {
             Site::Entry => "your #lua line".to_string(),
             Site::LuaTrigger { name, .. } => format!("the Lua trigger {name}"),
@@ -347,7 +344,7 @@ mod tests {
     #[test]
     fn the_other_stops_read_as_the_board_writes_them() {
         let time = stop(StopReason::Time, Some(("=trigger tells", 1)));
-        let tells = Owner::Trigger("tells".into());
+        let tells = Owner::trigger("tells");
         // Each is one error, at the place the stop names.
         assert_eq!(
             stop_lines(&tells, &Site::Entry, &time),
@@ -372,6 +369,14 @@ mod tests {
             texts(&stop_lines(&grouped, &Site::Entry, &time)),
             ["Vosh stopped the Lua in alias heal in Orla after 100 ms. heal in Orla stays off until you save it or restart Vosh."]
         );
+        let grouped = Owner::Trigger {
+            name: "tells".into(),
+            group: Some("Maren".into()),
+        };
+        assert_eq!(
+            texts(&stop_lines(&grouped, &Site::Entry, &time)),
+            ["Vosh stopped the Lua in trigger tells in Maren after 100 ms. tells in Maren stays off until you save it or restart Vosh."]
+        );
         assert_eq!(
             texts(&stop_lines(
                 &Owner::Script("combat.lua".into()),
@@ -393,7 +398,7 @@ mod tests {
             ["Vosh stopped a Char.Vitals handler after 100 ms. Vosh removed it."]
         );
         assert_eq!(
-            cap_line(&Owner::Trigger("tells".into()), &Site::Entry),
+            cap_line(&Owner::trigger("tells"), &Site::Entry),
             "The Lua in trigger tells queued more than 100 actions in one call. Vosh dropped the rest."
         );
         assert_eq!(

@@ -118,10 +118,15 @@ pub(super) fn run_trigger_scripts(
 ) -> ScriptOutcome {
     let mut acc = ScriptOutcome::default();
     for call in &result.scripts {
-        if p.triggers.is_stopped(&call.source, c.stop_key) {
+        if p.triggers
+            .is_stopped(call.group.as_deref(), &call.source, c.stop_key)
+        {
             continue;
         }
-        let owner = Owner::Trigger(call.source.clone());
+        let owner = Owner::Trigger {
+            name: call.source.clone(),
+            group: call.group.clone(),
+        };
         let outcome = c.script.run_body(&owner, &call.body, &call.captures);
         script::turn_off_stopped(p, c.stop_key, &outcome);
         acc.append(outcome);
@@ -605,9 +610,14 @@ fn prompt_block(
             MatchScope::Line,
             c.stop_key,
         );
+        // Each by its label, so two of one name in two groups both show.
+        let labels: Vec<String> = matched
+            .into_iter()
+            .map(vosh_automation::trigger::Trigger::label)
+            .collect();
         c.prompt
             .stage
-            .line_triggers_matched(matched.into_iter().map(|t| t.name.as_str()));
+            .line_triggers_matched(labels.iter().map(String::as_str));
     }
 
     let last = block.final_line().clone();

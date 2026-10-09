@@ -277,7 +277,7 @@ fn a_trigger_body_that_runs_away_turns_its_trigger_off() {
     let mut c = Connection::default();
     let result = vosh_automation::trigger::process(&p.triggers, b"You are hungry.", c.stop_key);
     let outcome = super::run_trigger_scripts(&mut p, &mut c, &result);
-    assert!(p.triggers.is_stopped("hunger", c.stop_key));
+    assert!(p.triggers.is_stopped(None, "hunger", c.stop_key));
     let apply = crate::script::apply_actions(&mut p, &mut c, outcome);
     // A stopped body sends nothing it queued.
     let leftover = &apply.send_bytes;
@@ -315,7 +315,7 @@ fn a_function_a_trigger_body_left_behind_turns_its_trigger_off_too() {
         data: serde_json::json!({}),
     };
     let (_, apply) = super::gmcp_step(&mut p, &mut c, &msg, tokio::time::Instant::now());
-    assert!(p.triggers.is_stopped("day", c.stop_key));
+    assert!(p.triggers.is_stopped(None, "day", c.stop_key));
     assert_eq!(
         apply.echoes,
         [lua_error(

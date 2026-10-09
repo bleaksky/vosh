@@ -1835,6 +1835,68 @@ async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
     h.finish(grid).await;
 }
 
+// Two groups each hold a trigger named exits, one per character. Every
+// trigger that matches a line fires, so both run on the exits line of a
+// look: Maren's marks the line and Tolliver's sends ponder, which the
+// game answers with Huh?. Turning a group off holds only its own. The
+// guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_trigger_name_two_groups_share_fires_in_both() {
+    use vosh_automation::trigger::{Trigger, TriggerAction};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+    {
+        let mut p = h.state.selected_profile().await;
+        let in_group = |group: &str, action: TriggerAction| Trigger {
+            group: Some(group.into()),
+            ..Trigger::new("exits", r"^\[Exits: (\w+)\]$", action)
+        };
+        p.triggers
+            .set(in_group(
+                "Maren",
+                TriggerAction::Replace {
+                    template: "[Exits: $1 for Maren]".into(),
+                },
+            ))
+            .expect("the trigger compiles");
+        p.triggers
+            .set(in_group(
+                "Tolliver",
+                TriggerAction::Send {
+                    template: "ponder".into(),
+                },
+            ))
+            .expect("the trigger compiles");
+        assert_eq!(p.triggers.named("exits").len(), 2);
+    }
+    let count = |h: &Harness, text: &str| h.screen().iter().filter(|r| r.contains(text)).count();
+    h.type_line("look").await;
+    h.until_shown("[Exits: south for Maren]").await;
+    h.until_shown("Huh?").await;
+
+    // Tolliver's group off, the line still shows Maren's mark and the
+    // game hears no ponder.
+    h.state
+        .selected_profile()
+        .await
+        .triggers
+        .set_group_enabled("Tolliver", false);
+    // The game answers in order, so once the last look shows, the
+    // answer to every command before it has come.
+    let (marked, huh) = (count(&h, "for Maren]"), count(&h, "Huh?"));
+    h.type_line("look").await;
+    h.type_line("ponder").await;
+    h.type_line("look").await;
+    h.until("both looks", |h| count(h, "for Maren]") >= marked + 2)
+        .await;
+    assert_eq!(count(&h, "Huh?"), huh + 1, "{:#?}", h.screen());
+    h.finish(grid).await;
+}
+
 // Two groups each hold an alias named ds, one per character. The one in
 // the group Settings lists first goes to the game, and once you turn its
 // group off the other one does. The guard keeps other tests off the

@@ -18,10 +18,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::groups::{compare_groups, GroupSwitch};
+use crate::groups::{clean_group, compare_groups, GroupSwitch};
 use crate::revision::next_revision;
 use crate::split::split_commands;
-use crate::stops::{StopKey, Stops};
+use crate::stops::{split_stop_id, stop_id, StopKey, Stops};
 use crate::ScriptCall;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -205,11 +205,6 @@ fn recursion_text(chain: &[String], depth: usize) -> String {
 /// Default cap on alias recursion depth. Matches the `TinTin++` default.
 pub const DEFAULT_MAX_DEPTH: usize = 16;
 
-/// A group as the store keeps it: trimmed, and None for no group.
-fn clean_group(group: Option<&str>) -> Option<&str> {
-    group.map(str::trim).filter(|g| !g.is_empty())
-}
-
 /// `alias` as the store keeps it, its name and group trimmed and an
 /// empty group as none. A name you typed with a space before or after it
 /// would never match the first word of a line otherwise.
@@ -220,18 +215,6 @@ fn cleaned(mut alias: Alias) -> Alias {
     }
     alias.group = clean_group(alias.group.as_deref()).map(str::to_string);
     alias
-}
-
-/// The text the stops know an alias by, its group and its name, since
-/// two groups may each hold an alias of one name.
-fn stop_id(group: Option<&str>, name: &str) -> String {
-    format!("{}\u{1f}{name}", group.unwrap_or(""))
-}
-
-/// The group and the name a [`stop_id`] stands for.
-fn split_stop_id(id: &str) -> (Option<&str>, &str) {
-    let (group, name) = id.split_once('\u{1f}').unwrap_or(("", id));
-    (clean_group(Some(group)), name)
 }
 
 impl Alias {
