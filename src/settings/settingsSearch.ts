@@ -395,6 +395,39 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
 
   // Input.
   {
+    label: 'Mark before your commands',
+    description: 'Vosh leaves it out after a prompt that already ends in >.',
+    keywords: 'echo caret arrow prefix mark symbol sent input',
+    target: at('input', 'sent', 'mark-commands'),
+  },
+  {
+    label: 'Mark color',
+    keywords: 'echo mark caret color grey',
+    target: at('input', 'sent', 'mark-color'),
+  },
+  {
+    label: 'Command color',
+    keywords: 'echo local command typed sent color',
+    target: at('input', 'sent', 'sent-color'),
+  },
+  {
+    label: 'Dim sent commands',
+    description: 'Your commands draw faint, so the game’s lines stand out.',
+    keywords: 'echo faint dim grey sent',
+    target: at('input', 'sent', 'sent-dim'),
+  },
+  {
+    label: 'Use the same mark in the command line',
+    description: 'The line you type in starts with your mark.',
+    keywords: 'prompt glyph mark command line',
+    target: at('input', 'sent', 'mark-line'),
+  },
+  {
+    label: 'Show the commands your macros send',
+    keywords: 'macro echo keys',
+    target: at('input', 'sent', 'echo-macros'),
+  },
+  {
     label: 'Caret shape',
     keywords: 'cursor block outline underline pipe command line',
     target: at('input', 'command-line', 'caret'),
@@ -458,39 +491,6 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'Turn this off and Post posts your note at once, unless a report would record a room other than the one you began it in.',
     keywords: 'writing card note post confirm ask sure',
     target: at('input', 'writing', 'writing-ask-post'),
-  },
-  {
-    label: 'Mark before your commands',
-    description: 'Vosh leaves it out after a prompt that already ends in >.',
-    keywords: 'echo caret arrow prefix mark symbol sent input',
-    target: at('input', 'sent', 'mark-commands'),
-  },
-  {
-    label: 'Mark color',
-    keywords: 'echo mark caret color grey',
-    target: at('input', 'sent', 'mark-color'),
-  },
-  {
-    label: 'Command color',
-    keywords: 'echo local command typed sent color',
-    target: at('input', 'sent', 'sent-color'),
-  },
-  {
-    label: 'Dim sent commands',
-    description: 'Your commands draw faint, so the game’s lines stand out.',
-    keywords: 'echo faint dim grey sent',
-    target: at('input', 'sent', 'sent-dim'),
-  },
-  {
-    label: 'Use the same mark in the command line',
-    description: 'The line you type in starts with your mark.',
-    keywords: 'prompt glyph mark command line',
-    target: at('input', 'sent', 'mark-line'),
-  },
-  {
-    label: 'Show the commands your macros send',
-    keywords: 'macro echo keys',
-    target: at('input', 'sent', 'echo-macros'),
   },
   {
     label: 'Wait between pasted lines',
