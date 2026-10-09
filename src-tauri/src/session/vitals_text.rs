@@ -1,9 +1,9 @@
-//! The vitals text a footer or the status line draws (Q7 to Q9 of the
-//! Vitals Styles review). While the page watches it, the session renders
-//! your text as the watch starts, on each Char.Vitals and Char.Combat,
-//! each second while the text reads the tick and each minute while it
-//! reads the time or the date, and when Settings saves a new text. Each
-//! render goes out on `session://vitals-text` once the locks let go.
+//! The vitals text a footer or the status line draws. While the page
+//! watches it, the session renders your text as the watch starts, on
+//! each Char.Vitals and Char.Combat, each second while the text reads
+//! the tick and each minute while it reads the time or the date, and
+//! when Settings saves a new text. Each render goes out on
+//! `session://vitals-text` once the locks let go.
 
 use std::sync::Mutex;
 use std::time::Duration;

@@ -1,7 +1,7 @@
-//! The Aabahran PROMPT compiler against the game's own output (section 3
-//! of the build spec): James's PROMPT compiling to the patterns in E
-//! section 6.6, one hand case per code, the shapes and their settle
-//! flags, the warnings with their copy, and the compile error.
+//! The Aabahran PROMPT compiler against the game's own output: James's
+//! PROMPT compiling to the patterns the game prints, one hand case per
+//! code, the shapes and their settle flags, the warnings with their copy,
+//! and the compile error.
 //!
 //! Character names in these lines are placeholders, so `Ilsabet` reads
 //! `Tester`.
@@ -15,10 +15,10 @@ use vosh_prompt::aabahran::{
 use vosh_prompt::testkit::mud::PROMPT;
 use vosh_prompt::{Capture, Vars};
 
-/// E section 6.6, Normal.
+/// The Normal shape.
 const NORMAL: &str = r"^(?:\(Wizi (?<wizi>\d+)\) )?(?:\(Incog (?<incog>\d+)\) )?\[(?<hp>-?\d+)/(?<maxhp>\d+)hp (?<mana>-?\d+)/(?<maxmana>\d+)mn (?<move>-?\d+)/(?<maxmove>\d+)mv\] *$";
 
-/// E section 6.6, Tank, with `%P` as section 3 fixes it.
+/// The Tank shape, with `%P` carrying its brackets.
 const TANK: [&str; 2] = [
     r"^(?:\(Wizi (?<wizi>\d+)\) )?(?:\(Incog (?<incog>\d+)\) )?(?<tank>.+?): (?:\[(?<tank_bar>[=-]{3}(?:\|[=-]{3}){3})\])? *$",
     r"^\[(?<hp>-?\d+)/(?<maxhp>\d+)hp (?<mana>-?\d+)/(?<maxmana>\d+)mn (?<move>-?\d+)/(?<maxmove>\d+)mv\] *$",
@@ -588,7 +588,7 @@ fn warnings(setting: &str, who: Who) -> Vec<(WarningKind, std::ops::Range<usize>
 
 #[test]
 fn codes_run_together_and_neither_reads() {
-    // Healer's prompt, as board P3b draws it.
+    // A healer's prompt.
     let compiled = stored("<%h%m %vmv> ", "");
     assert_eq!(
         compiled

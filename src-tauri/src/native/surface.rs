@@ -1,4 +1,4 @@
-//! Tier 3 native terminal renderer (see docs/native-renderer.md).
+//! The native terminal renderer (see docs/renderer.md).
 //!
 //! The platform submodule owns the view plumbing: `install` creates the
 //! native view under the webview, `place` puts the grid in the pane and

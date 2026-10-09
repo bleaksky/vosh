@@ -1,5 +1,5 @@
 //! The synthetic pulses in `fixtures/prompt/aabahran/wire` are what the
-//! test kit's fake plays (section 9 of the build spec). After a change to
+//! test kit's fake plays. After a change to
 //! the fake, run this test with `VOSH_WRITE_WIRE=1` to write them again,
 //! then read the diff.
 //!

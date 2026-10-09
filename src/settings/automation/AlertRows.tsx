@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { FIRST_ATTENTION, FIRST_TONE, type AlertPart } from '../../automation/alertParts';
 import { alertsOpenSettings } from '../../ipc/alerts';
 import type { AlertParts } from '../../ipc/automation';
-import { errorText } from '../../lib/text';
+import { errorText, listJoin } from '../../lib/text';
 import { ALERT_TONES, playAlertTone } from '../../stores/session/alertTones';
 import {
   Button,
@@ -19,8 +20,8 @@ import {
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import type { BannerPermission } from './useBannerPermission';
 
-// The rows that edit an alert, as board 1 of the Alerts and Scenes review
-// draws them on the trigger card and under its Advanced.
+// The rows that edit an alert, on the trigger card and under its
+// Advanced.
 
 function platform(): string | undefined {
   return typeof document === 'undefined' ? undefined : document.documentElement.dataset.platform;
@@ -37,6 +38,17 @@ function attentionLabel(): string {
   return 'Bounce';
 }
 
+/** The parts `alert` has on, as the Alert row names them, as `Banner
+ *  and Sound`, or `none` while it has none. */
+export function AlertPartsOn({ alert, none }: { alert: AlertParts | undefined; none: string }) {
+  const on = [
+    alert?.banner ? 'Banner' : '',
+    alert?.sound !== undefined ? 'Sound' : '',
+    alert?.attention !== undefined ? attentionLabel() : '',
+  ].filter(Boolean);
+  return on.length > 0 ? listJoin(on) : none;
+}
+
 /** Why Banner shows nothing while the system turns Vosh's banners off.
  *  Only macOS and Windows turn them off. */
 function bannerOffNote(): [why: string, still: string] {
@@ -51,17 +63,21 @@ function bannerOffNote(): [why: string, still: string] {
  *  their own, and a pressed one leads with the pane menu's check, so the
  *  row never reads as a pick of one. `onPress` gets the part and whether
  *  it is now on. Banner on goes through `banner.askFirst`, so the first
- *  one opens Vosh's ask (board 3), which this row draws. While the
- *  system turns banners off, Banner wears the warn ring. */
+ *  one opens Vosh's ask, which this row draws. While the system turns
+ *  banners off, Banner wears the warn ring. */
 export function AlertRow({
   alert,
   disabled,
   banner,
+  description,
   onPress,
 }: {
   alert: AlertParts | undefined;
   disabled: boolean;
   banner: BannerPermission;
+  /** The line under the label, as a preset trigger's says what its
+   *  preset has once you changed the row. */
+  description?: ReactNode;
   onPress: (part: AlertPart, on: boolean) => void;
 }) {
   const parts: { part: AlertPart; label: string; on: boolean }[] = [
@@ -72,7 +88,7 @@ export function AlertRow({
   const off = banner.permission === 'denied';
   return (
     <>
-      <Row label="Alert">
+      <Row label="Alert" description={description}>
         <div role="group" aria-label="Alert with" className="st-seg is-multi">
           {parts.map(({ part, label, on }) => {
             const warn = off && part === 'banner';
@@ -148,12 +164,12 @@ function toneOptions(current: string): readonly SelectOption[] {
 /** One of the four rows under the Alert row, by the key it sets. */
 export type AlertDetail = 'sound' | 'attention' | 'words' | 'background';
 
-/** The four rows that tune an alert, which close the card under Advanced
- *  (board 1). They show whatever parts are pressed. A part that is off
+/** The four rows that tune an alert, which close the card under
+ *  Advanced. They show whatever parts are pressed. A part that is off
  *  shows what pressing it would use, Chime and Once, and a pick there
  *  turns it on. Play sounds the tone shown, on or off. `only` keeps the
- *  rows it names, in this order, as the card of an alert preset does
- *  (board 2). `onChange` gets the keys a row sets. */
+ *  rows it names, in this order, as the card of an alert preset does.
+ *  `onChange` gets the keys a row sets. */
 export function AlertDetailRows({
   alert,
   disabled,

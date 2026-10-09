@@ -1,6 +1,7 @@
 import { act, createElement, type ComponentType, type ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import golden from '../../fixtures/links/settings-anchors.json';
+import { presetById, presetTriggers } from '../automation/presets';
 import { resolveHelpTarget } from '../help/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../shell/overlays/palette';
 import { defaultLayout, type PaneLeaf } from '../panel/paneLayout';
@@ -19,13 +20,13 @@ import {
   type SettingsTarget,
 } from '../lib/settingsNav';
 import { SETTINGS_ROWS, settingsRowKey } from './settingsSearch';
-import { FakeDocument, findAll, type FakeElement } from '../test/fakeDom';
+import { FakeDocument, FakeElement, findAll } from '../test/fakeDom';
 import type { PaneMenu as PaneMenuType } from '../panel/PaneMenu';
 import type { SettingsPageProps } from './pageTypes';
 
 // Every way into Settings names a target as a string: a search hit, a
-// palette row (whose id also sits in the palette's Recent list), an old
-// tab id from an older build, and a link from another window or page.
+// palette row (whose id also sits in the palette's Recent list), and a
+// link from another window or page.
 // The frame resolves the string, opens the group's page, and scrolls to
 // the element that carries the target's anchor as data-st-anchor. A
 // move that drops or renames one of those anchors, or changes where a
@@ -41,7 +42,7 @@ import type { SettingsPageProps } from './pageTypes';
 // window that already shows the group follows the link, since the frame
 // keeps the page and hands it the new target. The Prompt section draws
 // your game's prompt one of four ways, and a search hit on it lands in
-// each, so the Input page mounts on that link in all four.
+// each, so the Prompt page mounts on that link in all four.
 
 // What the pages read when they mount. Two profiles, so a link that
 // names one is told apart from the profile in use, and a tick, so the
@@ -53,6 +54,11 @@ const PROFILES = {
     { name: 'ilsabet', auto_match: { host: 'play.theforsakenlands.com', port: 1848 } },
   ],
 };
+
+/** A preset trigger as the store keeps it. */
+const SECONDARY = presetTriggers(presetById('disarm_buff_fade')!).find(
+  (t) => t.name === 'disarm.secondary',
+);
 
 const TICK = {
   enabled: true,
@@ -97,7 +103,7 @@ function forsakenState(newBuild: boolean): PromptState {
 }
 
 /** The link a search hit on Your game's prompt sends. */
-const PROMPT_LINK = 'input:prompt#prompt-game';
+const PROMPT_LINK = 'prompt#prompt-game';
 
 const NO_PROMPT: PromptScene = { block: 'point' };
 
@@ -194,8 +200,22 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
     }
     case 'tick_get_config':
       return TICK;
+    // The Presets page reads the list of presets that are on, and the
+    // alert presets, to draw a row for each.
+    case 'ui_get_config':
+      return config();
+    case 'alert_presets_get':
+      return { ids: ['alert_tells'], on: [], alerts: {} };
+    // The Triggers page lists a preset trigger, which a preset fix
+    // notice opens by name.
+    case 'triggers_export':
+      return JSON.stringify([SECONDARY]);
+    case 'preset_edits_get':
+      return {};
     case 'logs_list_sessions':
       return [];
+    case 'logs_keep_get':
+      return null;
     case 'logs_search_page':
       return { hits: [], total: 0 };
     case 'prompt_config_get':
@@ -263,27 +283,51 @@ beforeAll(async () => {
   vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
   vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '' }));
+  // A link to a preset scrolls its row into view in the list. A color
+  // field reads no color, as it reads none where CSS is missing.
+  vi.stubGlobal('CSS', { escape: (s: string) => s, supports: () => false });
+  Object.assign(FakeElement.prototype, { querySelector: () => null });
   // React DOM checks for a DOM once, when it loads, so it and the pages
   // load now.
   ({ createRoot } = await import('react-dom/client'));
-  const [general, appearance, layout, input, automation, scripts, characters, paneMenu] =
-    await Promise.all([
-      import('./general/GeneralPage'),
-      import('./appearance/AppearancePage'),
-      import('./layout/LayoutPage'),
-      import('./input/InputPage'),
-      import('./automation/AutomationPage'),
-      import('./scripts/ScriptsPage'),
-      import('./characters/CharactersPage'),
-      import('../panel/PaneMenu'),
-    ]);
+  const [
+    general,
+    appearance,
+    accessibility,
+    layout,
+    vitals,
+    prompt,
+    input,
+    automation,
+    scripts,
+    logs,
+    characters,
+    paneMenu,
+  ] = await Promise.all([
+    import('./general/GeneralPage'),
+    import('./appearance/AppearancePage'),
+    import('./accessibility/AccessibilityPage'),
+    import('./layout/LayoutPage'),
+    import('./vitals/VitalsPage'),
+    import('./prompt/PromptPage'),
+    import('./input/InputPage'),
+    import('./automation/AutomationPage'),
+    import('./scripts/ScriptsPage'),
+    import('./logs/LogsPage'),
+    import('./characters/CharactersPage'),
+    import('../panel/PaneMenu'),
+  ]);
   PAGES = {
     general: general.GeneralPage,
     appearance: appearance.AppearancePage,
+    accessibility: accessibility.AccessibilityPage,
     layout: layout.LayoutPage,
+    vitals: vitals.VitalsPage,
+    prompt: prompt.PromptPage,
     input: input.InputPage,
     automation: automation.AutomationPage,
     scripts: scripts.ScriptsPage,
+    logs: logs.LogsPage,
     characters: characters.CharactersPage,
   };
   PaneMenu = paneMenu.PaneMenu;
@@ -483,8 +527,7 @@ async function paletteLinks(): Promise<Record<string, string>> {
 }
 
 /** Every link string, as the code sends it today and as the golden
- *  file names it, the strings older builds left behind and where they
- *  land, and each group bare, so the anchors a page draws on its own
+ *  file names it, and each group bare, so the anchors a page draws on its own
  *  count too. */
 function everyLink(): string[] {
   return [
@@ -550,7 +593,8 @@ async function senderLinks(): Promise<Record<string, string[]>> {
     'pane menu, Edit tracked affects': [],
     'pane menu, Change when affects warn': [],
     'Layout, Panes and tracked affects': [],
-    'General, Search logs': [],
+    'Logs, Save a scene': [],
+    'Logs, Search logs': [],
   };
   for (const active of ['Ilsabet', null]) {
     scene.active = active;
@@ -565,17 +609,13 @@ async function senderLinks(): Promise<Record<string, string[]>> {
     out['Layout, Panes and tracked affects'].push(...layout.sent);
   }
   scene.active = PROFILES.active;
-  const general = await land({ group: 'general' }, MAC, {
-    after: (c) =>
-      press(
-        only(
-          c,
-          'Search logs',
-          (el) => el.nodeName === 'BUTTON' && el.textContent === 'Search logs…',
-        ),
-      ),
-  });
-  out['General, Search logs'].push(...general.sent);
+  for (const label of ['Save a scene', 'Search logs']) {
+    const logs = await land({ group: 'logs' }, MAC, {
+      after: (c) =>
+        press(only(c, label, (el) => el.nodeName === 'BUTTON' && el.textContent === `${label}…`)),
+    });
+    out[`Logs, ${label}`].push(...logs.sent);
+  }
   return out;
 }
 
@@ -593,7 +633,7 @@ function gameBlockDrawn(root: FakeElement): GameBlock | null {
   return null;
 }
 
-/** Open the Input page on the search hit for Your game's prompt in each
+/** Open the Prompt page on the search hit for Your game's prompt in each
  *  scene. */
 async function promptLinks() {
   const target = resolveSettingsTarget(PROMPT_LINK);

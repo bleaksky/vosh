@@ -48,7 +48,7 @@ import { CheckIcon, ChevronRightIcon } from '../ui/icons';
 import { getPanelLayout } from './panelLayoutStore';
 import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } from './paneTypes';
 
-// The more menu on every pane header (SPEC 9): Split right, Split
+// The more menu on every pane header: Split right, Split
 // down, Show here instead with a submenu of pane types and then, after
 // a rule, the Lua panes on offer, and Close pane.
 // The Affects pane adds Style and Marker, each a submenu with a check
@@ -61,7 +61,7 @@ import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } f
 // channels the game sends, each opening Default and the theme's 16 ANSI
 // colors with a check on the current pick, then Reset all. A Lua pane
 // adds Edit with its plugin's name, which opens that plugin under
-// Scripts in Settings (Scripts and Panels board 10). A pick saves
+// Scripts in Settings. A pick saves
 // alone for the profile and the pane follows at once. Closing a pane
 // loses nothing, so it carries no destructive color. A split the panel
 // has no room for, with every pane at its minimum at your panel size,
@@ -150,7 +150,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
       <MenuItem
         key={choice.value}
         onSelect={run(() => pick(choice.value))}
-        trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
+        trailing={choice.checked ? <CheckIcon className="menu-check" /> : null}
       >
         {choice.label}
       </MenuItem>
@@ -207,7 +207,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         label={submenus[which].label}
         nested
         autoFocus={subOpen.focus}
-        className="pane-menu-sub"
+        className="menu-sub"
         at={submenuAt(r, menu)}
         onClose={() => {
           // Escape or ArrowLeft: back to the row that opened it.
@@ -240,7 +240,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         label={`Color for ${channel}`}
         nested
         autoFocus={chanOpen.focus}
-        className="pane-menu-sub"
+        className="menu-sub"
         at={submenuAt(r, menu, leftward)}
         onClose={() => {
           setChanOpen(null);
@@ -282,7 +282,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
           if (which !== 'colors') setChanOpen(null);
         },
       }}
-      trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+      trailing={<ChevronRightIcon className="menu-chevron" />}
     >
       {submenus[which].label}
     </MenuItem>
@@ -403,7 +403,7 @@ export function ShowHereRows({
       {lua.map((ref) => (
         <MenuItem
           key={paneKey(ref)}
-          trailing={<span className="pane-menu-plugin">{ref.props.plugin}</span>}
+          trailing={<span className="menu-hint">{ref.props.plugin}</span>}
           onSelect={() => pick(ref)}
         >
           {paneLabel(ref)}
@@ -415,7 +415,7 @@ export function ShowHereRows({
 
 /** A dot in a color, before a row's name. */
 function Swatch({ color }: { color: string }) {
-  return <span className="pane-menu-swatch" style={{ background: color }} aria-hidden="true" />;
+  return <span className="menu-swatch" style={{ background: color }} aria-hidden="true" />;
 }
 
 /** The rows of Channel colors: each channel the pane knows, with a dot
@@ -457,7 +457,7 @@ export function ChannelColorRows({
             onOpen: (focus) => onOpen(channel, focus),
           }}
           onFocus={() => onLeave(channel)}
-          trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+          trailing={<ChevronRightIcon className="menu-chevron" />}
         >
           <Swatch color={chatChannelColor(channel, palette, colors)} />
           {channel}
@@ -501,7 +501,7 @@ export function ChannelColorItems({
         done();
         void setChatColor(channel, choice.value).catch(() => undefined);
       }}
-      trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
+      trailing={choice.checked ? <CheckIcon className="menu-check" /> : null}
     >
       <Swatch color={choice.swatch} />
       {choice.label}

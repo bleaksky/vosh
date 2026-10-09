@@ -1,15 +1,14 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import {
   BUNDLED_FONTS,
-  colorVisionNote,
   fontChoices,
   pairChoices,
   panelFontChoices,
-  panelSizeChoices,
+  sizeChoicesWithTerminal,
   sizeChoices,
   themeCaption,
 } from '../../theme/appearanceSettings';
-import { toColorVision, type ColorVision } from '../../theme/gameFit';
+import { type ColorVision } from '../../theme/gameFit';
 import { normalizePanelFont } from '../../panel/panelFont';
 import { normalizePanelSize } from '../../panel/panelSize';
 import type { CustomTheme } from '../../ipc/theme';
@@ -17,15 +16,24 @@ import {
   listSystemFonts,
   type SystemFontEntry,
   type TerminalLineHeight,
+  type ThemeFollow,
   type UiConfig,
 } from '../../ipc/uiConfig';
 import type { Appearance } from '../../theme/chrome';
 import type { SettingsTarget } from '../../lib/settingsNav';
 import {
+  getDaylight,
+  startDaylightStore,
+  subscribeDaylight,
+} from '../../stores/session/daylightStore';
+import {
   activeThemeFor,
   applyThemePrefs,
+  daylightShown,
   pickTheme,
   systemPrefersDark,
+  systemPrefersMoreContrast,
+  themeFollowOf,
   themePrefsOf,
 } from '../../theme/theme';
 import { parseThemeFile, ThemeFileError } from '../../theme/themeImport';
@@ -47,23 +55,22 @@ import { CollapseRows } from './CollapseRows';
 import { ThemeGallery } from './ThemeGallery';
 import { fitAndKeep } from './fitAndKeep';
 
-// Appearance, from the approved board (SettingsAppearance.dc.html).
-// Theme holds Import… and the gallery of every theme, with a Vision
-// switch that previews the tiles as each color vision sees them, a
-// caption that describes the theme on screen and credits its colors,
-// then follow system appearance and the light and dark pair it switches
-// between. Terminal text holds the font, the size, the line height,
-// whether MUD text takes the theme's colors, whether play fits the
-// game's colors to the theme, which color vision the game text and the
-// window's status colors follow, whether Vosh
-// keeps the colors your triggers set readable on the theme, and whether
-// a line the same as the one before it shows once with a count. While that is on, two rows
-// under it choose whether the lines of a fight collapse, and whether
-// attack lines do. A link to either row shows them even while it is
-// off, so search lands on them. Panel text holds the font and the size
+// Appearance. Theme holds Import… and the gallery of every theme, with
+// a Vision switch that previews the tiles as each color vision sees
+// them, a caption that describes the theme on screen and credits its
+// colors, then Switch themes, which follows the system with a light and
+// dark pair or the game's day with a day and night pair. Terminal text
+// holds the font, the size, the line height, whether MUD text takes the
+// theme's colors, and whether a line the same as the one before it
+// shows once with a count. While that is on, two rows under it choose
+// whether the lines of a fight collapse, and whether attack lines do. A
+// link to either row shows them even while it is off, so search lands
+// on them. Fit game colors, Color vision, Keep highlight colors
+// readable and Blinking text live on Accessibility, with the other
+// settings that help you read. Panel text holds the font and the size
 // that every pane and the status line draw in, so each section sets one
-// thing. A quiet Advanced row at the end holds what the board leaves
-// out. Every change saves on its own.
+// thing. A quiet Advanced row at the end holds the rest. Every change
+// saves on its own.
 
 const LINE_HEIGHTS = [
   { value: 'compact', label: 'Compact' },
@@ -71,11 +78,10 @@ const LINE_HEIGHTS = [
   { value: 'loose', label: 'Loose' },
 ] as const;
 
-const COLOR_VISIONS = [
-  { value: 'typical', label: 'Typical' },
-  { value: 'deuteranopia', label: 'Deuteranopia' },
-  { value: 'protanopia', label: 'Protanopia' },
-  { value: 'tritanopia', label: 'Tritanopia' },
+const THEME_FOLLOW_CHOICES = [
+  { value: 'off', label: 'Off' },
+  { value: 'system', label: 'With the system' },
+  { value: 'game', label: 'With the game' },
 ] as const;
 
 // The four formats parseThemeFile reads. macOS lists every file anyway,
@@ -86,7 +92,6 @@ const ADVANCED_ANCHORS: ReadonlySet<string> = new Set([
   'custom-theme',
   'base-palette',
   'bright-bold',
-  'blink-text',
   'font-stack',
 ]);
 
@@ -109,13 +114,46 @@ function showsCollapseRows(config: UiConfig, target: SettingsTarget): boolean {
   );
 }
 
-/** The system the follow row names. */
+/** The rows of the pair each Switch themes mode switches between. */
+const PAIR_ANCHORS: Readonly<Record<'system' | 'game', readonly string[]>> = {
+  system: ['light-theme', 'dark-theme'],
+  game: ['day-theme', 'night-theme'],
+};
+
+/** A pair shows while Switch themes follows its mode, and a link to
+ *  either of its rows shows it in any mode, so search lands on it. */
+function showsPair(mode: 'system' | 'game', follow: ThemeFollow, target: SettingsTarget): boolean {
+  return (
+    follow === mode || (target.anchor !== undefined && PAIR_ANCHORS[mode].includes(target.anchor))
+  );
+}
+
+/** The system Switch themes names. */
 function systemName(): string {
   const platform = typeof document === 'undefined' ? '' : document.documentElement.dataset.platform;
   if (platform === 'macos') return 'macOS';
   if (platform === 'windows') return 'Windows';
   return 'your system';
 }
+
+/** What Switch themes says under its label in each mode. While it
+ *  follows the system and the system asks for more contrast, it names
+ *  the high contrast theme showing (`contrastTheme`), since a pick only
+ *  fills its slot. */
+function switchThemesLine(mode: ThemeFollow, contrastTheme?: string): string | undefined {
+  if (mode === 'system' && contrastTheme !== undefined) {
+    const system = systemName();
+    const named = system === 'your system' ? 'Your system' : system;
+    return `${named} is set to increase contrast, so ${contrastTheme} shows. Your pick shows once that's off.`;
+  }
+  if (mode === 'system') {
+    return `Vosh switches between your light and dark theme when ${systemName()} does.`;
+  }
+  if (mode === 'game') return "Turns at the game's dawn and dusk, about every 6 minutes.";
+  return undefined;
+}
+
+const hearNothing = () => () => undefined;
 
 export function AppearancePage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
@@ -151,6 +189,13 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     };
   }, []);
 
+  // The page hears the game's day or night from the start, so choosing
+  // With the game knows whether the game already said, and keeps your
+  // theme when it did.
+  useEffect(() => {
+    startDaylightStore();
+  }, []);
+
   // A custom theme that keeps no fit is fitted once the page opens on
   // your config, and keeps the fit: one imported before Vosh kept fits,
   // one Vosh 0.8.1 saved, which drops the fit, and one whose fit Settings
@@ -164,6 +209,11 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
+  // With the game the gallery rings the theme the game's day or night
+  // shows, so the page draws again at each turn.
+  const follow = config ? themeFollowOf(config) : 'off';
+  useSyncExternalStore(follow === 'game' ? subscribeDaylight : hearNothing, getDaylight);
+
   if (!config) return null;
 
   const themes = galleryThemes(BUILTIN_THEMES, config.custom_themes.map(customToAppTheme));
@@ -173,38 +223,54 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   const shown = shownId(activeThemeFor(config));
   const lightTheme = shownId(config.light_theme);
   const darkTheme = shownId(config.dark_theme);
+  // A blank day or night slot shows your theme.
+  const dayTheme = shownId(config.day_theme || config.theme);
+  const nightTheme = shownId(config.night_theme || config.theme);
   // An id no theme has draws the fallback theme, so the caption names it.
   const shownTheme = themes.find((t) => t.id === shown) ?? findTheme(shown);
   const caption = themeCaption(shownTheme);
-  const visionNote = colorVisionNote(
-    config.color_vision,
-    resolveThemeTerminalColors(config.theme_terminal_colors),
-  );
-  // While follow is on the arrow keys stay among the themes the OS
-  // shows now, so stepping through the gallery never fills the other
-  // slot and each step lands on the radio it checks.
-  const arrowAppearance: Appearance | undefined = config.follow_system_appearance
-    ? systemPrefersDark()
-      ? 'dark'
-      : 'light'
-    : undefined;
+  const contrastTheme =
+    follow === 'system' && systemPrefersMoreContrast() ? shownTheme.label : undefined;
+  // With the system the arrow keys stay among the themes the OS shows
+  // now, so stepping through the gallery never fills the other slot and
+  // each step lands on the radio it checks. With the game a pick fills
+  // the slot showing, whatever its appearance, so every theme counts.
+  const arrowAppearance: Appearance | undefined =
+    follow === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : undefined;
 
-  // A pick follows pickTheme. While follow is off it becomes your theme.
-  // While follow is on it fills the light or dark entry, and shows only
-  // when that matches the OS, which is what activeThemeFor resolves.
+  // A pick follows pickTheme. Off it becomes your theme. With the system
+  // it fills the light or dark entry, and shows only when that matches
+  // the OS. With the game it fills the day or night entry showing now.
   const pick = (id: string) => {
     const next = pickTheme(config, id);
     applyThemePrefs(next);
     update(themePrefsOf(next), { now: true });
   };
 
-  // Every theme row saves the four theme fields together, as
+  // Every theme row saves the seven theme fields together, as
   // THEME_PREFS_CHANGED carries them, so a dark theme the page seeded
   // from your theme saves too.
   const setPrefs = (patch: Partial<UiConfig>) => {
     const next = { ...config, ...patch };
     applyThemePrefs(next);
     update(themePrefsOf(next), { now: true });
+  };
+
+  // Choosing With the game starts a blank day or night slot on the
+  // theme showing, so nothing changes until you pick. Before the game
+  // says day or night your theme shows, so it takes the theme showing
+  // too.
+  const setFollow = (mode: ThemeFollow) => {
+    const patch: Partial<UiConfig> = {
+      theme_follow: mode,
+      follow_system_appearance: mode === 'system',
+    };
+    if (mode === 'game') {
+      if (config.day_theme === '') patch.day_theme = shown;
+      if (config.night_theme === '') patch.night_theme = shown;
+      if (daylightShown() === null) patch.theme = shown;
+    }
+    setPrefs(patch);
   };
 
   const addTheme = (theme: CustomTheme) => {
@@ -270,7 +336,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
               ref={fileRef}
               type="file"
               accept={THEME_FILE_TYPES}
-              className="st-visually-hidden"
+              className="visually-hidden"
               tabIndex={-1}
               aria-hidden="true"
               onChange={(e) => {
@@ -299,29 +365,52 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           />
           {caption !== '' && <p className="st-meta st-theme-caption">{caption}</p>}
           <Row
-            anchor="follow-system"
-            label="Follow system appearance"
-            description={`Vosh switches between your light and dark theme when ${systemName()} does.`}
+            anchor="switch-themes"
+            label="Switch themes"
+            description={switchThemesLine(follow, contrastTheme)}
           >
-            <Toggle
-              checked={config.follow_system_appearance}
-              onChange={(on) => setPrefs({ follow_system_appearance: on })}
+            <Segmented<ThemeFollow>
+              options={THEME_FOLLOW_CHOICES}
+              value={follow}
+              onChange={setFollow}
             />
           </Row>
-          <Row anchor="light-theme" label="Light theme">
-            <Select
-              value={lightTheme}
-              options={pairChoices(themes, 'light', lightTheme)}
-              onChange={(id) => setPrefs({ light_theme: id })}
-            />
-          </Row>
-          <Row anchor="dark-theme" label="Dark theme">
-            <Select
-              value={darkTheme}
-              options={pairChoices(themes, 'dark', darkTheme)}
-              onChange={(id) => setPrefs({ dark_theme: id })}
-            />
-          </Row>
+          {showsPair('system', follow, target) && (
+            <>
+              <Row anchor="light-theme" label="Light theme">
+                <Select
+                  value={lightTheme}
+                  options={pairChoices(themes, 'light', lightTheme)}
+                  onChange={(id) => setPrefs({ light_theme: id })}
+                />
+              </Row>
+              <Row anchor="dark-theme" label="Dark theme">
+                <Select
+                  value={darkTheme}
+                  options={pairChoices(themes, 'dark', darkTheme)}
+                  onChange={(id) => setPrefs({ dark_theme: id })}
+                />
+              </Row>
+            </>
+          )}
+          {showsPair('game', follow, target) && (
+            <>
+              <Row anchor="day-theme" label="Day theme">
+                <Select
+                  value={dayTheme}
+                  options={pairChoices(themes, null, dayTheme)}
+                  onChange={(id) => setPrefs({ day_theme: id })}
+                />
+              </Row>
+              <Row anchor="night-theme" label="Night theme">
+                <Select
+                  value={nightTheme}
+                  options={pairChoices(themes, null, nightTheme)}
+                  onChange={(id) => setPrefs({ night_theme: id })}
+                />
+              </Row>
+            </>
+          )}
         </Card>
       </Section>
 
@@ -358,48 +447,6 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           />
         </Row>
         <Row
-          anchor="fit-game-colors"
-          label="Fit game colors"
-          description="While you play, Vosh lifts the game colors that fade on the theme, and Settings keeps the theme as published."
-        >
-          <Toggle
-            checked={config.fit_game_colors}
-            onChange={(on) => update({ fit_game_colors: on }, { now: true })}
-          />
-        </Row>
-        <Row
-          anchor="color-vision"
-          label="Color vision"
-          description={
-            <>
-              Vosh swaps the colors your eyes confuse for colors they tell apart, the way color
-              blind modes in games do.
-              {visionNote !== '' && (
-                <>
-                  <br />
-                  {visionNote}
-                </>
-              )}
-            </>
-          }
-        >
-          <Select
-            value={config.color_vision}
-            options={COLOR_VISIONS}
-            onChange={(vision) => update({ color_vision: toColorVision(vision) }, { now: true })}
-          />
-        </Row>
-        <Row
-          anchor="readable-highlights"
-          label="Keep highlight colors readable"
-          description="Vosh darkens or lightens a color your triggers set when the theme would make it faint."
-        >
-          <Toggle
-            checked={config.readable_highlights}
-            onChange={(on) => update({ readable_highlights: on }, { now: true })}
-          />
-        </Row>
-        <Row
           anchor="collapse-repeats"
           label="Collapse repeated lines"
           description="A line the same as the line before it shows once, with a count in front."
@@ -431,7 +478,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
         >
           <Select
             value={String(normalizePanelSize(config.panel_font_size))}
-            options={panelSizeChoices(config.panel_font_size)}
+            options={sizeChoicesWithTerminal(normalizePanelSize(config.panel_font_size))}
             onChange={(size) => update({ panel_font_size: Number(size) }, { now: true })}
           />
         </Row>

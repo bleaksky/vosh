@@ -1,4 +1,5 @@
-import { getUiConfig, subscribeTickCountChanged, type TickCount } from '../../ipc/uiConfig';
+import { getUiConfig, type TickCount } from '../../ipc/uiConfig';
+import { subscribeTickCountChanged } from '../../ipc/uiConfigEvents';
 import { createConfigStore } from './configStore';
 
 // Which way the status line tick counts, from UiConfig tick_count. You

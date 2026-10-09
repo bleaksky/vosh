@@ -8,8 +8,8 @@ import {
   wrappedRows,
 } from './promptScreen';
 
-// The game's own lines on the terminal screen, for the card's marks while
-// the profile reads no prompt yet (P2, P3, P3b, B2 and P15).
+// The game's own lines on the terminal screen, for the card's marks
+// while the profile reads no prompt yet.
 
 const PROMPT = '<1020/1020hp 800/800m 930/930mv> ';
 

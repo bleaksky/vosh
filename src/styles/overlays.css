@@ -1,9 +1,9 @@
-/* One Window overlays: the command palette, the terminal menu, the
-   find bar, toasts, the update and reconnect notices, the confirm
-   dialog, and the scroll depth chip. Every floating surface takes the
-   SPEC 3 recipe (--raised ground, radius 16, --shadow-float) and reads
-   only the One Window tokens. Class names carry the ov- prefix so
-   nothing in the interim migration.css reaches them. */
+/* Overlays: the command palette, the menus, the find bar, toasts, the
+   update and reconnect notices, the confirm dialog, and the scroll
+   depth chip. Every floating surface takes the floating recipe
+   (--raised ground, radius 16, --shadow-float) and reads only the
+   shared tokens. Class names carry the ov- prefix, and the menu recipe
+   the menu- prefix. */
 
 /* Scroll depth. Sits at the terminal's top right, 8 below the band
    and 16 in from the panel edge, and drops under the find bar (8 + 40
@@ -13,7 +13,7 @@
   position: absolute;
   top: 8px;
   right: 16px;
-  z-index: 40;
+  z-index: var(--z-in-pane);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -49,41 +49,7 @@
   top: 56px;
 }
 
-/* Keycaps: 20 square, radius 4, a ring and no fill, the glyph in the
-   UI face. Spelled out keys (Ctrl, Shift) widen to fit. */
-.ov-keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
-  margin: 0 0 0 12px;
-  padding: 0;
-  font-family: inherit;
-}
-
-.ov-key {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--key-ring);
-  border-radius: var(--r-key);
-  background: none;
-  box-sizing: border-box;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 400;
-  color: var(--secondary);
-}
-
-.ov-key.is-wide {
-  padding: 0 4px;
-}
-
-/* Command palette (SPEC 7). 560 wide, centered on the window, top at
+/* Command palette. 560 wide, centered on the window, top at
    15% of the window height. The search row is 46 tall with the icon
    at x 14 and the text at x 45. Rows sit in 36 slots with a 34
    highlight inset 8, text at x 42, a check at x 18, and keycaps ending
@@ -92,7 +58,7 @@
   position: fixed;
   top: 15vh;
   left: max(16px, calc(50% - 280px));
-  z-index: 1000;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   width: min(560px, calc(100vw - 32px));
@@ -233,7 +199,7 @@
 }
 
 .ov-pal-row.is-selected {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .ov-pal-row.is-danger {
@@ -267,6 +233,13 @@
   color: var(--tertiary);
 }
 
+/* A row's shortcut keys, 12 after its title or meta. Scoped to the
+   palette so it outranks the keys row in controls.css, which loads
+   later. */
+.ov-palette .keys {
+  margin-left: 12px;
+}
+
 /* Alias commands go to the MUD, so they take the terminal face. */
 .ov-pal-meta.is-mono {
   font-family: var(--font-mud);
@@ -290,29 +263,39 @@
   color: var(--tertiary);
 }
 
-/* Menus (SPEC 7): the terminal right-click menu. 6 of inner padding,
-   30 tall rows at radius 8 with the text 12 in, shortcut hints on the
-   right in the tertiary tone, and separators inset 12 with 6 above and
-   below. The ov-menu classes suit any other floating menu too. */
-.ov-menu {
+/* Menus: the one menu recipe MenuSurface draws. 6 of inner padding, 30 tall rows at radius 8 with
+   the text 12 in, trailing marks 16 after the words, and separators
+   inset 12 with 6 above and below. Menus keep the system face whatever
+   the Panel font. */
+.menu {
   position: fixed;
-  z-index: 1000;
-  width: 232px;
+  z-index: var(--z-menu);
+  min-width: 232px;
+  max-width: 320px;
+  margin: 0;
   padding: 6px;
+  list-style: none;
   border-radius: var(--r-float);
   background: var(--raised);
   box-shadow: var(--shadow-float);
-  box-sizing: border-box;
+  /* A menu that takes focus itself lights no row and draws no ring. */
   outline: none;
-  font-family: var(--font-ui);
   color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-.ov-menu-group {
+.menu > li {
   display: block;
+  margin: 0;
+  padding: 0;
 }
 
-.ov-menu-item {
+.menu-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -322,40 +305,58 @@
   padding: 0 12px;
   border: 0;
   border-radius: var(--r-row);
-  outline: none;
   background: transparent;
-  box-sizing: border-box;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 400;
   color: var(--text);
+  font: inherit;
   text-align: left;
+  white-space: nowrap;
+  outline: none;
   cursor: default;
 }
 
-.ov-menu-item.is-active {
-  background: var(--menu-hi);
+.menu-item:focus,
+.menu-item[aria-expanded='true'] {
+  background: var(--hover);
 }
 
-.ov-menu-item.is-danger {
+.menu-item[aria-disabled='true'] {
+  color: var(--tertiary);
+}
+
+.menu-item.is-danger {
   color: var(--danger-text);
 }
 
-.ov-menu-label {
+.menu-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.ov-menu-keys {
+.menu-chevron,
+.menu-check {
+  display: block;
   flex: none;
-  margin: 0 0 0 12px;
+  margin-left: 16px;
+  margin-right: -4px;
+}
+
+.menu-chevron {
+  color: var(--tertiary);
+}
+
+.menu-check {
+  color: var(--accent);
+}
+
+/* A shortcut after a row's words, as plain text in the tertiary tone. */
+.menu-keys {
+  flex: none;
+  margin: 0 0 0 16px;
   padding: 0;
   border: 0;
   background: none;
-  font-family: var(--font-ui);
+  font-family: inherit;
   font-size: 12px;
   line-height: 16px;
   font-weight: 400;
@@ -363,19 +364,77 @@
   white-space: nowrap;
 }
 
-.ov-menu-sep {
+/* A hint after a row's words that is not a shortcut, like the plugin
+   that draws a Lua pane or in another pane in the Chat filter, reads
+   as a shortcut does. */
+.menu-hint {
+  flex: none;
+  margin-left: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.menu > .menu-sep {
   height: 1px;
   margin: 6px 12px;
   background: var(--sep);
 }
 
-/* Find bar (Menus board). 40 tall, 8 below the band, its right edge 16
+/* A line of text in a menu that is not a row, like Add a pane's
+   Every pane is showing. */
+.menu-note {
+  padding: 7px 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
+/* A caps heading over a group of rows, in the palette's caps style,
+   like SESSIONS over the session popover's list. */
+.menu-head {
+  padding: 7px 12px 3px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.menu-narrow,
+.menu-sub {
+  min-width: 160px;
+}
+
+/* A channel's 17 colors run taller than a short window, so a submenu
+   scrolls inside the window instead of running off it. */
+.menu-sub {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
+/* The color a chat channel shows, before its name under Channel colors
+   and before each color it can take. The swatch ring keeps black and
+   the ground's own color visible on the menu. */
+.menu-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--key-ring);
+  vertical-align: -1px;
+}
+
+/* Find bar. 40 tall, 8 below the band, its right edge 16
    in from the panel. Controls are 28 by 24 at radius 8, 8 apart. */
 .ov-find {
   position: absolute;
   top: 8px;
   right: 16px;
-  z-index: 50;
+  z-index: var(--z-in-pane);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -462,7 +521,7 @@
 }
 
 .ov-find-btn:hover:not(:disabled) {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .ov-find-btn:disabled {
@@ -481,7 +540,7 @@
   background: var(--sep);
 }
 
-/* The three match toggles draw their glyphs as text (SPEC 6). On is
+/* The three match toggles draw their glyphs as text. On is
    the selected row fill, ringed on light themes where that fill is
    white on white. */
 .ov-find-toggle {
@@ -516,18 +575,31 @@
   box-shadow: inset 0 0 0 1px var(--sep);
 }
 
-/* Toasts, bottom right of the terminal column. Each is a floating card
-   with a 16 status mark, then the message and an optional detail. */
-.ov-toasts {
+/* The corner of the terminal column, bottom right, where the toasts
+   stack above the notices in the order CornerNotices.tsx lists them.
+   Each card takes clicks, and the gaps between them pass clicks to the
+   terminal. */
+.ov-corner {
   position: absolute;
   right: 16px;
   bottom: 16px;
-  z-index: 60;
+  z-index: var(--z-edge);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
   max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+
+/* Toasts, at the top of the corner. Each is a floating card with a 16
+   status mark, then the message and an optional detail. */
+.ov-toasts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
   pointer-events: none;
 }
 
@@ -562,16 +634,7 @@
 }
 
 .ov-toast-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin: 0 4px;
-  border-radius: 4px;
-  background: var(--accent);
-}
-
-.ov-toast.is-error .ov-toast-dot {
-  background: var(--danger);
 }
 
 .ov-toast-msg {
@@ -596,18 +659,63 @@
    sits 8 inside the card, its radius 8 concentric with the card's 16,
    and 8 after the message. */
 .ov-toast.has-action {
+  max-width: 520px;
   padding: 8px 8px 8px 12px;
 }
 
-.ov-toast.has-action > .ov-button {
+/* A long meta, like the file a saved scene went to, ends in an ellipsis
+   before the message wraps. */
+.ov-toast.has-action > .ov-toast-meta {
+  flex: 0 1 auto;
+}
+
+.ov-toast.has-action > .btn {
   flex: none;
   margin-left: 8px;
 }
 
-/* Prompt codes in a toast read in the terminal's face (P14). */
+/* Prompt codes in a toast read in the terminal's face. */
 .ov-toast-meta.is-mono {
   font-family: var(--font-mud);
   font-variant-numeric: normal;
+}
+
+/* Show me. A 2 px accent ring 2 px out from what to pick, over the
+   menus, with one pulse, and its line on the toast recipe beside it.
+   Neither takes a press. */
+.cm-ring {
+  position: fixed;
+  z-index: var(--z-coach);
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px var(--accent);
+  pointer-events: none;
+  animation: cm-pulse 700ms ease-out 1;
+}
+
+@keyframes cm-pulse {
+  from {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  to {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+.cm-tip {
+  position: fixed;
+  z-index: var(--z-coach);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-ring {
+    animation: none;
+  }
 }
 
 /* Confirm dialog. No scrim: the layer is clear and only catches a
@@ -615,12 +723,17 @@
 .ov-confirm-layer {
   position: fixed;
   inset: 0;
-  z-index: 1100;
+  z-index: var(--z-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
   background: transparent;
+}
+
+.ov-confirm-layer.is-placed {
+  display: block;
+  padding: 0;
 }
 
 .ov-confirm {
@@ -698,65 +811,61 @@
   margin-top: 12px;
 }
 
-/* Buttons (SPEC 4): 28 tall, radius 8, 13 medium. The default is the
-   secondary look, a ring and no fill. Danger keeps the ring and takes
-   the danger text. */
-.ov-button {
-  height: 28px;
-  margin: 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--sep);
-  box-sizing: border-box;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--text);
-  cursor: default;
+/* The shared catalog preview, a confirm grown to 600 wide. The card
+   keeps the confirm's recipe and takes only its size and columns here.
+   The head takes the confirm's title and body, the kit sections scroll
+   in the middle, and the foot with its hint and buttons stays put under
+   a hairline. A layer 24 in from the window edge holds the card. */
+.ov-confirm-layer.ov-wizard-layer {
+  padding: 24px;
 }
 
-.ov-button:hover {
-  background: var(--menu-hi);
+.ov-confirm.ov-wizard {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  padding: 0;
 }
 
-.ov-button:focus-visible {
-  box-shadow:
-    inset 0 0 0 1px var(--sep),
-    0 0 0 2px var(--accent);
+.ov-wizard-head {
+  flex: none;
+  padding: 16px 16px 0;
 }
 
-.ov-button.is-danger {
-  color: var(--danger-text);
+/* Two classes, since settings.css, which sets the frame's st-content
+   padding, loads after this sheet. */
+.st-content.ov-wizard-body {
+  padding: 4px 16px 16px;
+  scroll-padding: 4px 0 16px;
 }
 
-/* Primary fills with the accent, for the one thing a card asks you to
-   do, like Install and restart on the update notice or Create in New
-   plugin. A button that waits on the card, like Create while the name
-   breaks its rule, sits at 45 percent. */
-.ov-update .ov-button.is-primary,
-.ov-confirm .ov-button.is-primary {
-  background: var(--accent);
-  box-shadow: none;
-  color: var(--on-accent);
+.ov-wizard-body > .st-card + * {
+  margin-top: 16px;
 }
 
-.ov-update .ov-button.is-primary:focus-visible,
-.ov-confirm .ov-button.is-primary:focus-visible {
-  box-shadow:
-    0 0 0 2px var(--raised),
-    0 0 0 4px var(--accent);
+.ov-wizard-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  box-shadow: inset 0 1px 0 var(--sep);
 }
 
-.ov-update .ov-button:disabled,
-.ov-confirm .ov-button:disabled {
-  opacity: 0.45;
+/* The done state has no scroll body, so the foot keeps 16 under the
+   head's copy. */
+.ov-wizard-head + .ov-wizard-foot {
+  margin-top: 16px;
 }
 
-/* The shell mounts the toasts among its floating surfaces, a direct
+.ov-wizard-foot > .st-row-desc {
+  flex: 1 1 auto;
+}
+
+/* The shell mounts the corner among its floating surfaces, a direct
    child of its grid. An absolutely placed grid child takes its grid
    area as the containing block, so pinning the stack to the terminal
    cell keeps it 16 inside the terminal column's corner, clear of the
@@ -764,27 +873,23 @@
    the second column, after the sessions sidebar's, which is 0 wide
    while the sidebar is gone. Both lines are explicit, since an auto end
    line would fall back to the whole grid. */
-.shell > .ov-toasts {
+.shell > .ov-corner {
   grid-column: 2 / 3;
   grid-row: 2 / 3;
 }
 
-/* Update notice. A floating card at the toasts' corner, one line tall:
-   an 8 status dot, the message, the version in the tertiary tone, then
+/* Update notice. A floating card in the corner, one line tall: an 8
+   status dot, the message, the version in the tertiary tone, then
    Later and Install and restart. The buttons sit 8 inside the card, so
    their radius 8 runs concentric with its 16. The height is fixed at
-   44 (8 + 28 + 8) and a long failure message ellipsizes, which lets
-   the toast stack clear the card by a known offset. */
+   44 (8 + 28 + 8) and a long failure message ellipsizes. The preset fix
+   notice wears the same recipe in the warn tone. */
 .ov-update {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 55;
   display: flex;
   align-items: center;
   gap: 8px;
   height: 44px;
-  max-width: calc(100% - 32px);
+  max-width: 100%;
   padding: 8px 8px 8px 12px;
   border-radius: var(--r-float);
   background: var(--raised);
@@ -796,26 +901,11 @@
   font-weight: 400;
   color: var(--text);
   white-space: nowrap;
+  pointer-events: auto;
 }
 
 .ov-update-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin: 0 4px;
-  border-radius: 4px;
-  background: var(--accent);
-}
-
-.ov-update.is-error .ov-update-dot {
-  background: var(--danger);
-}
-
-/* A redial that dials rings in the success tone, as the title band's
-   connecting dot does. */
-.ov-update.is-wait .ov-update-dot {
-  background: none;
-  border: 1.25px solid var(--success);
 }
 
 .ov-update-msg {
@@ -833,32 +923,15 @@
   color: var(--tertiary);
 }
 
+/* A trigger name reads in the terminal's face. */
+.ov-update-meta.is-mono {
+  font-family: var(--font-mud);
+  font-variant-numeric: normal;
+}
+
 .ov-update-actions {
   display: flex;
   flex: none;
   gap: 8px;
   margin-left: 8px;
-}
-
-/* The notice mounts among the shell's floating surfaces, a direct child
-   of its grid, so it takes the terminal cell as the toasts do and stays
-   clear of the panel's vitals. MainWindow mounts it just before the toasts, and
-   while it is up the stack rises by the card's 44 plus an 8 gap. */
-.shell > .ov-update {
-  grid-column: 2 / 3;
-  grid-row: 2 / 3;
-}
-
-.shell > .ov-update ~ .ov-toasts {
-  bottom: 68px;
-}
-
-/* The reconnect notice mounts first, so the update notice rises above
-   it, and the toasts clear both. */
-.shell > .ov-update ~ .ov-update {
-  bottom: 68px;
-}
-
-.shell > .ov-update ~ .ov-update ~ .ov-toasts {
-  bottom: 120px;
 }

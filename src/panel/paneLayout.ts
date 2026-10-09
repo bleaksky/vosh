@@ -19,9 +19,24 @@ import { pendingWrites } from '../lib/pendingWrites';
 // the result in state and hand it straight back to setPaneLayout.
 
 /** The built-in content a pane can show. The panel holds up to
- *  CHAT_PANES_MAX Chat panes and one of each other type. */
-export const PANE_TYPES = ['map', 'affects', 'group', 'chat', 'imm'] as const;
+ *  CHAT_PANES_MAX Chat panes and one of each other type. `writing` is
+ *  the writing card pinned to the panel, which only the card's pin adds
+ *  (WRITING_PANE). Mirrors PANE_TYPES in src-tauri/src/profile/panes.rs. */
+export const PANE_TYPES = ['map', 'affects', 'group', 'chat', 'imm', 'writing'] as const;
 export type PaneType = (typeof PANE_TYPES)[number];
+
+/** The pane the writing card lives in while you pin it. Add a pane,
+ *  the View menu and the palette never offer it. */
+export const WRITING_PANE = 'writing';
+
+/** The pane types you add or show from the menus: every built-in type
+ *  but the writing card's. */
+export type OfferedPaneType = Exclude<PaneType, typeof WRITING_PANE>;
+
+/** Whether `t` is a pane type the menus offer. */
+export function isOfferedPaneType(t: PaneType): t is OfferedPaneType {
+  return t !== WRITING_PANE;
+}
 
 /** How many Chat panes the panel holds. Mirrors CHAT_PANES_MAX in
  *  src-tauri/src/profile/panes.rs. */
@@ -77,14 +92,15 @@ export const PANE_ROW_PX = 22;
 
 /** The height each pane type needs to be read: Affects its header and
  *  six rows, Group, Staff queues and a Lua pane their header and three
- *  rows, Chat a couple of messages, and the Map a drawing you can
- *  follow. */
+ *  rows, Chat a couple of messages, the Map a drawing you can follow,
+ *  and the writing card its header, six rows of text and its footer. */
 export const PANE_MIN_H: Record<PaneKind, number> = {
   map: 180,
   affects: PANE_HEADER_PX + 6 * PANE_ROW_PX,
   group: PANE_HEADER_PX + 3 * PANE_ROW_PX,
   chat: 120,
   imm: PANE_HEADER_PX + 3 * PANE_ROW_PX,
+  writing: 240,
   lua: PANE_HEADER_PX + 3 * PANE_ROW_PX,
 };
 
@@ -164,9 +180,9 @@ export function defaultLayout(): PaneLayout {
   };
 }
 
-// The map's share of the stock layout, over affects. The approved
-// boards give the Map pane 348 px and the Affects pane 315 px at 1280
-// by 800, which shows every Affects row the boards show.
+// The map's share of the stock layout, over affects. It gives the Map
+// pane 348 px and the Affects pane 315 px at 1280 by 800, which is
+// room for every Affects row.
 const DEFAULT_MAP_WEIGHT = 0.525;
 const DEFAULT_AFFECTS_WEIGHT = 0.475;
 

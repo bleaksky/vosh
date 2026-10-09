@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aabahranMapPacket } from '../../test/aabahranGmcp';
 import { hexToRgba } from '../../theme/color';
-import { roomFill, sectorForCode } from './mapPalette';
+import { MAP_COLORS, roomFill, sectorForCode } from './mapPalette';
+import { offerOf, planWalk, stepOnItsWay, walkAhead, type WalkMark } from './mapWalk';
 import {
   DOOR_COLORS,
   corridors,
@@ -22,6 +23,8 @@ import {
   drawOffFloorOverlay,
   drawSquares,
   drawTileset,
+  gridPlace,
+  roomAt,
 } from './mapPaint';
 import { GlyphsOverlay } from './GlyphsOverlay';
 
@@ -52,12 +55,16 @@ const GROUND = '#1b1e24';
 const ACCENT = '#5fb3a1';
 const ACCENT_SOFT = 'rgba(95, 179, 161, 0.13)';
 const FAINT = '#7c8394';
+const DANGER = '#e0715f';
+const SECONDARY = '#a3a9b8';
 const MARK_FACE = 'Iosevka, monospace';
 const VARS: Record<string, string> = {
   '--panel': GROUND,
   '--accent': ACCENT,
   '--accent-soft': ACCENT_SOFT,
   '--tertiary': FAINT,
+  '--danger': DANGER,
+  '--secondary': SECONDARY,
   '--font-panel-mark': MARK_FACE,
 };
 
@@ -157,10 +164,21 @@ function scene(payload: MapTilesPayload, zoom = 1) {
   };
 }
 
-function squares(payload: MapTilesPayload, zoom = 1) {
+function squares(payload: MapTilesPayload, zoom = 1, walk: WalkMark | null = null) {
   const s = scene(payload, zoom);
   const { ctx, calls } = recorder();
-  drawSquares(ctx, payload, s.rows, s.cols, s.centerR, s.centerC, s.anchor, GROUND, MARK_FACE);
+  drawSquares(
+    ctx,
+    payload,
+    s.rows,
+    s.cols,
+    s.centerR,
+    s.centerC,
+    s.anchor,
+    GROUND,
+    MARK_FACE,
+    walk,
+  );
   return { ...s, calls };
 }
 
@@ -325,6 +343,196 @@ describe('the Squares painter', () => {
       drawn += marks.length;
     }
     expect(drawn).toBeGreaterThan(0);
+  });
+});
+
+/** The index of the last call that matches, or -1. */
+function lastIndex(calls: Call[], match: (call: Call) => boolean): number {
+  for (let i = calls.length - 1; i >= 0; i--) if (match(calls[i])) return i;
+  return -1;
+}
+
+describe('the walk under the pointer', () => {
+  /** The walk to the room at row, col of the Val Miran packet. */
+  function walkTo(row: number, col: number): WalkMark {
+    const plan = planWalk(VAL_MIRAN, row, col);
+    if (!plan) throw new Error(`no walk to ${row},${col}`);
+    return offerOf(plan, { row, col });
+  }
+
+  it('strokes the path in pathLine at 2 px from your room before the room fills', () => {
+    // 4n2e, from The Central Square at [10][10] to [6][12].
+    const walk = walkTo(6, 12);
+    const { ox, oy, pitch, calls } = squares(VAL_MIRAN, 1, walk);
+    const at = (row: number, col: number): Pt => [ox + col * pitch, oy + row * pitch];
+    const path = calls.findIndex(
+      (c) => c.op === 'stroke' && c.state.strokeStyle === MAP_COLORS.pathLine,
+    );
+    expect(path).toBeGreaterThan(-1);
+    expect(calls[path].state.lineWidth).toBe(2);
+    expect(calls[path].lines).toEqual([
+      [at(10, 10), at(9, 10)],
+      [at(9, 10), at(8, 10)],
+      [at(8, 10), at(7, 10)],
+      [at(7, 10), at(6, 10)],
+      [at(6, 10), at(6, 11)],
+      [at(6, 11), at(6, 12)],
+    ]);
+    const firstRoom = calls.findIndex((c) => c.op === 'fillRect' && c.state.fillStyle === GROUND);
+    expect(path).toBeLessThan(firstRoom);
+    const lastCorridor = lastIndex(
+      calls,
+      (c) => c.op === 'stroke' && c.state.strokeStyle === DOOR_COLORS.open,
+    );
+    expect(path).toBeGreaterThan(lastCorridor);
+  });
+
+  it('outlines each room on the path in pathLine at full alpha', () => {
+    const walk = walkTo(6, 12);
+    const { ox, oy, pitch, size, calls } = squares(VAL_MIRAN, 1, walk);
+    const lit = calls.filter(
+      (c) => c.op === 'strokeRect' && c.state.strokeStyle === MAP_COLORS.pathLine,
+    );
+    const byPlace = (x: unknown[], y: unknown[]) => String(x).localeCompare(String(y));
+    expect(lit.map((c) => c.args).sort(byPlace)).toEqual(
+      walk.cells.map(({ row, col }) => box(ox + col * pitch, oy + row * pitch, size)).sort(byPlace),
+    );
+    expect(lit.every((c) => c.state.globalAlpha === 1 && c.state.lineWidth === 1)).toBe(true);
+  });
+
+  it('rings the room in the accent 3.5 px outside its square, after the rooms', () => {
+    const { ox, oy, pitch, size, calls } = squares(VAL_MIRAN, 1, walkTo(6, 12));
+    const ring = calls.findIndex((c) => c.op === 'roundRect');
+    const half = size / 2 + 3.5;
+    expect(calls[ring].args).toEqual([
+      ox + 12 * pitch - half,
+      oy + 6 * pitch - half,
+      size + 7,
+      size + 7,
+      3,
+    ]);
+    const stroke = calls[ring + 1];
+    expect(stroke.op).toBe('stroke');
+    expect(stroke.state).toMatchObject({ strokeStyle: ACCENT, lineWidth: 1.5, lineDash: [] });
+    expect(ring).toBeGreaterThan(lastIndex(calls, (c) => c.op === 'strokeRect'));
+  });
+
+  it('dashes a danger ring 3 on 2 around a room past a locked door', () => {
+    // The only way into [7][15] is the locked door south of [6][15].
+    const walk = walkTo(7, 15);
+    expect(walk.kind).toBe('door');
+    const { calls } = squares(VAL_MIRAN, 1, walk);
+    const ring = calls.findIndex((c) => c.op === 'roundRect');
+    expect(calls[ring + 1].state).toMatchObject({
+      strokeStyle: DANGER,
+      lineWidth: 1.5,
+      lineDash: [3, 2],
+    });
+  });
+
+  it('draws nothing of a walk with none to show', () => {
+    const { calls } = squares(VAL_MIRAN);
+    expect(calls.some((c) => c.op === 'roundRect')).toBe(false);
+    expect(calls.some((c) => c.state.strokeStyle === MAP_COLORS.pathLine)).toBe(false);
+  });
+
+  it('finds the room under the pointer where each flat style draws it', () => {
+    const { centerR, centerC, ox, oy, pitch } = scene(VAL_MIRAN);
+    const squaresAt = gridPlace('squares', W, H, 1, centerR, centerC, false);
+    expect(squaresAt).toEqual({ ox, oy, pitch, size: 11 });
+    expect(roomAt(squaresAt, ox + 12 * pitch + 4, oy + 6 * pitch - 6)).toEqual({ row: 6, col: 12 });
+    expect(gridPlace('tileset', W, H, 1, centerR, centerC, true).size).toBe(pitch);
+    // Glyphs centers your room's 1 em box on the drawing, 14 px a room
+    // and 4.9 px a bridge at zoom 1.
+    const glyphs = gridPlace('glyphs', W, H, 1, centerR, centerC, false);
+    expect(glyphs.pitch).toBeCloseTo(18.9);
+    expect(glyphs.size).toBe(14);
+    expect(roomAt(glyphs, W / 2, H / 2)).toEqual({ row: centerR, col: centerC });
+    expect(roomAt(glyphs, W / 2 + 2 * 18.9 + 5, H / 2 - 4 * 18.9)).toEqual({
+      row: centerR - 4,
+      col: centerC + 2,
+    });
+  });
+});
+
+describe('a walk a click sent', () => {
+  const plan = planWalk(VAL_MIRAN, 6, 12);
+  if (!plan) throw new Error('no walk to 6,12');
+  /** The room you stand in, the square, as Room.Info names it. */
+  const HERE = 20605;
+  /** The walk to [6][12], clicked two rooms south of the square, so on
+   *  the grid it planned on the square sat two rows higher. */
+  const route = {
+    cells: [10, 9, 8, 7, 6, 5, 4]
+      .map((row) => ({ row, col: 10 }))
+      .concat([11, 12].map((col) => ({ row: 4, col }))),
+    rooms: [20607, 20606, 20605, ...plan.rooms],
+    target: { row: 4, col: 12 },
+    kind: 'open' as const,
+  };
+
+  it('draws what is left ahead from the room you stand in', () => {
+    const walking = { kind: 'walking', done: 2, total: 8, left: '4n2e', route: true } as const;
+    expect(walkAhead(VAL_MIRAN, route, walking, HERE)).toEqual(offerOf(plan, { row: 6, col: 12 }));
+    // Off the route, the map draws none of it.
+    const elsewhere = { ...route, rooms: route.rooms.map((room) => room + 1000) };
+    expect(walkAhead(VAL_MIRAN, elsewhere, walking, HERE)).toBeNull();
+    expect(walkAhead(VAL_MIRAN, route, { kind: 'idle' }, HERE)).toBeNull();
+    // Nor before the game names the room you stand in.
+    expect(walkAhead(VAL_MIRAN, route, walking, null)).toBeNull();
+  });
+
+  it('finds the room the step on its way lands in, so a click plans from there', () => {
+    const north = { cell: { row: 9, col: 10 }, room: 20604 };
+    const clicked = { kind: 'walking', done: 2, total: 8, left: '4n2e', route: true } as const;
+    expect(stepOnItsWay(VAL_MIRAN, route, clicked, HERE)).toEqual(north);
+    // A walk you typed takes its first step left out of your cell.
+    const typed = { kind: 'walking', done: 0, total: 2, left: '2n', route: false } as const;
+    expect(stepOnItsWay(VAL_MIRAN, null, typed, HERE)).toEqual(north);
+    // A step up leaves your floor, and nothing is on its way at a stop.
+    expect(stepOnItsWay(VAL_MIRAN, null, { ...typed, left: 'u' }, HERE)).toBeNull();
+    const stop = { kind: 'stopped', done: 2, total: 8, why: 'plain' } as const;
+    expect(stepOnItsWay(VAL_MIRAN, route, stop, HERE)).toBeNull();
+    // The plan from there starts one room north.
+    expect(planWalk(VAL_MIRAN, 6, 12, north.cell)?.steps.join('')).toBe('nnnee');
+  });
+
+  it('keeps the steps Vosh sent but never saw land solid after a stop', () => {
+    const stop = (done: number) =>
+      walkAhead(VAL_MIRAN, route, { kind: 'stopped', done, total: 8, why: 'lost_sight' }, HERE);
+    expect(stop(3)?.solid).toBe(1);
+    expect(stop(2)?.solid).toBe(0);
+  });
+
+  /** The walk to [6][12] stopped with the first leg sent and unseen. */
+  const stopped: WalkMark = { ...offerOf(plan, { row: 6, col: 12 }), solid: 1 };
+
+  it('draws the leg Vosh sent solid and dashes the steps left 3 on 3 in the secondary ink', () => {
+    const { ox, oy, pitch, calls } = squares(VAL_MIRAN, 1, stopped);
+    const at = (row: number, col: number): Pt => [ox + col * pitch, oy + row * pitch];
+    const solid = calls.filter(
+      (c) => c.op === 'stroke' && c.state.strokeStyle === MAP_COLORS.pathLine,
+    );
+    expect(solid.map((c) => c.lines)).toEqual([[[at(10, 10), at(9, 10)]]]);
+    expect(solid[0].state).toMatchObject({ lineWidth: 2, lineDash: [] });
+    const dashed = calls.filter((c) => c.op === 'stroke' && c.state.strokeStyle === SECONDARY);
+    expect(dashed).toHaveLength(1);
+    expect(dashed[0].state).toMatchObject({ lineWidth: 2, lineDash: [3, 3] });
+    expect(dashed[0].lines?.[0]).toEqual([at(9, 10), at(8, 10)]);
+    expect(dashed[0].lines?.at(-1)).toEqual([at(6, 11), at(6, 12)]);
+  });
+
+  it('lets the rooms fall back to their depth fade and dashes a tertiary ring 3 on 2', () => {
+    const { calls } = squares(VAL_MIRAN, 1, stopped);
+    expect(
+      calls.some((c) => c.op === 'strokeRect' && c.state.strokeStyle === MAP_COLORS.pathLine),
+    ).toBe(false);
+    const ring = calls.findIndex((c) => c.op === 'roundRect');
+    expect(calls[ring + 1].state).toMatchObject({
+      strokeStyle: FAINT,
+      lineWidth: 1.5,
+      lineDash: [3, 2],
+    });
   });
 });
 

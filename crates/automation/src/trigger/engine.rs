@@ -2002,7 +2002,7 @@ mod tests {
         assert_eq!(Some(shown), process(&s, BANK.as_bytes(), SESSION).display);
     }
 
-    /// The Room, time and weather colors preset as presets.ts makes it,
+    /// The Room, time, and weather colors preset as presets.ts makes it,
     /// from fixtures/room-colors/preset.json.
     fn room_preset() -> TriggerStore {
         #[derive(serde::Deserialize)]
@@ -2081,7 +2081,12 @@ mod tests {
             }
             assert_eq!(
                 changed,
-                ["rubric", "solarized-light", "melange-light"],
+                [
+                    "rubric",
+                    "solarized-light",
+                    "high-contrast-light",
+                    "melange-light"
+                ],
                 "{plain}"
             );
         }

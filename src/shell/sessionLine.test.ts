@@ -9,9 +9,9 @@ import type { SessionRowState } from '../stores/session/sessionRowStore';
 import { aabahranPacket } from '../test/aabahranGmcp';
 import { howLong, secondLine } from './sessionLine';
 
-// Holds the second line of a session's row to board 02 of the Sessions
-// Sidebar review, one string for each state it draws. The rooms and the
-// target are the game's own, from the GMCP fixtures and the room looks.
+// Holds the second line of a session's row, one string for each state
+// it draws. The rooms and the target are the game's own, from the GMCP
+// fixtures and the room looks.
 
 const PLAY = 'play.theforsakenlands.com';
 const NOW = 10_000_000;

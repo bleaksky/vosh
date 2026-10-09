@@ -51,6 +51,13 @@ impl LogStore {
     /// already exist.
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
+        // A new file gives free pages back in steps from the start, so
+        // Keep logs for never needs to rebuild it (see `retention.rs`).
+        // The setting takes only before the first table.
+        let tables: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |r| r.get(0))?;
+        if tables == 0 {
+            conn.execute_batch("PRAGMA auto_vacuum = INCREMENTAL;")?;
+        }
         configure_connection(&conn)?;
         let store = Self { conn };
         store.migrate()?;
@@ -82,7 +89,9 @@ impl LogStore {
                  session_id INTEGER NOT NULL REFERENCES sessions(id),
                  ts_ms INTEGER NOT NULL,
                  text TEXT NOT NULL,
-                 raw BLOB
+                 raw BLOB,
+                 kind INTEGER,
+                 channel TEXT
              );
              CREATE INDEX IF NOT EXISTS idx_log_lines_session
                  ON log_lines(session_id, ts_ms);",
@@ -93,6 +102,20 @@ impl LogStore {
         if !self.has_column("sessions", "character")? {
             self.conn
                 .execute_batch("ALTER TABLE sessions ADD COLUMN character TEXT")?;
+        }
+        // What each row is came with Save a scene. The rows an older log
+        // holds keep neither column, and a scene reads them by their text
+        // (`kind.rs`). Adding a column rewrites no row, so a big log
+        // opens as fast as before.
+        // Each column goes on its own, so a log that gained one before a
+        // crash or a full disk stopped the second still gains the other.
+        for (column, add) in [
+            ("kind", "ALTER TABLE log_lines ADD COLUMN kind INTEGER"),
+            ("channel", "ALTER TABLE log_lines ADD COLUMN channel TEXT"),
+        ] {
+            if !self.has_column("log_lines", column)? {
+                self.conn.execute_batch(add)?;
+            }
         }
         Ok(())
     }
@@ -114,7 +137,7 @@ mod tests {
 
     #[test]
     fn low_fsync_pragmas_are_applied_on_open() {
-        // Regression guard for the Phase 2 perf fix: if the pragmas
+        // Regression guard for the low fsync pragmas: if the pragmas
         // ever get dropped, per-line fsync pressure returns and every
         // server line stalls behind a flush. The synchronous pragma
         // works on every backend so we assert it directly; journal
@@ -152,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn an_older_log_gains_the_character_column_and_keeps_its_rows() {
+    fn an_older_log_gains_the_new_columns_and_keeps_its_rows() {
         let dir = temp_dir("older");
         let path = dir.join("logs.sqlite");
         {
@@ -182,6 +205,8 @@ mod tests {
         }
         let mut s = LogStore::open(&path).unwrap();
         assert!(s.has_column("sessions", "character").unwrap());
+        assert!(s.has_column("log_lines", "kind").unwrap());
+        assert!(s.has_column("log_lines", "channel").unwrap());
         let old = s.get_session(1).unwrap().expect("the old session");
         assert_eq!((old.host.as_str(), old.line_count), ("h", 1));
         assert_eq!(s.session_character(1).unwrap(), None);
@@ -192,6 +217,67 @@ mod tests {
         // Opening it again finds the column there and adds nothing.
         let s = LogStore::open(&path).unwrap();
         assert_eq!(s.session_character(id).unwrap().as_deref(), Some("Tester"));
+        drop(s);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_log_that_gained_only_the_kind_column_gains_the_channel() {
+        let dir = temp_dir("half");
+        let path = dir.join("logs.sqlite");
+        {
+            let s = LogStore::open(&path).unwrap();
+            // The schema a migration left when it stopped between its two
+            // columns.
+            s.conn
+                .execute_batch("ALTER TABLE log_lines DROP COLUMN channel")
+                .unwrap();
+            assert!(!s.has_column("log_lines", "channel").unwrap());
+        }
+        let mut s = LogStore::open(&path).unwrap();
+        assert!(s.has_column("log_lines", "channel").unwrap());
+        let id = s.start_session("h", 1, 0).unwrap();
+        s.append(id, 1, "Maren walks in.", None).unwrap();
+        drop(s);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_older_build_writes_and_reads_a_log_with_the_kind_columns() {
+        let dir = temp_dir("downgrade");
+        let path = dir.join("logs.sqlite");
+        let id = {
+            let mut s = LogStore::open(&path).unwrap();
+            let id = s.start_session("h", 1, 0).unwrap();
+            s.append(id, 1, "Maren walks in.", None).unwrap();
+            id
+        };
+        {
+            // The statements an older build runs, which name no kind.
+            let conn = Connection::open(&path).unwrap();
+            conn.execute(
+                "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)",
+                params![id, 2, "Orla walks in.", Option::<Vec<u8>>::None],
+            )
+            .unwrap();
+            let texts: Vec<String> = conn
+                .prepare("SELECT text FROM log_lines WHERE session_id = ?1 ORDER BY id")
+                .unwrap()
+                .query_map([id], |r| r.get(0))
+                .unwrap()
+                .collect::<std::result::Result<_, _>>()
+                .unwrap();
+            assert_eq!(texts, ["Maren walks in.", "Orla walks in."]);
+        }
+        // The row it wrote reads as an older row, with no kind.
+        let s = LogStore::open(&path).unwrap();
+        let kinds: Vec<_> = s
+            .scene_lines(id, 0, 10, 10)
+            .unwrap()
+            .into_iter()
+            .map(|line| line.kind)
+            .collect();
+        assert_eq!(kinds, [Some(crate::LineKind::Text), None]);
         drop(s);
         let _ = std::fs::remove_dir_all(&dir);
     }

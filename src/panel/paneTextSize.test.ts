@@ -3,6 +3,7 @@ import panelCss from '../styles/panel.css?raw';
 import affectsCss from '../styles/affects.css?raw';
 import mapCss from '../styles/map.css?raw';
 import frameCss from '../styles/frame.css?raw';
+import overlaysCss from '../styles/overlays.css?raw';
 import tokensCss from '../styles/tokens.css?raw';
 import { TEXT_SIZES } from '../theme/appearanceSettings';
 import { liveChipMeasure } from './affects/chipMeasure';
@@ -32,6 +33,8 @@ const RULES = [
   ...rulesOf(mapCss).filter((r) => r.selector.includes('.pane-')),
 ];
 const FRAME_RULES = rulesOf(frameCss);
+// The menus float over the panes and keep a size of their own.
+const MENU_RULES = rulesOf(overlaysCss).filter((r) => /\.menu\b/.test(r.selector));
 const TOKEN_RULES = rulesOf(tokensCss);
 
 /** The declarations of the one rule with `selector` in `rules`. */
@@ -217,6 +220,36 @@ const SCALED: [string, string, string, string][] = [
   ['.vitals-marks', 'font-size', '12px', '16px'],
   ['.vitals-marks', 'line-height', '16px', '21px'],
   ['.vitals-marks.is-under .vitals-mark-row', 'padding', '4px 0', '5px 0'],
+  ['.vitals-drawn', 'font-size', '12px', '16px'],
+  ['.vitals-drawn', 'line-height', '16px', '21px'],
+  ['.vitals-foe.is-top', 'margin-bottom', '10px', '13px'],
+  ['.vitals-foe.is-bottom', 'margin-top', '10px', '13px'],
+  ['.vitals-foe-line', 'height', '16px', '21px'],
+  ['.vitals-foe-mark', 'margin-top', '4px', '5px'],
+  ['.vitals-band + .vitals-band', 'margin-top', '5px', '7px'],
+  ['.vitals-band-text', 'height', '16px', '21px'],
+  ['.vitals-band-graph', 'margin-top', '3px', '4px'],
+  ['.vitals-blocks', 'line-height', '16px', '21px'],
+  ['.vitals-drawn .vitals-marks.is-traces', 'grid-auto-rows', '26px', '35px'],
+  ['.panel-vitals-marks.is-cols', 'padding', '10px 0 12px', '13px 0 16px'],
+  ['.vitals-caps', 'font-size', '10px', '13px'],
+  ['.vitals-caps', 'line-height', '12px', '16px'],
+  ['.vitals-dial', 'margin-top', '5px', '7px'],
+  ['.vitals-dial-figure', 'font-size', '14px', '19px'],
+  ['.vitals-dial.is-narrow .vitals-dial-figure', 'font-size', '12px', '16px'],
+  ['.vitals-dial-max', 'font-size', '10px', '13px'],
+  ['.vitals-dial-max', 'line-height', '12px', '16px'],
+  ['.vitals-ring-row', 'height', '19px', '25px'],
+  ['.vitals-vial.is-narrow .vitals-vial-glass', 'margin-top', '5px', '7px'],
+  ['.vitals-vial.is-narrow .vitals-vial-text', 'margin-top', '5px', '7px'],
+  ['.vitals-vial-figure', 'height', '20px', '27px'],
+  ['.vitals-vial-figure', 'font-size', '16px', '21px'],
+  ['.vitals-vial-figure', 'line-height', '20px', '27px'],
+  ['.vitals-vial-max', 'font-size', '10px', '13px'],
+  ['.vitals-vial-max', 'line-height', '12px', '16px'],
+  ['.vitals-orb', 'margin-top', '5px', '7px'],
+  ['.vitals-orb-value', 'margin-top', '5px', '7px'],
+  ['.vitals-candle', 'height', '22px', '29px'],
 ];
 
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
@@ -275,8 +308,9 @@ describe('the panel in panel.css', () => {
   });
 
   it('keeps the first count a digit wide, the label giving way last', () => {
-    // A label followed by a count may shrink, ending in an ellipsis.
-    const label = declarations('.pane-label:has(+ .pane-meta)');
+    // The label may shrink, ending in an ellipsis, with a count beside
+    // it or alone.
+    const label = declarations('.pane-label');
     expect(label.get('flex')).toBe('0 1 auto');
     expect(label.get('min-width')).toBe('0');
     expect(label.get('overflow')).toBe('hidden');
@@ -298,16 +332,22 @@ describe('the panel in panel.css', () => {
     expect(declarations('.pane-meta + .pane-meta').get('margin-left')).toBe('10px');
     expect(RULES.filter((r) => r.selector === '.pane-meta + .pane-meta')).toHaveLength(1);
     expect(declarations('.pane-header > .pane-label + *').get('margin-left')).toBe('8px');
-    // A label with no count beside it never shrinks, as before.
-    expect(declarations('.pane-label').get('flex')).toBe('none');
+    // The label rule says it once, with no rule per neighbor.
+    expect(RULES.filter((r) => r.selector.includes('.pane-label:has('))).toHaveLength(0);
+    // A label with no count beside it ends in an ellipsis before the
+    // more button, inside the header's 40 px right padding.
+    expect(label.get('white-space')).toBe('nowrap');
+    expect(declarations('.pane-header').get('padding')).toBe(
+      'round(6px * var(--mud-scale), 1px) 40px 0 18px',
+    );
   });
 
   it('sets every text in the panes at your panel size, and the menus at their own', () => {
     let read = 0;
-    for (const { selector, body } of RULES) {
+    for (const { selector, body } of [...RULES, ...MENU_RULES]) {
       for (const [, prop, value] of body.matchAll(/(font-size|line-height)\s*:\s*([^;]+);/g)) {
         const at = `${selector} ${prop}`;
-        if (selector.includes('pane-menu')) {
+        if (/\.menu\b/.test(selector)) {
           expect(value.trim(), at).toMatch(/^\d+px$/);
         } else if (selector === '.vitals-ledger-current' && prop === 'font-size') {
           // Ledger's figure, which VitalsLedger sets from your size.

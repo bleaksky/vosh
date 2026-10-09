@@ -1,13 +1,15 @@
 //! The commands for your sessions and their connections to the game.
 //! The page lists, opens, selects, renames, moves and closes sessions,
 //! keeps where each one dials, connects and disconnects through them,
-//! sends the lines you type, plain or masked, stops a walk on Esc, tells
+//! sends the lines you type, plain, masked or raw into the game's editor,
+//! walks the path you click on
+//! the map, stops a walk on Esc, tells
 //! the game the size of the terminal, and reads the target you track.
 //! Each acts on the session it names, or on the selected session when it
 //! names none. Every window hears the rows again after a step that
 //! changes what one shows, see [`crate::sessions::broadcast_sessions`].
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
@@ -64,9 +66,10 @@ pub(crate) async fn session_select<R: tauri::Runtime>(
 /// Close the session `session` names. Its connection ends as on
 /// Disconnect, and its grid, its scrollback file and the Lua stops it
 /// made go. With it go its
-/// connection's state, its Lua engine with the aliases its plugins made
-/// and its recording. Its profile saves, unless `#profile reset` or
-/// `#profile load` holds it, and closes when no other session plays it.
+/// connection's state, its Lua engine with the aliases its plugins made,
+/// its recording and its snoop window. Its profile saves, unless
+/// `#profile reset` or `#profile load` holds it, and closes when no other
+/// session plays it.
 /// A session that was selected hands the selection on, see
 /// [`crate::sessions::Sessions::close`], and every window hears what the
 /// next one brings to the front, see
@@ -89,6 +92,9 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
         (closed, (selected.id == session).then(|| selected.profile()))
     };
     crate::session::disconnect(&app, state.inner(), &closed).await;
+    if let Some(window) = app.get_webview_window(&crate::app::windows::snoop_label(closed.id)) {
+        let _ = window.close();
+    }
     if let Some(app_data) = state.app_data.get() {
         let _ = std::fs::remove_file(crate::disk::paths::scrollback_path(app_data, closed.id));
     }
@@ -138,7 +144,7 @@ pub(crate) async fn session_rename<R: tauri::Runtime>(
 /// Move the session `session` names to the place `to` in the list, or to
 /// its end when `to` lies past it, as a drag of its row does. The
 /// selection stays, and profiles.toml keeps the order for the next
-/// launch (Q18).
+/// launch.
 #[tauri::command]
 pub(crate) async fn session_move<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -160,7 +166,7 @@ const NO_ADDRESS: &str = "Give the session a host and a port to dial.";
 
 /// Keep `host` on `port`, over TLS when `tls` says so, as where the
 /// session `session` names dials, without dialing, as the session form
-/// saves it. Each session keeps its own (board 7 and Q12). Its row names
+/// saves it. Each session keeps its own. Its row names
 /// that world from then on, and profiles.toml keeps it for the next
 /// launch while it keeps the list, see
 /// [`crate::profile::set::SessionEntry::list`]. A blank host or port 0
@@ -248,6 +254,65 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Send a line you type into the game's line editor while it holds a
+/// text Vosh can name, exactly as typed. No
+/// alias, variable, `#` command or semicolon split sees it, and its
+/// leading spaces stay, since every line there is part of your text. It
+/// goes to the log as typed.
+#[tauri::command]
+pub(crate) async fn session_send_raw<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    line: String,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
+    let current = session.slot.lock().await;
+    let Some(handle) = current.as_ref() else {
+        output::emit_output(&app, &session, input::NOT_CONNECTED.to_vec());
+        return Ok(());
+    };
+    if !handle.send(format!("{line}\r\n").into_bytes()) {
+        return Err("session task gone".to_string());
+    }
+    Ok(())
+}
+
+/// Walk the path you clicked on the map: `steps` as a `#walk` string,
+/// planned from room `start`, with the room each step should reach in
+/// `rooms`. A walk under way gives way once its step in flight lands,
+/// and the walker drops a path planned from a room you have since left.
+/// It says nothing when you are not connected.
+#[tauri::command]
+pub(crate) async fn session_walk_route(
+    state: State<'_, SharedState>,
+    steps: String,
+    start: i64,
+    rooms: Vec<i64>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    use crate::input::walk::{parse_steps, Route, WalkCommand, WalkPlan};
+    let steps = parse_steps(&steps).map_err(|e| e.to_string())?;
+    if rooms.len() != steps.len() {
+        return Err(format!(
+            "The path has {} steps but names {} rooms.",
+            steps.len(),
+            rooms.len()
+        ));
+    }
+    let session = state.session(session)?;
+    if let Some(handle) = session.slot.lock().await.as_ref() {
+        let _ = handle.walk(WalkCommand::Start {
+            plan: WalkPlan {
+                steps,
+                route: Some(Route { start, rooms }),
+            },
+            rest: Vec::new(),
+        });
+    }
+    Ok(())
+}
+
 /// Stop the walk under way, as Esc in the command line does. It says
 /// nothing when you are not walking or not connected.
 #[tauri::command]
@@ -308,8 +373,8 @@ pub(crate) async fn session_reconnect_cancel<R: tauri::Runtime>(
 }
 
 /// Whether `profile`, or the profile the selected session plays when it
-/// names none, dials again after the link drops while you play (Alerts
-/// Q14). On at first.
+/// names none, dials again after the link drops while you play. On at
+/// first.
 #[tauri::command]
 pub(crate) async fn reconnect_get(
     state: State<'_, SharedState>,

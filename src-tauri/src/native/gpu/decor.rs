@@ -5,11 +5,11 @@ use super::frame::CellInstance;
 use super::style::Rgba;
 use crate::native::grid::Underline;
 
-/// How far the underline sits below the baseline, in CSS pixels. The
-/// Styles board sets `text-underline-offset: 3px`.
+/// How far the underline sits below the baseline, in CSS pixels, the
+/// `text-underline-offset: 3px` the page sets.
 const UNDERLINE_DROP: f32 = 3.0;
 /// The curly underline's band in CSS pixels, from the top of its crest
-/// to the bottom of its trough. Chrome draws the board's wavy line 3.5
+/// to the bottom of its trough. Chrome draws a wavy line 3.5
 /// CSS pixels tall at a 1 px thickness.
 const CURL_HEIGHT: f32 = 3.5;
 /// A dash's share of its cell. The gap takes the rest, split evenly on
@@ -17,8 +17,7 @@ const CURL_HEIGHT: f32 = 3.5;
 const DASH_SHARE: f32 = 0.65;
 
 /// Where a cell's lines sit, in device pixels from the cell's top left
-/// corner. Every line is one CSS pixel thick, the weight of the Styles
-/// board, and every line stays inside its cell, so no line reaches into
+/// corner. Every line is one CSS pixel thick, and every line stays inside its cell, so no line reaches into
 /// the row below or past a split's edge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Decor {
@@ -55,8 +54,8 @@ pub(super) fn decor(cell_w: u32, cell_h: u32, baseline: u32, scale: f32) -> Deco
     let t = (scale.round() as u32).clamp(1, cell_h);
     let want = baseline + (UNDERLINE_DROP * scale).round() as u32;
     let fit = |ink: u32| want.min(cell_h.saturating_sub(ink));
-    // The double's gap is half a line, at least a pixel: Chrome draws the
-    // board's double at 2x as two 2 px lines 1 px apart.
+    // The double's gap is half a line, at least a pixel: Chrome draws a
+    // double underline at 2x as two 2 px lines 1 px apart.
     let gap = (t / 2).max(1);
     let double_top = fit(2 * t + gap);
     // The curl keeps a CSS pixel of room under the letters, giving up

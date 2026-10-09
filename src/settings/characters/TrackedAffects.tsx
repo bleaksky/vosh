@@ -11,7 +11,7 @@ import {
 } from './trackedAffectEdit';
 import { Card, Chip, ChipButton, PlusIcon, Section } from '../../ui';
 
-// Tracked affects on the Characters board: a quiet line, then a chip
+// Tracked affects on the Characters page: a quiet line, then a chip
 // per affect the profile tracks with a close button that stops
 // tracking it, then Add affect. Add affect turns into a field in place
 // with the affects on you now as suggestions. Return adds, Esc puts
@@ -94,6 +94,8 @@ export function TrackedAffects({ tracked, onEdit }: Props) {
               <ChipButton
                 ref={addRef}
                 icon={<PlusIcon size={12} />}
+                data-st-anchor="add-affect"
+                data-st-coach="Pick Add affect… and name a spell you keep up."
                 onClick={() => setAdding(true)}
               >
                 Add affect…

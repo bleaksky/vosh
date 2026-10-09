@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { Fragment, useRef, useState, type ReactNode } from 'react';
 import { openVitalsTextCard } from '../ipc/prompt';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
@@ -11,14 +11,14 @@ import { returnToCommandLine } from './paneActions';
 import {
   pickVitalsStyle,
   pickVitalsValues,
-  vitalsStyleChoices,
+  vitalsStyleFamilies,
   vitalsValuesChoices,
 } from './vitalsPicks';
 
 // The menu a right click on your vitals opens, on the panel footer or
-// on the status line's vitals (board 4 of the Vitals Styles review,
-// Q16). It opens at the pointer, as the terminal's menu does, with
-// Style and Values, each a submenu with a check on your pick, then
+// on the status line's vitals. It opens at the pointer, as the terminal's menu does, with
+// Style and Values, each a submenu with a check on your pick, Style's
+// with a line between families of styles, then
 // Customize vitals…, which opens Settings there. Under Text it adds Edit
 // your text…, which opens the card for your text, and Values goes quiet, since your text writes its own
 // values. Colors stay in Customize vitals. A pick saves alone for the
@@ -50,7 +50,7 @@ export function VitalsChoiceItems<T extends string>({
             done();
             void pick(choice.value).catch(() => undefined);
           }}
-          trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
+          trailing={choice.checked ? <CheckIcon className="menu-check" /> : null}
         >
           {choice.label}
         </MenuItem>
@@ -60,7 +60,7 @@ export function VitalsChoiceItems<T extends string>({
 }
 
 const openSettingsAt = () =>
-  openSettingsTab(formatSettingsTarget({ group: 'layout', section: 'customize-vitals' }));
+  openSettingsTab(formatSettingsTarget({ group: 'vitals', section: 'customize-vitals' }));
 
 interface Props {
   /** The pointer, where the menu opens. */
@@ -87,13 +87,14 @@ export function VitalsMenu({ x, y, onClose }: Props) {
   const submenus: Record<VitalsSubmenu, { label: string; items: () => ReactNode }> = {
     style: {
       label: 'Style',
-      items: () => (
-        <VitalsChoiceItems
-          choices={vitalsStyleChoices(options)}
-          pick={pickVitalsStyle}
-          done={done}
-        />
-      ),
+      // A line sets each family of styles apart.
+      items: () =>
+        vitalsStyleFamilies(options).map((family, i) => (
+          <Fragment key={family[0]?.value}>
+            {i > 0 && <MenuSeparator />}
+            <VitalsChoiceItems choices={family} pick={pickVitalsStyle} done={done} />
+          </Fragment>
+        )),
     },
     values: {
       label: 'Values',
@@ -120,7 +121,7 @@ export function VitalsMenu({ x, y, onClose }: Props) {
         label={submenus[which].label}
         nested
         autoFocus={subOpen.focus}
-        className="pane-menu-sub"
+        className="menu-sub"
         at={submenuAt(r, menu)}
         onClose={() => {
           // Escape or ArrowLeft: back to the row that opened it.
@@ -145,7 +146,7 @@ export function VitalsMenu({ x, y, onClose }: Props) {
         controls: subId(which),
         onOpen: (focus) => setSubOpen((prev) => openPaneSubmenu(prev, which, focus)),
       }}
-      trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+      trailing={<ChevronRightIcon className="menu-chevron" />}
     >
       {submenus[which].label}
     </MenuItem>

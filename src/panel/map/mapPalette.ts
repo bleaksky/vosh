@@ -81,8 +81,18 @@ export const MAP_COLORS = {
   get originFill(): string {
     return readCssVar('--accent-soft', 'rgba(255, 51, 153, 0.09)');
   },
+  /// The tertiary ink, for the up and down marks and the ring of a
+  /// stopped walk.
   get text(): string {
     return readCssVar('--tertiary', '#6e7681');
+  },
+  /// The secondary ink, for the steps a stopped walk left.
+  get secondary(): string {
+    return readCssVar('--secondary', '#918e8c');
+  },
+  /// The ring around a room a walk cannot reach, past a door.
+  get danger(): string {
+    return readCssVar('--danger', '#ea8f80');
   },
   dest: '#c83030',
   destGlow: 'rgba(200,48,48,0.15)',

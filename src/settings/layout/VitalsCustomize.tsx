@@ -1,18 +1,17 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { type UiConfig, type UiFields } from '../../ipc/uiConfig';
 import {
   DEFAULT_VITALS_CUSTOM,
   normalizeVitalsOff,
   VITALS_VALUES,
   shownStyle,
-  type UiConfig,
-  type UiFields,
   type Vital,
   type VitalsMeter,
   type VitalsOpponent,
   type VitalsStyle,
   type VitalsColors,
   type VitalsValues,
-} from '../../ipc/uiConfig';
+} from '../../ipc/uiConfigVitals';
 import { partShift, useRowDrag } from '../../lib/useRowDrag';
 import { VITAL_LABELS, VITALS_VALUES_LABELS } from '../../panel/vitalsView';
 import type { AnsiSlot } from '../../theme/baseAnsi';
@@ -34,12 +33,13 @@ import { VitalSwatch } from './VitalSwatch';
 import { VitalsTextRows } from './VitalsTextRows';
 import { customDiffers, movedTo, movedWords, textDiffers } from './vitalsStyles';
 
-// Customize vitals under Settings, Layout (boards 2 to 5 of the Vitals
-// Styles review, Q3). One set of choices every drawn style shares: which
-// vitals show and their order, a color for each, where your opponent
-// sits, Values, Meter and the warning. Each pick saves alone, and Reset
-// to default puts the set back and leaves your style, Show your vitals
-// in and the pinned switch alone. It rests until something differs.
+// Customize vitals under Settings, Layout. One set of choices every
+// drawn style shares: which vitals show and their order, a color for
+// each, where your opponent sits, Values, Meter and the warning. Each
+// pick saves alone, and Reset to default puts the set back and leaves
+// your style, Show your vitals in and the pinned switch alone. Show each
+// hit sits with the warning, since both change how a vital reads as it
+// changes. It rests until something differs.
 //
 // The list moves a vital with its grip, by the pointer or from the
 // keyboard, as the Sessions list moves a session. Under Status line the
@@ -68,13 +68,37 @@ const METERS: readonly SegmentedOption<VitalsMeter>[] = [
   { value: 'none', label: 'None' },
 ];
 
+/** Why Meter goes quiet for each style that draws its own mark. */
+const OWN_MARKS: Partial<Record<VitalsStyle, string>> = {
+  gauges: 'Gauges draw their own pill, so they take no meter.',
+  pips: 'Pips draw their own discs, so they take no meter.',
+  bands: 'Bands draw their own bars, so they take no meter.',
+  ladders: 'Ladders draw their own segments, so they take no meter.',
+  blocks: 'Blocks draw their own cells, so they take no meter.',
+  traces: 'Traces draw their own line, so they take no meter.',
+  dials: 'Dials draw their own arc, so they take no meter.',
+  rings: 'Rings draw their own arcs, so they take no meter.',
+  vials: 'Vials draw their own glass, so they take no meter.',
+  orbs: 'Orbs draw their own glass, so they take no meter.',
+  candles: 'Candles draw their own wax, so they take no meter.',
+};
+
+/** What Show each hit does. */
+const HIT_WORDS =
+  'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.';
+
+/** Why Show each hit goes quiet, or null where it draws. */
+function hitQuietOf(style: VitalsStyle, status: boolean): string | null {
+  if (status) return "The status line doesn't show hits, so this waits for the panel.";
+  if (style === 'traces') return 'Traces already draw each hit in their line.';
+  return null;
+}
+
 /** Why Meter goes quiet for a style or the status line, or null where it
  *  draws. */
 function meterQuiet(style: VitalsStyle, status: boolean): string | null {
   if (status) return 'The status line draws no meter.';
-  if (style === 'gauges') return 'Gauges draw their own pill, so they take no meter.';
-  if (style === 'pips') return 'Pips draw their own discs, so they take no meter.';
-  return null;
+  return OWN_MARKS[style] ?? null;
 }
 
 export function CustomizeVitalsSection({
@@ -114,6 +138,7 @@ export function CustomizeVitalsSection({
 function CustomRows({ config, update }: { config: UiConfig; update: (patch: UiFields) => void }) {
   const status = config.vitals_place === 'status';
   const quiet = meterQuiet(shownStyle(config), status);
+  const hitQuiet = hitQuietOf(shownStyle(config), status);
   const opponentOn = !config.vitals_off.includes('opponent');
   return (
     <>
@@ -174,6 +199,13 @@ function CustomRows({ config, update }: { config: UiConfig; update: (patch: UiFi
         <Toggle
           checked={config.vitals_warn_thirds}
           onChange={(on) => update({ vitals_warn_thirds: on })}
+        />
+      </Row>
+      <Row label="Show each hit" description={hitQuiet ?? HIT_WORDS} anchor="show-each-hit">
+        <Toggle
+          checked={config.vitals_hit}
+          disabled={hitQuiet !== null}
+          onChange={(on) => update({ vitals_hit: on })}
         />
       </Row>
     </>

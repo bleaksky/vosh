@@ -79,9 +79,9 @@ impl SessionId {
         Self(n)
     }
 
-    /// The session numbered `n`, as a banner Vosh posted names it. It may
-    /// name a session that has since closed, which a lookup then refuses.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    /// The session numbered `n`, as a banner Vosh posted or a snoop
+    /// window's label names it. It may name a session that has since
+    /// closed, which a lookup then refuses.
     pub(crate) const fn from_number(n: u32) -> Self {
         Self(n)
     }
@@ -156,7 +156,7 @@ pub(crate) struct Session {
     /// The character the session played last, which its row names once
     /// the live connection has none: through a drop, every try of a
     /// redial and a disconnect, so two sessions that redial on one world
-    /// still read apart (Sessions Q10, board 3). A login sets it, and a
+    /// still read apart. A login sets it, and a
     /// connect you start clears it, since the row then names the world
     /// until you log in. A leaf lock, held for a copy.
     played: std::sync::Mutex<Option<String>>,
@@ -199,6 +199,11 @@ pub(crate) struct Session {
     /// When each alert of the session last rang, for the 10 second cap. A
     /// leaf lock, taken alone once the profile and connection let go.
     alert_caps: std::sync::Mutex<crate::alert::Caps>,
+    /// The logs the session opened since Vosh started, oldest first, by
+    /// their ids in logs.sqlite, which the log view's This session reads.
+    /// The newest is the open one while the connection runs. A leaf
+    /// lock, held for a copy.
+    logs: std::sync::Mutex<Vec<i64>>,
     /// The series of redials the session runs after a drop, if any. A
     /// leaf lock, held to start, take or wake one. See
     /// [`crate::session::reconnect`].
@@ -239,6 +244,7 @@ impl Session {
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),
             alert_caps: std::sync::Mutex::new(crate::alert::Caps::default()),
+            logs: std::sync::Mutex::new(Vec::new()),
             redial: std::sync::Mutex::new(None),
             awaiting_game_prompt: crate::session::reconnect::AwaitingPrompt::default(),
         }
@@ -282,6 +288,22 @@ impl Session {
             .profile
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = open;
+    }
+
+    /// The logs the session opened since Vosh started, oldest first.
+    pub(crate) fn logs(&self) -> Vec<i64> {
+        self.logs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The session's connection opened log `id`.
+    pub(crate) fn note_log(&self, id: i64) {
+        self.logs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(id);
     }
 
     /// The name you gave the session, if any.

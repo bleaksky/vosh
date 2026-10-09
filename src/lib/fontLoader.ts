@@ -78,12 +78,16 @@ const GENERIC_FAMILIES = new Set([
 // The family the bundled JetBrains Mono goes by in fonts.css.
 const BUNDLED_FAMILY = 'JetBrainsMono Bundled';
 
-// The family Berkeley Mono went by while Vosh bundled it, which saved
-// font lists still name, and the installed families that stand in for
-// it: the Nerd Font build Vosh bundled, then the family the foundry
-// sells.
-const RETIRED_BERKELEY = 'berkeleymono bundled';
-const BERKELEY_FAMILIES = ['BerkeleyMono Nerd Font', 'Berkeley Mono'];
+// The family name of the font Vosh bundled before JetBrains Mono, which
+// saved font lists still name. Vosh never ships it again, so the name
+// stands for the bundled JetBrains Mono.
+const RETIRED_BUNDLED = 'berkeleymono bundled';
+
+// The default font list from those days. A profile that never picked a
+// font still holds it, and it draws as the default list does now.
+const RETIRED_DEFAULT =
+  'berkeleymono nerd font, jetbrains mono, fira code, menlo, consolas, ui-monospace, monospace';
+const DEFAULT_STACK = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
 function unquote(piece: string): string {
   return piece
@@ -96,32 +100,23 @@ function cssFamily(name: string): string {
   return GENERIC_FAMILIES.has(name.toLowerCase()) ? name : JSON.stringify(name);
 }
 
-// The font list the page renders for a saved one. Vosh no longer ships
-// Berkeley Mono, so a Berkeley name stands for your installed copy, and
-// the bundled JetBrains Mono follows each run of Berkeley names for a
-// machine without one. The retired bundled name becomes the installed
-// Berkeley families. A repeated name drops out. A list without Berkeley
-// Mono comes back as it is. rendered_families in
+// The font list the page renders for a saved one. The retired default
+// list becomes the default list, and the retired bundled name becomes
+// the bundled JetBrains Mono, with a repeated name dropped. Every other
+// list comes back as it is. rendered_families in
 // src-tauri/src/native/gpu/atlas.rs gives the native atlas the same list,
 // so both renderers land on the same face and cell. Both run
 // fixtures/font-stacks/cases.json.
 export function renderFontStack(stack: string): string {
-  if (!/berkeley/i.test(stack)) return stack;
+  if (stack.trim().toLowerCase() === RETIRED_DEFAULT) return DEFAULT_STACK;
+  if (!stack.toLowerCase().includes(RETIRED_BUNDLED)) return stack;
   const out: string[] = [];
-  const push = (name: string) => {
-    if (!out.some((f) => f.toLowerCase() === name.toLowerCase())) out.push(name);
-  };
-  let afterBerkeley = false;
   for (const piece of stack.split(',')) {
-    const name = unquote(piece);
-    if (!name) continue;
-    const berkeley = /berkeley/i.test(name);
-    if (afterBerkeley && !berkeley) push(BUNDLED_FAMILY);
-    afterBerkeley = berkeley;
-    if (name.toLowerCase() === RETIRED_BERKELEY) BERKELEY_FAMILIES.forEach(push);
-    else push(name);
+    const unquoted = unquote(piece);
+    if (!unquoted) continue;
+    const name = unquoted.toLowerCase() === RETIRED_BUNDLED ? BUNDLED_FAMILY : unquoted;
+    if (!out.some((f) => f.toLowerCase() === name.toLowerCase())) out.push(name);
   }
-  if (afterBerkeley) push(BUNDLED_FAMILY);
   return out.map(cssFamily).join(', ');
 }
 

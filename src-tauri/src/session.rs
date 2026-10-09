@@ -13,6 +13,8 @@
 //!   room list and look, the tick's count, the prompt engine, the session
 //!   variables and the Lua engine.
 //! - `socket` opens the plain or TLS socket.
+//! - `round_trip` reads the round trip to the game and keeps the stalls
+//!   `#lag` lists.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
 //! - `lines` cuts what the game sends into lines and the partial after
@@ -38,11 +40,16 @@
 //!   read on.
 //! - `log_sink` holds the session log's row and the scrollback ring of a
 //!   connection, and the lines the session captures as it ends.
+//!   `log_kinds` says what each row it logs is, for Save a scene.
 //! - `perf` counts the work on the hot path.
+//! - `reader` holds what one read hands a screen reader.
 //! - `reconnect` decides whether a drop dials again, and runs the series
 //!   of redials.
+//! - `snoop` keeps the players the session snoops, with their text.
 //! - `walk` is the walker, which sends the steps of a `#walk` one at a
 //!   time.
+//! - `writer` follows where the game takes your input and runs what the
+//!   writing card asks of the game's line editor.
 //! - `vitals_text` renders your vitals text for a footer or the status
 //!   line while the page watches it.
 //! - `tests` drives the steps the way the loop does.
@@ -58,17 +65,22 @@ pub(crate) mod highlight_ground;
 pub(crate) mod identity;
 pub(crate) mod last_packages;
 mod lines;
+pub(crate) mod log_kinds;
 mod log_sink;
 mod lua_timers;
 mod perf;
 pub(crate) mod prompt_view;
 mod read;
+mod reader;
 pub(crate) mod reconnect;
 pub(crate) mod room_block;
+pub(crate) mod round_trip;
+pub(crate) mod snoop;
 mod socket;
 mod steps;
 pub(crate) mod vitals_text;
 pub(crate) mod walk;
+pub(crate) mod writer;
 
 use std::sync::Arc;
 
@@ -170,6 +182,8 @@ pub(crate) enum OutgoingMsg {
     /// A `#walk` you typed, or Esc, for the walker. It follows the bytes
     /// of its line.
     Walk(WalkCommand),
+    /// What the writing card asks of the game's line editor.
+    Writer(writer::WriterCommand),
 }
 
 pub(crate) struct SessionHandle {
@@ -229,6 +243,12 @@ impl SessionHandle {
     /// the session has already been torn down.
     pub(crate) fn walk(&self, command: WalkCommand) -> bool {
         self.tx_outgoing.send(OutgoingMsg::Walk(command)).is_ok()
+    }
+
+    /// Hand the writer what the writing card asks. Returns false when the
+    /// session has already been torn down.
+    pub(crate) fn writer(&self, command: writer::WriterCommand) -> bool {
+        self.tx_outgoing.send(OutgoingMsg::Writer(command)).is_ok()
     }
 
     /// True once the session loop has ended, so nothing sent reaches the
@@ -517,9 +537,29 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     // What the plugins printed at launch, if nothing showed it yet.
     crate::app::plugins::show_launch_lines(&app, session);
 
+    // Log sessions decides whether the connection writes the log.
+    let (logged, lines, mark) = {
+        let p = session.lock_profile().await;
+        (
+            crate::profile::ui::logs_connection(&p.ui, &host),
+            p.ui.scrollback_lines,
+            crate::input::echo_mark(&p.ui),
+        )
+    };
+    // Scrollback size and the mark, which the profile may have changed
+    // since.
+    crate::logs::keep_scrollback_lines(session, lines).await;
+    crate::input::keep_echo_mark(session.id, mark);
+    #[cfg(test)]
+    let logged = logged
+        || (vosh_log::is_local_host(&host)
+            && state
+                .log_this_computer
+                .load(std::sync::atomic::Ordering::Acquire));
     let log_sink = LogSink::open(
         state.logs.clone(),
-        session.scrollback.clone(),
+        logged,
+        session,
         scrollback_path,
         &host,
         port,

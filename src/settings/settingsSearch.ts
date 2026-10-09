@@ -1,3 +1,4 @@
+import { PRESET_CATEGORIES, PRESETS } from '../automation/presets';
 import {
   formatSettingsTarget,
   settingsGroupLabel,
@@ -39,7 +40,9 @@ const at = (group: SettingsGroup, section?: string, anchor?: string): SettingsTa
 };
 
 export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
-  // General, from the approved board.
+  // General. Session logs, Scrollback and the two pages inside Logs keep
+  // their place in this list, since search breaks a tie by it, and name
+  // the Logs tab.
   {
     label: 'World',
     keywords: 'connect connection mud server session port build',
@@ -81,12 +84,32 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   {
     label: 'Session logs',
     keywords: 'log logs saved sessions history lines',
-    target: at('general', 'session-logs'),
+    target: at('logs', 'session-logs'),
+  },
+  {
+    label: 'Log sessions',
+    keywords: 'log logging record save sessions localhost',
+    target: at('logs', 'session-logs', 'log-sessions'),
+  },
+  {
+    label: 'Keep logs for',
+    keywords: 'log logs retention delete old days year forever space disk',
+    target: at('logs', 'session-logs', 'keep-logs'),
+  },
+  {
+    label: 'Scrollback size',
+    keywords: 'scrollback history lines terminal buffer memory',
+    target: at('logs', 'scrollback', 'scrollback-size'),
   },
   {
     label: 'Search logs',
-    keywords: 'log history find copy text',
-    target: at('general', 'logs'),
+    keywords: 'log history find copy text save file export download txt colors',
+    target: at('logs', 'search'),
+  },
+  {
+    label: 'Save a scene',
+    keywords: 'scene log share export html web page roleplay story download transcript',
+    target: at('logs', 'scene'),
   },
   {
     label: 'GPU rendering',
@@ -95,7 +118,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     only: 'not-macos',
   },
 
-  // Appearance, from the approved board.
+  // Appearance.
   {
     label: 'Theme',
     keywords: 'colors palette gallery dark light nord ember rubric vellum one everforest',
@@ -108,13 +131,16 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'theme', 'import-theme'),
   },
   {
-    label: 'Follow system appearance',
-    description: 'Vosh switches between your light and dark theme when macOS does.',
-    keywords: 'dark mode light mode automatic',
-    target: at('appearance', 'theme', 'follow-system'),
+    label: 'Switch themes',
+    description: "Turns at the game's dawn and dusk, about every 6 minutes.",
+    keywords:
+      'follow system appearance dark mode light mode automatic with the system with the game day night',
+    target: at('appearance', 'theme', 'switch-themes'),
   },
   { label: 'Light theme', target: at('appearance', 'theme', 'light-theme') },
   { label: 'Dark theme', target: at('appearance', 'theme', 'dark-theme') },
+  { label: 'Day theme', target: at('appearance', 'theme', 'day-theme') },
+  { label: 'Night theme', target: at('appearance', 'theme', 'night-theme') },
   {
     label: 'Font',
     keywords: 'typeface family terminal text monospace',
@@ -141,7 +167,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     description:
       'While you play, Vosh lifts the game colors that fade on the theme, and Settings keeps the theme as published.',
     keywords: 'contrast faint legible readable ansi room names published play',
-    target: at('appearance', 'text', 'fit-game-colors'),
+    target: at('accessibility', 'color', 'fit-game-colors'),
   },
   {
     label: 'Color vision',
@@ -149,14 +175,14 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'Vosh swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
     keywords:
       'color blind colorblind deuteranopia protanopia tritanopia red green blue yellow orange violet purple pink swap mode cvd accessibility danger warn success status window hue',
-    target: at('appearance', 'text', 'color-vision'),
+    target: at('accessibility', 'color', 'color-vision'),
   },
   {
     label: 'Keep highlight colors readable',
     description:
       'Vosh darkens or lightens a color your triggers set when the theme would make it faint.',
     keywords: 'contrast trigger highlight faint legible true color hex',
-    target: at('appearance', 'text', 'readable-highlights'),
+    target: at('accessibility', 'color', 'readable-highlights'),
   },
   {
     label: 'Collapse repeated lines',
@@ -215,7 +241,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     description:
       'Text your MUD or prompt sets to blink flashes. It starts off if your system reduces motion.',
     keywords: 'advanced blink flash sgr reduce motion animation',
-    target: at('appearance', 'advanced', 'blink-text'),
+    target: at('accessibility', 'motion', 'blink-text'),
   },
   {
     label: 'Font stack',
@@ -224,7 +250,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'advanced', 'font-stack'),
   },
 
-  // Layout, from the approved board.
+  // Layout.
   {
     label: 'Show the panel',
     description: 'When you hide it, your vitals move to the status line.',
@@ -247,40 +273,40 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     label: 'Style',
     description: 'Each tile draws your vitals in one style. Pick the one your panel shows.',
     keywords:
-      'vitals style gallery rows one line ledger gauges pips text look density compact health mana moves',
-    target: at('layout', 'vitals', 'style'),
+      'vitals style gallery rows one line ledger gauges pips bands ladders blocks traces dials rings vials orbs candles text look density compact health mana moves',
+    target: at('vitals', undefined, 'style'),
   },
   {
     label: 'Show your vitals in',
     description: 'Status line moves them under the terminal, and the panes take the room.',
     keywords: 'vitals place panel status line footer where health mana moves',
-    target: at('layout', 'vitals', 'place'),
+    target: at('vitals', undefined, 'place'),
   },
   {
     label: 'Hide vitals while your prompt is pinned',
     description:
       'While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out.',
     keywords: 'vitals hide pinned prompt band panel footer health mana moves',
-    target: at('layout', 'vitals', 'hide-pinned'),
+    target: at('vitals', undefined, 'hide-pinned'),
   },
   {
     label: 'Vitals and their order',
     description: 'Drag a vital to move it, give it a color, or turn it off.',
     keywords:
       'customize vitals order drag move reorder colors colours swatch hide show off reset health mana moves',
-    target: at('layout', 'customize-vitals', 'vitals-order'),
+    target: at('vitals', 'customize-vitals', 'vitals-order'),
   },
   {
     label: 'Your opponent',
     description: 'In a fight, its name and its health in warn, in every style.',
     keywords: 'customize vitals opponent enemy mob fight top bottom health',
-    target: at('layout', 'customize-vitals', 'opponent'),
+    target: at('vitals', 'customize-vitals', 'opponent'),
   },
   {
     label: 'Values',
     description: 'Current drops the maximum. Percent matches the Group pane.',
     keywords: 'vitals numbers current max maximum percent percentage health mana moves',
-    target: at('layout', 'customize-vitals', 'values'),
+    target: at('vitals', 'customize-vitals', 'values'),
   },
   {
     label: 'Meter',
@@ -288,14 +314,21 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     // Not `line`, which would pull Meter into a search for One line
     // through the `one` in None.
     keywords: 'vitals bar gauge thick thin health mana moves',
-    target: at('layout', 'customize-vitals', 'meter'),
+    target: at('vitals', 'customize-vitals', 'meter'),
   },
   {
     label: 'Warn before you run low',
     description:
       "Vitals turn yellow under two thirds and red under one third, like your group's health.",
     keywords: 'vitals low warning danger thirds yellow red color health mana moves',
-    target: at('layout', 'customize-vitals', 'warn-low'),
+    target: at('vitals', 'customize-vitals', 'warn-low'),
+  },
+  {
+    label: 'Show each hit',
+    description:
+      'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.',
+    keywords: 'vitals hit trail pale drain heal peak health mana moves',
+    target: at('vitals', 'customize-vitals', 'show-each-hit'),
   },
   {
     label: 'Divider color',
@@ -321,7 +354,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'tick count countdown count down up direction reverse late negative minus below zero',
     target: at('layout', 'status', 'tick-counts'),
   },
-  // The Affects card sits above Vitals on the page. Its rows come last
+  // The Affects card sits above Split terminal on the page. Its rows come last
   // here, since search breaks a tie by this order and `chip style`
   // should still find Tick and time, whose saved name it is.
   {
@@ -360,11 +393,78 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'affects', 'affects-almost-gone'),
   },
 
-  // Input, from the approved board.
+  // Input.
+  {
+    label: 'Mark before your commands',
+    description: 'Vosh leaves it out after a prompt that already ends in >.',
+    keywords: 'echo caret arrow prefix mark symbol sent input',
+    target: at('input', 'sent', 'mark-commands'),
+  },
+  {
+    label: 'Mark color',
+    keywords: 'echo mark caret color grey',
+    target: at('input', 'sent', 'mark-color'),
+  },
+  {
+    label: 'Command color',
+    keywords: 'echo local command typed sent color',
+    target: at('input', 'sent', 'sent-color'),
+  },
+  {
+    label: 'Dim sent commands',
+    description: 'Your commands draw faint, so the game’s lines stand out.',
+    keywords: 'echo faint dim grey sent',
+    target: at('input', 'sent', 'sent-dim'),
+  },
+  {
+    label: 'Use the same mark in the command line',
+    description: 'The line you type in starts with your mark.',
+    keywords: 'prompt glyph mark command line',
+    target: at('input', 'sent', 'mark-line'),
+  },
+  {
+    label: 'Show the commands your macros send',
+    keywords: 'macro echo keys',
+    target: at('input', 'sent', 'echo-macros'),
+  },
   {
     label: 'Caret shape',
     keywords: 'cursor block outline underline pipe command line',
     target: at('input', 'command-line', 'caret'),
+  },
+  {
+    label: 'Caret blinks',
+    keywords: 'cursor blink flash steady',
+    target: at('input', 'command-line', 'caret-blink'),
+  },
+  {
+    label: 'Caret color',
+    keywords: 'cursor color accent',
+    target: at('input', 'command-line', 'caret-color'),
+  },
+  {
+    label: 'Text color',
+    keywords: 'command line input typed color foreground',
+    target: at('input', 'command-line', 'line-color'),
+  },
+  {
+    label: 'Background',
+    keywords: 'command line input band tint background',
+    target: at('input', 'command-line', 'line-bg'),
+  },
+  {
+    label: 'Size',
+    keywords: 'command line input font size bigger smaller',
+    target: at('input', 'command-line', 'line-size'),
+  },
+  // The four colors show only while the switch is on, so search names
+  // the switch.
+  {
+    label: 'Color commands as you type',
+    description:
+      'Aliases, Vosh commands, and chat each take a color, and a # command Vosh doesn’t know turns red.',
+    keywords: 'syntax highlight fish color alias hash chat unknown',
+    target: at('input', 'command-line', 'type-colors'),
   },
   {
     label: 'Keep last command',
@@ -379,21 +479,18 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'command-line', 'spellcheck'),
   },
   {
-    label: 'Mark your commands',
+    label: 'Offer the card when the game’s editor opens',
     description:
-      'Draws a grey › before each command you send, except after a prompt that already ends in >.',
-    keywords: 'echo caret arrow prefix typed input sent',
-    target: at('input', 'command-line', 'mark-commands'),
+      'Type note edit or description edit and Vosh offers to open it in its writing card.',
+    keywords: 'writing card editor note description history notice offer',
+    target: at('input', 'writing', 'writing-offer'),
   },
   {
-    label: 'Sent command color',
-    keywords: 'echo local command typed input',
-    target: at('input', 'command-line', 'sent-color'),
-  },
-  {
-    label: 'Show the commands your macros send',
-    keywords: 'macro echo keys',
-    target: at('input', 'command-line', 'echo-macros'),
+    label: 'Ask before you post',
+    description:
+      'Turn this off and Post posts your note at once, unless a report would record a room other than the one you began it in.',
+    keywords: 'writing card note post confirm ask sure',
+    target: at('input', 'writing', 'writing-ask-post'),
   },
   {
     label: 'Wait between pasted lines',
@@ -401,27 +498,27 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'advanced', 'paste-delay'),
   },
 
-  // Input, Prompt (P12).
+  // Prompt, the section that left Input.
   {
     label: "Your game's prompt",
     description: 'Your prompt setting in the game. Vosh reads its codes.',
     keywords: 'prompt codes setting fight prompt fprompt capture pattern point line',
-    target: at('input', 'prompt', 'prompt-game'),
+    target: at('prompt', undefined, 'prompt-game'),
   },
   {
     label: 'Draw your own prompt',
     description: 'It takes the place of the prompt the game sends.',
     keywords: 'custom prompt design template customize gag replace preview',
-    target: at('input', 'prompt'),
+    target: at('prompt'),
   },
   {
     label: 'Where your prompt shows',
     description: 'Your prompt shows in the text, where the game sends it.',
     keywords: 'prompt pin pinned lift lifted raise band chip bottom',
-    target: at('input', 'prompt', 'prompt-show'),
+    target: at('prompt', undefined, 'prompt-show'),
   },
 
-  // Automation, from the approved board.
+  // Automation.
   {
     label: 'Triggers',
     keywords:
@@ -454,6 +551,24 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'preset triggers macros built in numpad movement walk keys alerts tells name attacked health connection banner notification sound',
     target: at('automation', 'presets'),
   },
+  // Each preset of the library, on its own card, which holds its colors,
+  // Your changes and Reset to preset. The alert presets come from Rust,
+  // so the Presets row finds them.
+  ...PRESETS.map(
+    (preset): SettingsRowEntry => ({
+      label: preset.name,
+      description: preset.description,
+      keywords: [
+        'preset',
+        PRESET_CATEGORIES[preset.category].toLowerCase(),
+        Object.keys(preset.colors).length > 0 ? 'colors swatch swatches' : '',
+        'your changes edits edited reset to preset',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      target: at('automation', 'presets', `presets:${preset.id}`),
+    }),
+  ),
   {
     label: 'Loadouts',
     keywords: 'loadout groups active catalog',
@@ -471,8 +586,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('automation', undefined, 'json'),
   },
 
-  // Scripts, from the approved boards. A section here names a plugin,
-  // so each row is an anchor on the list page.
+  // Scripts. A section here names a plugin, so each row is an anchor on
+  // the list page.
   {
     label: 'Plugins',
     keywords: 'lua script plugin install new',
@@ -484,8 +599,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('scripts', undefined, 'console'),
   },
 
-  // Characters, from the approved board. No section means the active
-  // profile.
+  // Characters. No section means the active profile.
   {
     label: 'Profiles',
     keywords: 'profile character rename duplicate delete switch',
@@ -522,6 +636,35 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     description: 'Vosh saves the panes you arrange for each character.',
     keywords: 'panes reset default',
     target: at('characters', undefined, 'layout'),
+  },
+
+  // Screen reader, on top of Accessibility (board 13, Settings layout
+  // Q5). These rows came last, so they sit last and win no tie an
+  // older row won.
+  {
+    label: 'Read new game lines',
+    description: 'VoiceOver reads each line the game sends, after your gags and routes.',
+    keywords: 'screen reader voiceover narrator speech speak announce blind accessibility aria',
+    target: at('accessibility', 'screen-reader', 'read-game-lines'),
+  },
+  {
+    label: 'Read in the background',
+    description: 'Keep reading while you are in another app.',
+    keywords: 'screen reader voiceover speech unfocused other app window behind',
+    target: at('accessibility', 'screen-reader', 'read-in-background'),
+  },
+  {
+    label: 'Read your prompt',
+    description: 'Your prompt comes every pulse. Off reads it only when you press its key.',
+    keywords: 'screen reader voiceover speech prompt pulse shortcut key',
+    target: at('accessibility', 'screen-reader', 'read-your-prompt'),
+  },
+  {
+    label: 'Long bursts',
+    description:
+      'When more lines than this land at once, VoiceOver reads how many came and the last one.',
+    keywords: 'screen reader voiceover speech flood many lines count',
+    target: at('accessibility', 'screen-reader', 'long-bursts'),
   },
 ];
 

@@ -1,7 +1,7 @@
 import { forwardRef, useId, useState, type ReactNode } from 'react';
 import { CodeEditor } from '../../ui/CodeEditor';
 import { canonicalKeyFromEvent, labelForKey } from '../../automation/macroKeys';
-import { Field, useRowIds, type FieldProps } from '../../ui';
+import { CheckIcon, ChipButton, Field, PencilIcon, useRowIds, type FieldProps } from '../../ui';
 
 // Controls the Automation detail cards share. Each one wraps a
 // primitive from ui/ with the editing rule its field needs.
@@ -177,5 +177,37 @@ export function CodeRow({
         {...(placeholder !== undefined ? { placeholder } : {})}
       />
     </div>
+  );
+}
+
+/** A flagged row's line, what the preset now has in the warn tone, and
+ *  its two choices on the chip recipe, for a trigger row or a swatch.
+ *  Take the fix sets the row to the preset's value, and Keep mine keeps
+ *  yours. Both wait for Save. */
+export function FixChoice({
+  verb,
+  children,
+  onTake,
+  onKeep,
+}: {
+  verb: string;
+  children: ReactNode;
+  onTake: () => void;
+  onKeep: () => void;
+}) {
+  return (
+    <span className="st-auto-fix">
+      <span className="st-auto-fix-line">
+        The preset now {verb} {children}
+      </span>
+      <span className="st-auto-fix-choices">
+        <ChipButton icon={<CheckIcon size={12} />} onClick={onTake}>
+          Take the fix
+        </ChipButton>
+        <ChipButton icon={<PencilIcon size={12} />} onClick={onKeep}>
+          Keep mine
+        </ChipButton>
+      </span>
+    </span>
   );
 }

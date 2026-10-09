@@ -304,7 +304,13 @@ async fn in_loadout_mode_the_items_join_the_catalog_and_a_clash_keeps_yours() {
         .filter(|t| group(&t.group))
         .map(|t| t.name.as_str())
         .collect();
-    assert_eq!(triggers.len(), 3, "{triggers:?}");
+    // The preset trigger tells stays out with the list and the edits of
+    // the file, so the presets stay as the catalog has them.
+    assert_eq!(triggers, ["spam", "room-items"]);
+    assert!(saved_catalog.triggers.iter().all(|t| t.preset.is_none()));
+    assert_eq!(saved_catalog.enabled_presets, Some(Vec::new()));
+    let edits = &saved_catalog.preset_edits;
+    assert!(edits.is_empty(), "{edits:?}");
     // Your macros join in the file's group. Its preset macros stay out,
     // since a launch installs the catalog's own.
     assert_eq!(
@@ -319,6 +325,11 @@ async fn in_loadout_mode_the_items_join_the_catalog_and_a_clash_keeps_yours() {
         file.aliases.is_empty() && file.triggers.is_empty() && file.macros.is_empty(),
         "{file:?}"
     );
+    assert_eq!(
+        file.ui.enabled_presets,
+        [crate::loadouts::presets::PRESETS_OFF]
+    );
+    assert!(file.preset_edits.is_empty(), "{:?}", file.preset_edits);
     assert_eq!(file.timers.len(), 1);
     assert!(state.selected_profile().await.aliases.get("heal").is_some());
 }

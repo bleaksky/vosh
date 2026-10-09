@@ -1,14 +1,13 @@
-/* The sessions sidebar of the Sessions review, inside the first column
+/* The sessions sidebar, inside the first column
    of the frame that frame.css lays out: the header, the rows and their
    marks, the drag, the name field, the card beside a row, the spinner
    and the line you drag to resize it. Then the session popover's list
    of sessions, which takes the sidebar's place while it is folded, and
    the total the session button shows then. Loads last, after frame.css.
-   Every rule sits under a shell-sessions- class, or a shell-menu- class
-   only that list uses. */
+   Every rule sits under a shell-sessions- class, a shell-menu- class
+   only that list uses, or the menu.is-listed popover that holds it. */
 
-/* Board 2 of the Sessions review, on otty's measures (otty-measure.md).
-   220 of rows on the panel ground, then a 1 px --sep line at x 220,
+/* 220 of rows on the panel ground, then a 1 px --sep line at x 220,
    drawn inset the way the Settings sidebar draws its own. */
 .shell-sessions {
   display: flex;
@@ -23,9 +22,9 @@
   -webkit-user-select: none;
 }
 
-/* The top 32 drags the window and holds the lights on macOS. New
-   session and Hide sessions end 16 in from the line, at otty's centers
-   x 162 and 190 on y 16, and stay in view where otty shows them only on
+/* The top 32 drags the window and holds the lights and the sessions
+   toggle on macOS. New session ends 16 in from the line, at
+   center x 190 on y 16, and stays in view rather than show only on
    hover, since the plus is how you open a session. */
 .shell-sessions-top {
   position: relative;
@@ -51,7 +50,7 @@
 /* SESSIONS in the caps label style at x 20, its line centered at y 49,
    so the first row's slot starts at 59. It stays put over the list, and
    once a row has passed under it a --divider hairline draws along its
-   foot (board 8). */
+   foot. */
 .shell-sessions-head {
   position: relative;
   z-index: 1;
@@ -71,16 +70,16 @@
   box-shadow: 0 1px 0 var(--divider);
 }
 
-/* How many sessions are open, 6 after SESSIONS (S8). */
+/* How many sessions are open, 6 after SESSIONS. */
 .shell-sessions-total {
   margin-left: 6px;
   font-weight: 400;
 }
 
 /* The list stops 1 px short of the line, so the pill runs 8 to 212 and
-   clears it, as otty's does. It scrolls with no bar, as the frame draws
-   it, since a bar would take its width from the rows on Windows and
-   Linux. The hairline and the cut row say there is more. */
+   clears it. It scrolls with no bar, since a bar would take its width
+   from the rows on Windows and Linux. The hairline and the cut row say
+   there is more. */
 .shell-sessions-list {
   position: relative;
   flex: 1 1 auto;
@@ -97,14 +96,13 @@
 }
 
 /* Rows on a 46 pitch, the pill 44 high and inset 8 with Vosh's row
-   radius (S1 of the Sessions Sidebar review, board 02). Its padding is 5
-   by 12, so line one runs 13/18 from y 5 and line two 12/16 from y 23.
-   The mark sits in a 16 square at x 20, the name starts at x 44 after
-   an 8 gap, and the right column ends at x 200. Every part keeps its
-   place, so a row never shifts as its state changes, and the name and
-   the room end in an ellipsis before the numbers do. The slot lets the
-   pointer through, so it counts as under the pointer only while its row
-   or the row's close button is. */
+   radius. Its padding is 5 by 12, so line one runs 13/18 from y 5 and
+   line two 12/16 from y 23. The mark sits in a 16 square at x 20, the
+   name starts at x 44 after an 8 gap, and the right column ends at x
+   200. Every part keeps its place, so a row never shifts as its state
+   changes, and the name and the room end in an ellipsis before the
+   numbers do. The slot lets the pointer through, so it counts as under
+   the pointer only while its row or the row's close button is. */
 .shell-sessions-slot {
   position: relative;
   height: 46px;
@@ -135,8 +133,8 @@
   pointer-events: auto;
 }
 
-/* A row behind brightens once the game prints a line there (Q9), and
-   dims while its session is not connected (Q8). */
+/* A row behind brightens once the game prints a line there, and
+   dims while its session is not connected. */
 .shell-sessions-row.is-new {
   color: var(--text);
 }
@@ -170,7 +168,7 @@
   font-weight: 500;
 }
 
-/* The status mark (S2): the green dot while the session plays, the
+/* The status mark: the green dot while the session plays, the
    ring while it is not connected, and the hand, the spinner or the
    triangle while something needs you, in the theme's own tones. */
 .shell-sessions-mark {
@@ -194,21 +192,6 @@
 
 .shell-sessions-mark.is-triangle {
   color: var(--danger);
-}
-
-.shell-sessions-dot {
-  display: block;
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-}
-
-.shell-sessions-mark.is-live .shell-sessions-dot {
-  background: var(--success);
-}
-
-.shell-sessions-mark.is-off .shell-sessions-dot {
-  box-shadow: inset 0 0 0 1.25px var(--tertiary);
 }
 
 /* The name, and a port that tells the session apart in quiet meta
@@ -236,19 +219,36 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The right column of line one, which holds the count, or the key
-   while you hold ⌘. */
+/* The right column of line one, which holds the eye of the session's
+   snoops, then the count, or the key while you hold ⌘. */
 .shell-sessions-end {
   grid-row: 1;
   grid-column: 3;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 6px;
   min-width: 16px;
   height: 16px;
 }
 
-/* What waits for you, white on the accent in a pill 16 high (S4). */
+/* A session's snoops: the eye and the count, in line one's right
+   column. */
+.shell-sessions-snoops {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-sessions-row[aria-current='true'] .shell-sessions-snoops {
+  color: var(--secondary);
+}
+
+/* What waits for you, white on the accent in a pill 16 high. */
 .shell-sessions-count {
   display: block;
   min-width: 16px;
@@ -264,7 +264,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* While you hold ⌘ the row's key takes the count's place (board 8). */
+/* While you hold ⌘ the row's key takes the count's place. */
 .shell-sessions-key {
   margin-right: -2px;
   font-size: 11px;
@@ -324,8 +324,8 @@
 }
 
 /* Under the pointer the close button takes the count's place, a 16
-   square on line one ending 18 in from the slot's right, as VS Code and
-   otty do it (S6). */
+   square on line one ending 18 in from the slot's right, as VS Code
+   does it. */
 .shell-sessions-close {
   position: absolute;
   top: 7px;
@@ -363,7 +363,7 @@
 /* A row in the air follows the pointer on the floating ground with both
    its lines, its name in the text tone, over the rows it passes. The
    other rows let the pointer through, so none lights under it, and part
-   to make room (board 8). */
+   to make room. */
 .shell-sessions-list.is-dragging .shell-sessions-row,
 .shell-sessions-list.is-dragging .shell-sessions-close {
   pointer-events: none;
@@ -402,8 +402,8 @@
   pointer-events: none;
 }
 
-/* The name as a field on line one, over the name and the right column
-   (S5, board 04). Its text starts at the name's own x of 44, so the
+/* The name as a field on line one, over the name and the right column.
+   Its text starts at the name's own x of 44, so the
    field reaches 6 past it on each side, 22 high in the control fill
    with an accent ring, at the regular weight even on the selected row.
    Its selection takes the accent tint the frame draws. */
@@ -436,7 +436,7 @@
   opacity: 1;
 }
 
-/* The card beside a row under the pointer (S6, board 03), on the menus'
+/* The card beside a row under the pointer, on the menus'
    floating recipe: 264 wide on --raised with --shadow-float and the
    card radius. The head is the row's name at 600 with its port, then
    the world and the profile in secondary, then the facts against a
@@ -445,7 +445,7 @@
    pointer passes through it. */
 .shell-sessions-card {
   position: fixed;
-  z-index: 800;
+  z-index: var(--z-card);
   box-sizing: border-box;
   width: 264px;
   padding: 12px 14px 10px;
@@ -528,7 +528,7 @@
   color: var(--tertiary);
 }
 
-/* The spinner turns a spoke at a time, as otty's does, and holds still
+/* The spinner turns a spoke at a time, and holds still
    for reduced motion. */
 @media (prefers-reduced-motion: no-preference) {
   .shell-sessions-mark.is-spinner svg {
@@ -571,22 +571,11 @@
   background: var(--accent);
 }
 
-/* The session popover's list of sessions while the sidebar is folded
-   (board 8). SESSIONS in the palette's caps style heads it. */
-.shell-menu-head {
-  margin: 0;
-  padding: 7px 12px 3px;
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--tertiary);
-  white-space: nowrap;
-}
-
+/* The session popover's list of sessions while the sidebar is folded,
+   under the menu-head SESSIONS (overlays.css). */
 /* Each row takes the sidebar's two lines on the menu's recipe, 44 high
-   inside the menu's 6, its mark 10 in and its right column 12 in (S7,
-   board 05). The name keeps the text tone and line two the tertiary
+   inside the menu's 6, its mark 10 in and its right column 12 in.
+   The name keeps the text tone and line two the tertiary
    one, the row in front too, which the check marks. */
 .shell-menu-session {
   display: grid;
@@ -612,29 +601,35 @@
   cursor: default;
 }
 
-.shell-menu-session:focus-visible,
-.shell-menu-session-slot:hover .shell-menu-session {
-  background: var(--menu-hi);
+/* The row under focus is lit, and only that one. The pointer moves the
+   focus, so a row under a resting pointer goes dark once the arrow keys
+   move on. */
+.shell-menu-session:focus {
+  background: var(--hover);
   outline: none;
 }
 
-.shell-menu-session .shell-sessions-end .pane-menu-check {
+.shell-menu-session .shell-sessions-end .menu-check {
   margin: 0 -4px 0 0;
+}
+
+.shell-menu-session .shell-sessions-end .menu-keys {
+  margin: 0;
 }
 
 /* A list too long for the window scrolls with no bar, as the sidebar's
    does, between SESSIONS and the rows under it, which stay put. It
    keeps two rows in view in the shortest window. */
-.shell-menu.is-listed {
+.menu.is-listed {
   display: flex;
   flex-direction: column;
 }
 
-.shell-menu.is-listed > * {
+.menu.is-listed > * {
   flex: none;
 }
 
-.shell-menu.is-listed > .shell-menu-sessions {
+.menu.is-listed > .shell-menu-sessions {
   flex: 0 1 auto;
   min-height: 60px;
   overflow-y: auto;
@@ -646,7 +641,7 @@
 }
 
 /* Under the pointer a row shows its close button in its right column,
-   the sidebar's cross on line one, and closes that session (Q13). */
+   the sidebar's cross on line one, and closes that session. */
 .shell-menu-session-slot {
   position: relative;
 }
@@ -685,8 +680,42 @@
 }
 
 /* The total of what waits on the other sessions sits 8 after the
-   session button's chevron while the sidebar is folded (S7). */
+   session button's chevron while the sidebar is folded. */
 .shell-title-button .shell-sessions-count {
   flex: none;
   margin-left: 8px;
+}
+
+/* In a window too narrow for the sidebar's column, the sidebar slides
+   in over the terminal from the left edge, full height, its ground
+   running up under the lights and the toggle as in its column. It
+   floats, so it takes the float shadow on its right.
+   Reduced motion drops the slide. */
+.shell-sessions-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-float);
+  animation: shell-sessions-slide 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes shell-sessions-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-sessions-overlay {
+    animation: none;
+  }
 }

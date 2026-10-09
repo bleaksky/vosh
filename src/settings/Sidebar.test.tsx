@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 
-// The nav as the boards draw it. Effects do not run in a markup render,
+// The nav as it draws. Effects do not run in a markup render,
 // so the Find listener never reaches the app.
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -16,27 +16,62 @@ function draw(group: Parameters<typeof Sidebar>[0]['group']): string {
   );
 }
 
-/** Each nav row, its link, whether it is the page shown, its icon path
- *  and its label. */
+/** Each nav row, its link, whether it starts a cluster, whether it is
+ *  the page shown, its icon path and its label. */
 function rows(html: string) {
   return [
     ...html.matchAll(
-      /<a href="#(\w+)" class="st-nav-item"( aria-current="page")?><svg[^>]*>(.*?)<\/svg><span class="st-nav-label">([^<]*)<\/span><\/a>/g,
+      /<a href="#(\w+)" class="st-nav-item"( data-cluster="")?( aria-current="page")?><svg[^>]*>(.*?)<\/svg><span class="st-nav-label">([^<]*)<\/span><\/a>/g,
     ),
-  ].map(([, id, current, icon, label]) => ({ id, current: !!current, icon, label }));
+  ].map(([, id, cluster, current, icon, label]) => ({
+    id,
+    cluster: !!cluster,
+    current: !!current,
+    icon,
+    label,
+  }));
 }
 
 describe('the Settings sidebar', () => {
-  it('draws the seven groups in board order, Scripts between Automation and Characters', () => {
-    expect(rows(draw('general')).map((r) => r.label)).toEqual([
+  it('draws the eleven groups in four clusters, with no headings', () => {
+    const drawn = rows(draw('general'));
+    expect(drawn.map((r) => r.label)).toEqual([
       'General',
       'Appearance',
+      'Accessibility',
       'Layout',
+      'Vitals',
+      'Prompt',
       'Input',
       'Automation',
       'Scripts',
+      'Logs',
       'Characters',
     ]);
+    // A gap starts Layout, Automation and Logs.
+    expect(drawn.filter((r) => r.cluster).map((r) => r.label)).toEqual([
+      'Layout',
+      'Automation',
+      'Logs',
+    ]);
+  });
+
+  it('is a landmark named Sidebar', () => {
+    expect(draw('general')).toMatch(/^<aside class="st-sidebar" aria-label="Sidebar">/);
+  });
+
+  it('names the search shortcut apart, with its keycaps out of the name', () => {
+    const html = draw('general');
+    expect(html).toMatch(/role="combobox"[^>]*aria-keyshortcuts="Meta\+F"/);
+    expect(html).toContain('<span class="keys st-search-keys" aria-hidden="true">');
+  });
+
+  it('gives each group its own glyph, and Prompt the terminal glyph Help draws for Play', () => {
+    const drawn = rows(draw('general'));
+    expect(new Set(drawn.map((r) => r.icon)).size).toBe(drawn.length);
+    expect(drawn.find((r) => r.id === 'prompt')?.icon).toBe(
+      '<rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"></rect><path d="M4.75 6.25L6.75 8l-2 1.75M8.75 10h2.5"></path>',
+    );
   });
 
   it('marks Scripts with the code glyph and as the page shown', () => {

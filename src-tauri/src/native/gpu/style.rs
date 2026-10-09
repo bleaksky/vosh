@@ -15,7 +15,8 @@ use crate::native::grid::{CellFlags, Underline};
 /// Linear-ish rgba in 0..1, ready for a wgpu vertex/instance buffer.
 pub(crate) type Rgba = [f32; 4];
 
-// Defaults until theming lands (M4). Chosen to match Vosh's dark surface.
+// Defaults until the page sends a theme. Chosen to match Vosh's dark
+// surface.
 const DEFAULT_FG: Rgb = Rgb {
     r: 0xcc,
     g: 0xcc,

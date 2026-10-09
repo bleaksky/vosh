@@ -1,14 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { normalizeUiConfig, VITALS_STYLES, type UiConfig } from '../../ipc/uiConfig';
+import { normalizeUiConfig, type UiConfig } from '../../ipc/uiConfig';
+import { VITALS_STYLES } from '../../ipc/uiConfigVitals';
 import { nextVitals, type Vitals } from '../../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../../terminal/bandCells';
 import { VitalsTiles } from './VitalsGallery';
 import { arrowPick, galleryCaption, galleryVitals, SAMPLE_VITALS, tileFit } from './vitalsStyles';
 import { vitalsStylePick } from '../../panel/vitalsView';
 
-// The Style gallery under Settings, Layout, Vitals (board 2 and board 5
-// of the Vitals Styles review). The tiles draw from plain values here.
+// The Style gallery under Settings, Layout, Vitals. The tiles draw from
+// plain values here.
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -43,15 +44,18 @@ function draw(patch: Partial<UiConfig> = {}, vitals: Vitals = SAMPLE_VITALS): st
     <VitalsTiles
       config={config(patch)}
       vitals={vitals}
+      history={[]}
       text={null}
       env={ENV}
       inks={{}}
+      flame="#eeca71"
       panel={300}
       width={300}
       scale={0.98}
       size={12}
       family={null}
       measure={(text) => text.length * 7}
+      measureGame={(text) => text.length * 7}
       onPick={() => undefined}
     />,
   );
@@ -71,12 +75,28 @@ const names = (html: string) =>
   );
 
 describe('the Style gallery', () => {
-  it('draws six tiles in the board order, named under each', () => {
+  it('draws a tile for each style in the board order, named under each', () => {
     const html = draw();
     expect(radios(html).map((r) => r.split(' ')[0])).toEqual([...VITALS_STYLES]);
-    expect(names(html)).toEqual(['Rows', 'One line', 'Ledger', 'Gauges', 'Pips', 'Text']);
+    expect(names(html)).toEqual([
+      'Rows',
+      'One line',
+      'Ledger',
+      'Gauges',
+      'Pips',
+      'Bands',
+      'Ladders',
+      'Blocks',
+      'Traces',
+      'Dials',
+      'Rings',
+      'Vials',
+      'Orbs',
+      'Candles',
+      'Text',
+    ]);
     expect(html).toContain('data-st-anchor="style"');
-    expect(html).toContain('<legend class="st-visually-hidden">Style</legend>');
+    expect(html).toContain('<legend class="visually-hidden">Style</legend>');
   });
 
   it('checks the style you play, your density until you pick one', () => {
@@ -88,6 +108,15 @@ describe('the Style gallery', () => {
       'ledger',
       'gauges checked',
       'pips',
+      'bands',
+      'ladders',
+      'blocks',
+      'traces',
+      'dials',
+      'rings',
+      'vials',
+      'orbs',
+      'candles',
       'text',
     ]);
   });
@@ -100,6 +129,15 @@ describe('the Style gallery', () => {
       'Ledger',
       'Gauges',
       'Pips',
+      'Bands',
+      'Ladders',
+      'Blocks',
+      'Traces',
+      'Dials',
+      'Rings',
+      'Vials',
+      'Orbs',
+      'Candles',
       'Text Yours in 0.7',
     ]);
     expect(radios(html)).toContain('text checked');
@@ -163,7 +201,7 @@ describe('the arrow keys', () => {
 
 describe('the numbers the tiles draw', () => {
   it('are the catalog samples while no session has your vitals', () => {
-    expect(galleryVitals(null)).toEqual({ vitals: SAMPLE_VITALS, live: false });
+    expect(galleryVitals(null)).toEqual({ vitals: SAMPLE_VITALS, history: [], live: false });
     expect(galleryVitals({ vitals: null, combat: null }).live).toBe(false);
     expect(SAMPLE_VITALS).toMatchObject({
       hp: 1020,
@@ -212,6 +250,12 @@ describe('the tile width', () => {
     expect(tileFit(420, 264)).toEqual({ width: 352, scale: 0.75 });
     expect(galleryCaption('rows', 420, 352)).toBe(
       'Rows. Each vital gets a row of its own, its value at the right and a line under it. Your panel is 420 pt wide, so each tile draws your vitals at 352 pt, scaled to fit.',
+    );
+  });
+
+  it('says Ladders leaves the last peak lit after a hit', () => {
+    expect(galleryCaption('ladders', 300, 300)).toMatch(
+      /^Ladders\. Each vital lights a row of segments, and a hit leaves its last peak lit for a moment\. /,
     );
   });
 

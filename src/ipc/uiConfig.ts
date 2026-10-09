@@ -1,8 +1,8 @@
-// The UI config as every window reads it, the events that carry each
-// field, and the calls that save some of its fields alone.
+// The UI config as every window reads it and the calls that save some
+// of its fields alone. uiConfigEvents.ts hears one field at a time.
 
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { normalizePanelFont } from '../panel/panelFont';
 import { normalizePanelSize } from '../panel/panelSize';
 import { toColorVision, type ColorVision } from '../theme/gameFit';
@@ -21,33 +21,42 @@ import {
   type AffectsStyle,
   type TrackedAffect,
 } from './affects';
-import {
-  BASE_ANSI_CHANGED,
-  BLINK_TEXT_CHANGED,
-  BRIGHT_BOLD_CHANGED,
-  CHAT_COLORS_CHANGED,
-  CHIP_STYLE_CHANGED,
-  COLOR_VISION_CHANGED,
-  ECHO_MACROS_CHANGED,
-  FIT_GAME_COLORS_CHANGED,
-  FONT_CHANGED,
-  GAME_TIME_CHANGED,
-  INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
-  INPUT_ECHO_COLOR_CHANGED,
-  KEEP_LAST_CHANGED,
-  PASTE_LINE_DELAY_CHANGED,
-  READABLE_HIGHLIGHTS_CHANGED,
-  SPELLCHECK_PROMPT_CHANGED,
-  SPLIT_DIVIDER_CHANGED,
-  TERMINAL_LINE_HEIGHT_CHANGED,
-  THEME_TERMINAL_COLORS_CHANGED,
-  TICK_COUNT_CHANGED,
-  UI_CONFIG_REPLACED,
-  VITALS_OPTIONS_CHANGED,
-  VITALS_TEXT_CHANGED,
-} from './events';
+import { CHAT_COLORS_CHANGED, UI_CONFIG_REPLACED, WRITING_ASK_POST_CHANGED } from './events';
 import { THEME_PREFS_FIELDS, type CustomTheme, type ThemeChoice } from './theme';
+import {
+  normalizeVitalsColors,
+  normalizeVitalsDensity,
+  normalizeVitalsMeter,
+  normalizeVitalsOff,
+  normalizeVitalsOpponent,
+  normalizeVitalsOrder,
+  normalizeVitalsPlace,
+  normalizeVitalsStyle,
+  normalizeVitalsTextPrevious,
+  normalizeVitalsValues,
+  VITALS_STYLES,
+  type SavedVitalsStyle,
+  type Vital,
+  type VitalOff,
+  type VitalsColors,
+  type VitalsDensity,
+  type VitalsMeter,
+  type VitalsOpponent,
+  type VitalsPlace,
+  type VitalsStyle,
+  type VitalsValues,
+} from './uiConfigVitals';
+import {
+  coerceEchoMarkText,
+  normalizeInputCursorStyle,
+  normalizeInputEchoMark,
+  normalizeInputLineBackground,
+  normalizeInputLineSize,
+  optionalColor,
+  type InputCursorStyle,
+  type InputEchoMark,
+  type InputLineBackground,
+} from './uiConfigInput';
 
 export interface SystemFontEntry {
   family: string;
@@ -61,28 +70,6 @@ export async function listSystemFonts(): Promise<SystemFontEntry[]> {
   } catch {
     return [];
   }
-}
-
-/** Caret shapes the command line can paint. Each one renders inside the
- *  same anchor box as the default block, so switching shapes never
- *  reflows the input row. */
-export const INPUT_CURSOR_STYLES = [
-  'block',
-  'block_outline',
-  'half_block',
-  'underline',
-  'underline_thick',
-  'pipe',
-  'pipe_thick',
-] as const;
-
-export type InputCursorStyle = (typeof INPUT_CURSOR_STYLES)[number];
-
-/** Coerce an unknown caret shape back to the default block. */
-export function normalizeInputCursorStyle(value: unknown): InputCursorStyle {
-  return INPUT_CURSOR_STYLES.includes(value as InputCursorStyle)
-    ? (value as InputCursorStyle)
-    : 'block';
 }
 
 /** Terminal row spacing. Each id maps to the multiple of the glyph
@@ -101,244 +88,15 @@ export function normalizeTerminalLineHeight(value: unknown): TerminalLineHeight 
   return value === 'compact' || value === 'loose' ? value : 'default';
 }
 
-/** How the vitals under the panel's panes lay out. `rows` gives each
- *  vital its own row. `line` sets Health, Mana, and Moves side by side
- *  on one row. */
-export const VITALS_DENSITIES = ['rows', 'line'] as const;
+/** What switches the theme by itself, the Switch themes row: nothing,
+ *  the OS appearance, or the game's dawn and dusk. */
+export const THEME_FOLLOWS = ['off', 'system', 'game'] as const;
 
-export type VitalsDensity = (typeof VITALS_DENSITIES)[number];
+export type ThemeFollow = (typeof THEME_FOLLOWS)[number];
 
-/** Coerce an unknown vitals density back to rows. */
-export function normalizeVitalsDensity(value: unknown): VitalsDensity {
-  return value === 'line' ? 'line' : 'rows';
-}
-
-/** What each vital's value shows. `current-max` reads `186 / 1020`,
- *  `current` reads `186`, and `percent` reads `18%`. */
-export const VITALS_VALUES = ['current-max', 'current', 'percent'] as const;
-
-export type VitalsValues = (typeof VITALS_VALUES)[number];
-
-/** Coerce an unknown value form back to current and max. */
-export function normalizeVitalsValues(value: unknown): VitalsValues {
-  return value === 'current' || value === 'percent' ? value : 'current-max';
-}
-
-/** The meter under each vital. `line` is the 2 px meter, `bar` the
- *  4 px one, and `none` drops the meters and tightens the rows. */
-export const VITALS_METERS = ['line', 'bar', 'none'] as const;
-
-export type VitalsMeter = (typeof VITALS_METERS)[number];
-
-/** Coerce an unknown meter back to the line. */
-export function normalizeVitalsMeter(value: unknown): VitalsMeter {
-  return value === 'bar' || value === 'none' ? value : 'line';
-}
-
-/** The six styles of the gallery, in its order. Rows and One line are
- *  the two densities, and vitals_style holds the other four. */
-export const VITALS_STYLES = ['rows', 'line', 'ledger', 'gauges', 'pips', 'text'] as const;
-
-export type VitalsStyle = (typeof VITALS_STYLES)[number];
-
-/** The styles vitals_style saves. Rows and One line stay in
- *  vitals_density, so a build without styles still reads your look. */
-const SAVED_VITALS_STYLES = ['ledger', 'gauges', 'pips', 'text'] as const;
-
-export type SavedVitalsStyle = (typeof SAVED_VITALS_STYLES)[number];
-
-/** Coerce an unknown saved style back to null, which draws the
- *  density. */
-export function normalizeVitalsStyle(value: unknown): SavedVitalsStyle | null {
-  return SAVED_VITALS_STYLES.find((style) => style === value) ?? null;
-}
-
-/** The style your vitals draw in, the one you picked or else your
- *  density, so a player who never picks sees today's look (Vitals
- *  Styles Q12). */
-export function shownStyle(config: Pick<UiConfig, 'vitals_style' | 'vitals_density'>): VitalsStyle {
-  return config.vitals_style ?? config.vitals_density;
-}
-
-/** Where your vitals show, under the panel's panes or in the status
- *  line. */
-export const VITALS_PLACES = ['panel', 'status'] as const;
-
-export type VitalsPlace = (typeof VITALS_PLACES)[number];
-
-/** Coerce an unknown place back to the panel. */
-export function normalizeVitalsPlace(value: unknown): VitalsPlace {
-  return value === 'status' ? 'status' : 'panel';
-}
-
-/** Your vitals in today's order. */
-export const VITALS = ['hp', 'mana', 'move'] as const;
-
-export type Vital = (typeof VITALS)[number];
-
-/** Keep each known vital once, in the order given, and add any missing
- *  after them in today's order. */
-export function normalizeVitalsOrder(value: unknown): Vital[] {
-  const given = Array.isArray(value) ? (value as unknown[]) : [];
-  const kept: Vital[] = [];
-  for (const name of [...given, ...VITALS]) {
-    const vital = VITALS.find((v) => v === name);
-    if (vital && !kept.includes(vital)) kept.push(vital);
-  }
-  return kept;
-}
-
-/** What vitals_off can hold, each vital and your opponent's row. */
-export const VITALS_OFF = [...VITALS, 'opponent'] as const;
-
-export type VitalOff = (typeof VITALS_OFF)[number];
-
-/** Keep each known name once, in the order of VITALS_OFF. */
-export function normalizeVitalsOff(value: unknown): VitalOff[] {
-  const given = Array.isArray(value) ? (value as unknown[]) : [];
-  return VITALS_OFF.filter((name) => given.includes(name));
-}
-
-/** Where your opponent's row sits in a fight. */
-export const VITALS_OPPONENT_PLACES = ['top', 'bottom'] as const;
-
-export type VitalsOpponent = (typeof VITALS_OPPONENT_PLACES)[number];
-
-/** Coerce an unknown opponent place back to the top. */
-export function normalizeVitalsOpponent(value: unknown): VitalsOpponent {
-  return value === 'bottom' ? 'bottom' : 'top';
-}
-
-/** Each vital's color as an ANSI slot from 0 to 15. A vital left out
- *  takes Default. */
-export type VitalsColors = Partial<Record<Vital, number>>;
-
-/** Keep the colors of known vitals that name a slot from 0 to 15. */
-export function normalizeVitalsColors(value: unknown): VitalsColors {
-  const given = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-  const colors: VitalsColors = {};
-  for (const vital of VITALS) {
-    const slot = given[vital];
-    if (typeof slot === 'number' && Number.isInteger(slot) && slot >= 0 && slot <= 15) {
-      colors[vital] = slot;
-    }
-  }
-  return colors;
-}
-
-/** How many earlier vitals texts Vosh keeps. */
-const VITALS_TEXT_PREVIOUS = 2;
-
-/** Drop blank and repeated texts and keep the newest two. */
-export function normalizeVitalsTextPrevious(value: unknown): string[] {
-  const given = Array.isArray(value) ? (value as unknown[]) : [];
-  const kept: string[] = [];
-  for (const text of given) {
-    if (kept.length === VITALS_TEXT_PREVIOUS) break;
-    if (typeof text === 'string' && text.length > 0 && !kept.includes(text)) kept.push(text);
-  }
-  return kept;
-}
-
-/** Every vitals choice the footer, the status line and the menu draw
- *  from, as one event payload, so a pick moves them together. The
- *  status line reads the values and the warning, never the meter. Your
- *  vitals text comes on its own event, rendered (src/ipc/vitals.ts). */
-export interface VitalsOptions {
-  /** The style shown, your pick or else your density. */
-  style: VitalsStyle;
-  place: VitalsPlace;
-  order: Vital[];
-  off: VitalOff[];
-  opponent: VitalsOpponent;
-  colors: VitalsColors;
-  values: VitalsValues;
-  meter: VitalsMeter;
-  /** Warn under two thirds and turn danger under one third, like the
-   *  Group pane. Off keeps danger under 20 percent. */
-  warn_thirds: boolean;
-  /** Hide the panel's vitals while your prompt is pinned. */
-  hide_when_pinned: boolean;
-}
-
-/** What Reset to default under Customize vitals puts back. Every vital
- *  on in today's order with Default colors, your opponent on top,
- *  Current and max, Line, and the warning off. Your style, where your
- *  vitals show and Hide vitals while your prompt is pinned stay as they
- *  are. */
-export const DEFAULT_VITALS_CUSTOM: Pick<
-  UiConfig,
-  | 'vitals_order'
-  | 'vitals_off'
-  | 'vitals_colors'
-  | 'vitals_opponent'
-  | 'vitals_values'
-  | 'vitals_meter'
-  | 'vitals_warn_thirds'
-> = {
-  vitals_order: [...VITALS],
-  vitals_off: [],
-  vitals_colors: {},
-  vitals_opponent: 'top',
-  vitals_values: 'current-max',
-  vitals_meter: 'line',
-  vitals_warn_thirds: false,
-};
-
-/** The fields of the config VitalsOptions reads. */
-type VitalsFields =
-  | 'vitals_style'
-  | 'vitals_density'
-  | 'vitals_place'
-  | 'vitals_order'
-  | 'vitals_off'
-  | 'vitals_opponent'
-  | 'vitals_colors'
-  | 'vitals_values'
-  | 'vitals_meter'
-  | 'vitals_warn_thirds'
-  | 'vitals_hide_when_pinned';
-
-/** The vitals options a config holds. */
-export function vitalsOptionsOf(config: Pick<UiConfig, VitalsFields>): VitalsOptions {
-  return {
-    style: shownStyle(config),
-    place: config.vitals_place,
-    order: config.vitals_order,
-    off: config.vitals_off,
-    opponent: config.vitals_opponent,
-    colors: config.vitals_colors,
-    values: config.vitals_values,
-    meter: config.vitals_meter,
-    warn_thirds: config.vitals_warn_thirds,
-    hide_when_pinned: config.vitals_hide_when_pinned,
-  };
-}
-
-export const DEFAULT_VITALS_OPTIONS: VitalsOptions = vitalsOptionsOf({
-  ...DEFAULT_VITALS_CUSTOM,
-  vitals_style: null,
-  vitals_density: 'rows',
-  vitals_place: 'panel',
-  vitals_hide_when_pinned: true,
-});
-
-/** Read vitals options off the bus, filling anything missing or
- *  unknown with the defaults. */
-export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  return {
-    style: VITALS_STYLES.find((style) => style === o.style) ?? 'rows',
-    place: normalizeVitalsPlace(o.place),
-    order: normalizeVitalsOrder(o.order),
-    off: normalizeVitalsOff(o.off),
-    opponent: normalizeVitalsOpponent(o.opponent),
-    colors: normalizeVitalsColors(o.colors),
-    values: normalizeVitalsValues(o.values),
-    meter: normalizeVitalsMeter(o.meter),
-    warn_thirds: o.warn_thirds === true,
-    hide_when_pinned: o.hide_when_pinned !== false,
-  };
+/** Coerce an unknown mode back to off. */
+export function normalizeThemeFollow(value: unknown): ThemeFollow {
+  return THEME_FOLLOWS.find((mode) => mode === value) ?? 'off';
 }
 
 export interface UiConfig {
@@ -351,6 +109,15 @@ export interface UiConfig {
   light_theme: string;
   /** The theme shown while following the system and the OS is dark. */
   dark_theme: string;
+  /** What switches the theme by itself, one of THEME_FOLLOWS. Rust keeps
+   *  follow_system_appearance true only for `system`. */
+  theme_follow: ThemeFollow;
+  /** The theme shown by day while following the game. Empty until you
+   *  pick one. */
+  day_theme: string;
+  /** The theme shown by night while following the game. Empty until you
+   *  pick one. */
+  night_theme: string;
   auto_update: boolean;
   font_family: string;
   font_size: number;
@@ -389,6 +156,19 @@ export interface UiConfig {
    *  color a trigger paints text in at a lightness that reads on the
    *  theme's terminal background. On unless you turn it off. */
   readable_highlights: boolean;
+  /** Read new game lines. While on, the session sends each line it shows,
+   *  after gags, for a screen reader to announce. Off unless you turn it
+   *  on. */
+  screen_reader: boolean;
+  /** Read in the background, under Read new game lines. Off unless you
+   *  turn it on. */
+  screen_reader_background: boolean;
+  /** Read your prompt, under Read new game lines. Off unless you turn it
+   *  on. */
+  screen_reader_prompt: boolean;
+  /** Past this many lines in one pulse, the reader hears the count and
+   *  the last line. 4, 8, 16 or 32, and 8 unless you pick another. */
+  screen_reader_burst: ScreenReaderBurst;
   /** Collapse repeated lines. While on, the session shows a line the
    *  game sends that reads exactly as the line before it on screen,
    *  colors included, once with a count before it. Off unless you turn
@@ -417,9 +197,19 @@ export interface UiConfig {
    *  locally like typed commands, so under lag the keybind visibly
    *  registered before the world responds. */
   echo_macros: boolean;
-  /** When true (default), each command you send echoes after a grey
-   *  `›` and a space, Mark your commands under Input in Settings. */
-  input_echo_caret: boolean;
+  /** The mark each command you send echoes after, one of
+   *  INPUT_ECHO_MARKS. `›` by default. */
+  input_echo_mark: InputEchoMark;
+  /** Your own mark, at most four characters, kept while another mark is
+   *  picked. Rust coerces it. */
+  input_echo_mark_text: string;
+  /** Hex color of the mark. Null means the theme's bright black. */
+  input_echo_mark_color: string | null;
+  /** Draw the echo of each command faint, the mark unchanged. Off by
+   *  default. */
+  input_echo_dim: boolean;
+  /** Start the line you type in with the same mark. On by default. */
+  input_line_mark: boolean;
   /** Milliseconds to wait between lines when sending a multi-line
    *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
    *  flood filter does not kick. Clamped server-side to [0, 10000]. */
@@ -431,8 +221,42 @@ export interface UiConfig {
    *  `kill` / `oload` / alias names do not light up red. Default
    *  off; opt-in for roleplayers. */
   spellcheck_prompt: boolean;
+  /** Offer the writing card in a notice when you open the game's line
+   *  editor yourself. Default on. */
+  writing_offer: boolean;
+  /** The writing card asks before it posts a note. Off, Post posts at
+   *  once. Default on. */
+  writing_ask_post: boolean;
   /** Shape of the command-line caret. Defaults to the ember block. */
   input_cursor_style: InputCursorStyle;
+  /** The caret blinks. On by default, and Reduce motion still holds it
+   *  steady. */
+  input_caret_blink: boolean;
+  /** Hex color of the caret. Null means the theme accent. */
+  input_caret_color: string | null;
+  /** Hex color of what you type. Null means the theme text. */
+  input_line_color: string | null;
+  /** The command line's background, one of INPUT_LINE_BACKGROUNDS. */
+  input_line_background: InputLineBackground;
+  /** Your own background color, kept while another background is
+   *  picked. */
+  input_line_background_color: string | null;
+  /** Size in px of what you type. 0 follows your terminal size. */
+  input_line_size: number;
+  /** Color the command line as you type, by what Vosh knows the first
+   *  word to be. Off by default. */
+  input_type_colors: boolean;
+  /** Hex color of a line that starts with an alias. Null means the
+   *  theme's cyan. */
+  input_type_alias_color: string | null;
+  /** Hex color of a line that starts with a Vosh # command. Null means
+   *  the theme's magenta. */
+  input_type_hash_color: string | null;
+  /** Hex color of a chat line. Null means the theme's yellow. */
+  input_type_chat_color: string | null;
+  /** Hex color of a # command Vosh does not know. Null means the theme's
+   *  danger color. */
+  input_type_unknown_color: string | null;
   /** How the vitals under the panel's panes lay out, one of
    *  VITALS_DENSITIES. */
   vitals_density: VitalsDensity;
@@ -463,6 +287,8 @@ export interface UiConfig {
   /** At most two earlier texts, newest first. Saving vitals_text puts
    *  the one it replaces here. */
   vitals_text_previous: string[];
+  /** Show each hit, on every style with a fill. */
+  vitals_hit: boolean;
   /** The style your 0.7 vitals grew into, which the gallery marks
    *  Yours in 0.7, or null when they give no clue. Read only, nothing
    *  saves it. */
@@ -491,6 +317,30 @@ export interface UiConfig {
   /** At or under this many hours an affect's hours turn bold red. Whole
    *  hours from 0 to 99, never over affects_running_out_hours. */
   affects_almost_gone_hours: number;
+  /** The share of the terminal column the snoop split takes, from 0.05
+   *  to 0.95. You set it by dragging the line under the split. */
+  snoop_share: number;
+  /** The snoop split folded to its strip. */
+  snoop_folded: boolean;
+  /** Log sessions. Null until you choose, which logs every world but
+   *  this computer. */
+  log_sessions: boolean | null;
+  /** Scrollback size: the lines each terminal keeps above the screen,
+   *  and the scrollback file for the next launch, 1,000 to 100,000. */
+  scrollback_lines: number;
+  /** Where you dragged the writing card, its left and top edges in CSS
+   *  pixels from the window's corner. Null until you move it, which
+   *  keeps the place over the terminal the card works out itself. */
+  writing_card_left: number | null;
+  writing_card_top: number | null;
+  /** The rows the writing card's text box shows, 6 to 500. Null until
+   *  you drag its foot, which lets the box grow with the text. */
+  writing_card_rows: number | null;
+  /** The columns of text the writing card's box shows, 75 to 500. Null
+   *  until you drag its corner, which keeps 80. */
+  writing_card_cols: number | null;
+  /** The writing card opens in its pane in the panel. */
+  writing_card_pinned: boolean;
 }
 
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
@@ -548,6 +398,9 @@ export interface RawUiConfig {
   follow_system_appearance?: boolean;
   light_theme?: string;
   dark_theme?: string;
+  theme_follow?: string;
+  day_theme?: string;
+  night_theme?: string;
   auto_update: boolean;
   font_family: string;
   font_size: number;
@@ -563,6 +416,10 @@ export interface RawUiConfig {
   fit_game_colors?: boolean;
   color_vision?: string;
   readable_highlights?: boolean;
+  screen_reader?: boolean;
+  screen_reader_background?: boolean;
+  screen_reader_prompt?: boolean;
+  screen_reader_burst?: number;
   collapse_repeats?: boolean;
   collapse_fight_lines?: boolean;
   collapse_attack_lines?: boolean;
@@ -571,10 +428,27 @@ export interface RawUiConfig {
   split_divider_color?: string | null;
   input_echo_color?: string | null;
   echo_macros?: boolean;
-  input_echo_caret?: boolean;
+  input_echo_mark?: string;
+  input_echo_mark_text?: string;
+  input_echo_mark_color?: string | null;
+  input_echo_dim?: boolean;
+  input_line_mark?: boolean;
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
+  writing_offer?: boolean;
+  writing_ask_post?: boolean;
   input_cursor_style?: string;
+  input_caret_blink?: boolean;
+  input_caret_color?: string | null;
+  input_line_color?: string | null;
+  input_line_background?: string;
+  input_line_background_color?: string | null;
+  input_line_size?: number;
+  input_type_colors?: boolean;
+  input_type_alias_color?: string | null;
+  input_type_hash_color?: string | null;
+  input_type_chat_color?: string | null;
+  input_type_unknown_color?: string | null;
   vitals_density?: string;
   vitals_values?: string;
   vitals_meter?: string;
@@ -588,6 +462,7 @@ export interface RawUiConfig {
   vitals_colors?: unknown;
   vitals_text?: string;
   vitals_text_previous?: unknown;
+  vitals_hit?: boolean;
   vitals_legacy_style?: string | null;
   vitals_legacy_text?: unknown;
   chip_style?: string;
@@ -598,6 +473,15 @@ export interface RawUiConfig {
   affects_tint?: boolean;
   affects_running_out_hours?: number;
   affects_almost_gone_hours?: number;
+  snoop_share?: number;
+  snoop_folded?: boolean;
+  log_sessions?: boolean | null;
+  scrollback_lines?: number;
+  writing_card_left?: number | null;
+  writing_card_top?: number | null;
+  writing_card_rows?: number | null;
+  writing_card_cols?: number | null;
+  writing_card_pinned?: boolean;
 }
 
 /** A profile's UI config, the selected session's profile's when it
@@ -649,6 +533,9 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
       typeof cfg.dark_theme === 'string' && cfg.dark_theme.length > 0
         ? cfg.dark_theme
         : seedDarkTheme(theme, customThemes),
+    theme_follow: normalizeThemeFollow(cfg.theme_follow),
+    day_theme: typeof cfg.day_theme === 'string' ? cfg.day_theme : '',
+    night_theme: typeof cfg.night_theme === 'string' ? cfg.night_theme : '',
     auto_update: cfg.auto_update,
     font_family: cfg.font_family,
     font_size: cfg.font_size,
@@ -667,6 +554,10 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     fit_game_colors: cfg.fit_game_colors !== false,
     color_vision: toColorVision(cfg.color_vision),
     readable_highlights: cfg.readable_highlights !== false,
+    screen_reader: cfg.screen_reader === true,
+    screen_reader_background: cfg.screen_reader_background === true,
+    screen_reader_prompt: cfg.screen_reader_prompt === true,
+    screen_reader_burst: normalizeScreenReaderBurst(cfg.screen_reader_burst),
     collapse_repeats: cfg.collapse_repeats === true,
     collapse_fight_lines: cfg.collapse_fight_lines !== false,
     collapse_attack_lines: cfg.collapse_attack_lines === true,
@@ -686,13 +577,36 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         ? cfg.input_echo_color
         : null,
     echo_macros: cfg.echo_macros !== false,
-    input_echo_caret: cfg.input_echo_caret !== false,
+    input_echo_mark: normalizeInputEchoMark(cfg.input_echo_mark),
+    input_echo_mark_text:
+      typeof cfg.input_echo_mark_text === 'string'
+        ? coerceEchoMarkText(cfg.input_echo_mark_text)
+        : '',
+    input_echo_mark_color:
+      typeof cfg.input_echo_mark_color === 'string' && cfg.input_echo_mark_color.length > 0
+        ? cfg.input_echo_mark_color
+        : null,
+    input_echo_dim: cfg.input_echo_dim === true,
+    input_line_mark: cfg.input_line_mark !== false,
     paste_line_delay_ms:
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
+    writing_offer: cfg.writing_offer !== false,
+    writing_ask_post: cfg.writing_ask_post !== false,
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
+    input_caret_blink: cfg.input_caret_blink !== false,
+    input_caret_color: optionalColor(cfg.input_caret_color),
+    input_line_color: optionalColor(cfg.input_line_color),
+    input_line_background: normalizeInputLineBackground(cfg.input_line_background),
+    input_line_background_color: optionalColor(cfg.input_line_background_color),
+    input_line_size: normalizeInputLineSize(cfg.input_line_size),
+    input_type_colors: cfg.input_type_colors === true,
+    input_type_alias_color: optionalColor(cfg.input_type_alias_color),
+    input_type_hash_color: optionalColor(cfg.input_type_hash_color),
+    input_type_chat_color: optionalColor(cfg.input_type_chat_color),
+    input_type_unknown_color: optionalColor(cfg.input_type_unknown_color),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),
@@ -706,6 +620,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     vitals_colors: normalizeVitalsColors(cfg.vitals_colors),
     vitals_text: typeof cfg.vitals_text === 'string' ? cfg.vitals_text : '',
     vitals_text_previous: normalizeVitalsTextPrevious(cfg.vitals_text_previous),
+    vitals_hit: cfg.vitals_hit === true,
     vitals_legacy_style: VITALS_STYLES.find((style) => style === cfg.vitals_legacy_style) ?? null,
     vitals_legacy_text:
       typeof cfg.vitals_legacy_text === 'string' && cfg.vitals_legacy_text !== ''
@@ -719,17 +634,76 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     affects_tint: cfg.affects_tint === true,
     affects_running_out_hours: thresholds.running_out,
     affects_almost_gone_hours: thresholds.almost_gone,
+    snoop_share: normalizeSnoopShare(cfg.snoop_share),
+    snoop_folded: cfg.snoop_folded === true,
+    log_sessions: typeof cfg.log_sessions === 'boolean' ? cfg.log_sessions : null,
+    scrollback_lines: normalizeScrollbackLines(cfg.scrollback_lines),
+    writing_card_left: normalizeWritingCardEdge(cfg.writing_card_left),
+    writing_card_top: normalizeWritingCardEdge(cfg.writing_card_top),
+    writing_card_rows: normalizeWritingCardRows(cfg.writing_card_rows),
+    writing_card_cols: normalizeWritingCardCols(cfg.writing_card_cols),
+    writing_card_pinned: cfg.writing_card_pinned === true,
   };
 }
 
-/** What FONT_CHANGED carries. */
-export interface FontChange {
-  family: string;
-  size: number;
-  /** The Panel font as saved (panelFont.ts). */
-  panel: string;
-  /** The panel size as saved, 0 for the terminal size (panelSize.ts). */
-  panelSize: number;
+/** Read a stored writing card edge. Anything but a finite number is
+ *  null, the place the card works out itself. */
+export function normalizeWritingCardEdge(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(100_000, Math.max(-100_000, raw))
+    : null;
+}
+
+/** Read the writing card's stored rows, held to 6 to 500 as Rust holds
+ *  them. Anything but a number is null, a box that grows with the text. */
+export function normalizeWritingCardRows(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(500, Math.max(6, Math.round(raw)))
+    : null;
+}
+
+/** Read the writing card's stored columns, a whole number from 75 to
+ *  500, or null for the box's own 80. */
+export function normalizeWritingCardCols(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(500, Math.max(75, Math.round(raw)))
+    : null;
+}
+
+/** The bursts you can pick for the screen reader. */
+export const SCREEN_READER_BURSTS = [4, 8, 16, 32] as const;
+export type ScreenReaderBurst = (typeof SCREEN_READER_BURSTS)[number];
+
+/** The burst the screen reader takes until you pick another. */
+export const DEFAULT_SCREEN_READER_BURST: ScreenReaderBurst = 8;
+
+/** Read a stored burst as Rust reads it. Anything but 4, 8, 16 or 32 is
+ *  8. */
+export function normalizeScreenReaderBurst(raw: unknown): ScreenReaderBurst {
+  return SCREEN_READER_BURSTS.find((burst) => burst === raw) ?? DEFAULT_SCREEN_READER_BURST;
+}
+
+/** The lines a terminal keeps until you pick another Scrollback size. */
+export const DEFAULT_SCROLLBACK_LINES = 10_000;
+
+/** Read a stored scrollback size, held to 1,000 to 100,000 as Rust holds
+ *  it. Anything that is not a number is the default. */
+export function normalizeScrollbackLines(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(100_000, Math.max(1_000, Math.round(raw)))
+    : DEFAULT_SCROLLBACK_LINES;
+}
+
+/** The share of the terminal column a snoop split takes until you drag
+ *  it. */
+export const DEFAULT_SNOOP_SHARE = 0.4;
+
+/** Read a stored snoop share, held to 0.05 to 0.95 as Rust holds it.
+ *  Anything that is not a finite number is the default. */
+export function normalizeSnoopShare(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(0.95, Math.max(0.05, raw))
+    : DEFAULT_SNOOP_SHARE;
 }
 
 /** Hear that the backend replaced the live profile's whole UI config,
@@ -741,17 +715,20 @@ export async function subscribeUiConfigReplaced(cb: () => void): Promise<Unliste
 }
 
 /** Save the theme choice alone, from a window that keeps no copy of
- *  the other fields, like the palette. Pass the light and dark pair too
- *  when the pick came from pickTheme, which fills one of them while
- *  follow system appearance is on. */
+ *  the other fields, like the palette. Pass the slots too when the pick
+ *  came from pickTheme, which fills the light or dark one while the
+ *  theme follows the system and the day or night one while it follows
+ *  the game. */
 export async function setUiTheme(
   theme: string,
-  pair?: { light_theme: string; dark_theme: string },
+  slots?: Pick<UiConfig, 'light_theme' | 'dark_theme' | 'day_theme' | 'night_theme'>,
 ): Promise<void> {
   await invoke('ui_set_theme', {
     theme,
-    lightTheme: pair?.light_theme ?? null,
-    darkTheme: pair?.dark_theme ?? null,
+    lightTheme: slots?.light_theme ?? null,
+    darkTheme: slots?.dark_theme ?? null,
+    dayTheme: slots?.day_theme ?? null,
+    nightTheme: slots?.night_theme ?? null,
   });
 }
 
@@ -771,46 +748,6 @@ export async function setUiFields(fields: UiFields, profile?: string | null): Pr
       .filter(([, value]) => value !== undefined)
       .map(([field, value]) => ({ field, value })),
     profile: profile ?? null,
-  });
-}
-
-/** Hear a new chip style saved from Settings. The Settings save emits
- *  it to every window, so the main window's status line follows at
- *  once. */
-export async function subscribeChipStyleChanged(
-  cb: (value: ChipStyle) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(CHIP_STYLE_CHANGED, (event) => {
-    cb(normalizeChipStyle(event.payload));
-  });
-}
-
-/** Hear a new tick count saved from Settings. The Settings save emits
- *  it to every window, so the main window's status line follows at
- *  once. */
-export async function subscribeTickCountChanged(
-  cb: (value: TickCount) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(TICK_COUNT_CHANGED, (event) => {
-    cb(normalizeTickCount(event.payload));
-  });
-}
-
-/** Hear a new game time clock saved from Settings, or the one a
- *  profile switch brings. The Settings save emits it to every window,
- *  so the main window's status line follows at once. */
-export async function subscribeGameTimeChanged(cb: (value: GameTime) => void): Promise<UnlistenFn> {
-  return listen<unknown>(GAME_TIME_CHANGED, (event) => {
-    cb(normalizeGameTime(event.payload));
-  });
-}
-
-/** Hear a new terminal line height saved from Settings. */
-export async function subscribeTerminalLineHeightChanged(
-  cb: (value: TerminalLineHeight) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(TERMINAL_LINE_HEIGHT_CHANGED, (event) => {
-    cb(normalizeTerminalLineHeight(event.payload));
   });
 }
 
@@ -841,152 +778,9 @@ export async function subscribeChatColorsChanged(
   });
 }
 
-/** Hear new vitals options, your style and every choice under Layout,
- *  Vitals, saved from Settings or the menu, or the ones a profile
- *  switch brings. */
-export async function subscribeVitalsOptionsChanged(
-  cb: (value: VitalsOptions) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(VITALS_OPTIONS_CHANGED, (event) => {
-    cb(normalizeVitalsOptions(event.payload));
-  });
-}
-
-/** Your vitals text and the earlier ones, as one event payload. */
-export type VitalsTextChange = Pick<UiConfig, 'vitals_text' | 'vitals_text_previous'>;
-
-export function vitalsTextOf(config: VitalsTextChange): VitalsTextChange {
-  return { vitals_text: config.vitals_text, vitals_text_previous: config.vitals_text_previous };
-}
-
-/** Hear a new vitals text, saved from Settings or the vitals text card,
- *  or the one a profile switch brings. */
-export async function subscribeVitalsTextChanged(
-  cb: (value: VitalsTextChange) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(VITALS_TEXT_CHANGED, (event) => {
-    const raw = event.payload as { vitals_text?: unknown; vitals_text_previous?: unknown } | null;
-    cb({
-      vitals_text: typeof raw?.vitals_text === 'string' ? raw.vitals_text : '',
-      vitals_text_previous: normalizeVitalsTextPrevious(raw?.vitals_text_previous),
-    });
-  });
-}
-
-/** Hear the Blinking text choice change, null for none. */
-export async function subscribeBlinkTextChanged(
-  cb: (value: boolean | null) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean | null>(BLINK_TEXT_CHANGED, (event) => {
-    cb(typeof event.payload === 'boolean' ? event.payload : null);
-  });
-}
-
-export async function subscribeBrightBoldChanged(
-  cb: (value: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(BRIGHT_BOLD_CHANGED, (event) => {
-    cb(Boolean(event.payload));
-  });
-}
-
-/** Hear Fit game colors change, saved in Settings or brought by
- *  another profile. */
-export async function subscribeFitGameColorsChanged(
-  cb: (value: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(FIT_GAME_COLORS_CHANGED, (event) => {
-    cb(event.payload !== false);
-  });
-}
-
-/** Hear the color vision change, saved in Settings or brought by
- *  another profile. */
-export async function subscribeColorVisionChanged(
-  cb: (value: ColorVision) => void,
-): Promise<UnlistenFn> {
-  return listen<string>(COLOR_VISION_CHANGED, (event) => {
-    cb(toColorVision(event.payload));
-  });
-}
-
-/** Hear Keep highlight colors readable change, saved in Settings or
- *  brought by another profile. */
-export async function subscribeReadableHighlightsChanged(
-  cb: (value: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(READABLE_HIGHLIGHTS_CHANGED, (event) => {
-    cb(event.payload !== false);
-  });
-}
-
-export async function subscribeSplitDividerChanged(
-  cb: (color: string | null) => void,
-): Promise<UnlistenFn> {
-  return listen<string | null>(SPLIT_DIVIDER_CHANGED, (event) => {
-    cb(typeof event.payload === 'string' && event.payload.length > 0 ? event.payload : null);
-  });
-}
-
-export async function subscribeBaseAnsiChanged(
-  cb: (colors: string[] | null) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(BASE_ANSI_CHANGED, (event) => {
-    const p = event.payload;
-    cb(
-      Array.isArray(p) && p.length === 16 && p.every((c) => typeof c === 'string')
-        ? (p as string[])
-        : null,
-    );
-  });
-}
-
-/** Hear the terminal font and size and the panel font and size saved in
- *  Settings. */
-export function subscribeFontChanged(cb: (change: FontChange) => void): Promise<UnlistenFn> {
-  return listen<FontChange>(FONT_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Keep last command change. */
-export function subscribeKeepLastChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(KEEP_LAST_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Use the theme's colors for MUD text change. */
-export function subscribeThemeTerminalColorsChanged(
-  cb: (on: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(THEME_TERMINAL_COLORS_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Sent command color change, null for the default. */
-export function subscribeInputEchoColorChanged(
-  cb: (color: string | null) => void,
-): Promise<UnlistenFn> {
-  return listen<string | null>(INPUT_ECHO_COLOR_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Show the commands your macros send change. */
-export function subscribeEchoMacrosChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(ECHO_MACROS_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Mark your commands change. */
-export function subscribeInputEchoCaretChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(INPUT_ECHO_CARET_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Wait between pasted lines change, in ms. */
-export function subscribePasteLineDelayChanged(cb: (ms: number) => void): Promise<UnlistenFn> {
-  return listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Check spelling when you chat change. */
-export function subscribeSpellcheckPromptChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(SPELLCHECK_PROMPT_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Caret shape change. */
-export function subscribeInputCursorStyleChanged(cb: (style: string) => void): Promise<UnlistenFn> {
-  return listen<string>(INPUT_CURSOR_STYLE_CHANGED, (event) => cb(event.payload));
+/** Turn Ask before you post off from the writing card, and tell every
+ *  window, since setUiFields tells none. */
+export async function stopAskingToPost(): Promise<void> {
+  await setUiFields({ writing_ask_post: false });
+  await emit(WRITING_ASK_POST_CHANGED, false);
 }

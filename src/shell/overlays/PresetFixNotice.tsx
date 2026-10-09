@@ -1,0 +1,40 @@
+import { useSyncExternalStore, type MouseEvent } from 'react';
+import { openSettingsTab } from '../../lib/settingsLink';
+import { closePresetFix, presetFixStore } from '../../stores/presetFixStore';
+import { Button } from '../../ui';
+
+// A press on the notice's buttons leaves the caret on the command line.
+const keepCaret = (event: MouseEvent) => event.preventDefault();
+
+// The notice a preset fix leaves when it changed a row you edited, or
+// took away a trigger you edited. It sits on the update notice recipe
+// in the warn tone and stays until you close it. Close leaves the marks
+// in Settings. Show opens Settings on the trigger, or on the preset's
+// card for a swatch or a trigger the preset no longer builds.
+export function PresetFixNotice() {
+  const notice = useSyncExternalStore(
+    presetFixStore.subscribe,
+    presetFixStore.get,
+    presetFixStore.get,
+  );
+  if (!notice) return null;
+  return (
+    <div className="ov-update is-warn" role="status" aria-live="polite">
+      <span className="ov-update-dot dot is-warn" aria-hidden="true" />
+      <span className="ov-update-msg">{notice.message}</span>
+      <span className={`ov-update-meta${notice.mono ? ' is-mono' : ''}`}>{notice.meta}</span>
+      <span className="ov-update-actions">
+        <Button onMouseDown={keepCaret} onClick={closePresetFix}>
+          Close
+        </Button>
+        <Button
+          variant="primary"
+          onMouseDown={keepCaret}
+          onClick={() => openSettingsTab(notice.link)}
+        >
+          Show
+        </Button>
+      </span>
+    </div>
+  );
+}

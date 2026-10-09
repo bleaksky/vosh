@@ -9,7 +9,7 @@ mod automation;
 pub(crate) mod profile;
 mod prompt;
 mod script;
-mod slash;
+pub(crate) mod slash;
 pub(crate) mod target;
 mod tick;
 mod vars;
@@ -30,7 +30,7 @@ use crate::profile::live::Profile;
 use crate::profile::switch::read_shared_layer;
 use crate::prompt::request_prompt_repaint;
 use crate::script::{run_alias_body, ApplyResult};
-use crate::session::connection::Connection;
+use crate::session::connection::{Connection, QuickKey};
 use crate::session::effects::{collect_script_result, run_lines_locked, Collected, LinesRun};
 use crate::sessions::Session;
 use crate::tick::TickConfig;
@@ -283,6 +283,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     // The line runs the way a line from a timer, the tick or Lua runs.
     let (
         open,
+        quick,
         LinesRun {
             apply,
             shown,
@@ -292,6 +293,9 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     ) = {
         let mut profile = session.lock_profile().await;
         let mut connection = session.connection.lock();
+        // A quick key echoes its command from here, since the page leaves
+        // its echo out, so that echo lands after the prompt.
+        let quick = fires_quick_key(&connection, line);
         let run = run_lines_locked(
             state,
             &mut profile,
@@ -299,7 +303,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
             [(LineFrom::You, line)],
             shared_layer.as_ref(),
         );
-        (profile.open().clone(), run)
+        (profile.open().clone(), quick, run)
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at
     // once, and `#prompt default` draws the new design there. A typed
@@ -314,24 +318,31 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         session.emit(app, events::TARGET, &payload);
     }
 
-    deliver_script_result(app, session, apply.ran_under(&open)).await
+    deliver_script_result(app, session, apply.ran_under(&open), quick).await
 }
 
 /// Apply a script result outside the session loop, the way every path
 /// applies one, then print its echo lines on the terminal, send its bytes
 /// to the game `session` runs and hand a `#walk` to its walker after them.
-/// With no connection the terminal says so.
+/// With no connection the terminal says so. `quick` says the lines start
+/// with a quick key's echo, which lands after the prompt. Any other line
+/// starts a row of its own.
 async fn deliver_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Arc<Session>,
     apply: ApplyResult,
+    quick: bool,
 ) -> Result<(), String> {
     let Collected {
         bytes,
         echoes,
         walk,
     } = collect_script_result(app, session, apply).await;
-    output::echo_lines(app, session, &echoes);
+    if quick {
+        output::echo_command(app, session, &echoes);
+    } else {
+        output::echo_lines(app, session, &echoes);
+    }
 
     if bytes.is_empty() && walk.is_none() {
         return Ok(());
@@ -584,12 +595,7 @@ fn process_line(
     // then to the MUD if no alias matches), so a default-but-unused
     // name like `gg` does not shadow a user alias of the same name
     // with a "no verb is set" error.
-    if let Some(qk) = c
-        .target
-        .quick_keys
-        .iter()
-        .find(|q| q.name == head && !q.verb.is_empty())
-    {
+    if let Some(qk) = quick_key(c, head) {
         let target = c.target.name.clone().unwrap_or_default();
         if target.is_empty() {
             return InputResult::error("no target — set one with `tar <name|index>` first");
@@ -597,7 +603,7 @@ fn process_line(
         let expansion = format!("{} {}", qk.verb, target);
         let mut inner = process_line(state, profile, c, &expansion, from, replaced, lua);
         // Echo the resolved line like any other typed command, with the
-        // caret and the Sent command color. The frontend suppresses its
+        // mark and the Command color. The frontend suppresses its
         // own echo for quick-keys, so this is the only echo that lands.
         inner.echo.insert(0, command_echo(&expansion, &profile.ui));
         return inner;
@@ -630,10 +636,10 @@ fn process_line(
 /// Run the steps a line expanded to, in order: each command goes out as
 /// text and each script alias body runs where it stands, adding to `lua`
 /// what it asks for besides its sends and echo lines. A command that is a
-/// `#walk` runs it (Q16), and the steps after it ride in the walk, so
-/// they wait for it to end (Q28). Every other `#` command goes out as
-/// text, as it always did. The walker runs what a walk held this way
-/// once you arrive.
+/// `#walk` runs it, and the steps after it ride in the walk, so they wait
+/// for it to end and run where it takes you. Every other `#` command
+/// goes out as text, as it always did. The walker runs what a walk held
+/// this way once you arrive.
 pub(crate) fn run_expanded(
     profile: &mut Profile,
     c: &mut Connection,
@@ -684,32 +690,97 @@ fn split_first_word(input: &str) -> (&str, &str) {
     }
 }
 
-/// The echo of a command you send, as the command line draws it: a grey
-/// `›` and a space while Mark your commands is on, then the command in
-/// the Sent command color when one is set. Mirrors `planSubmit` and
-/// `colorizeEcho` in src/input/maskedInput.ts, so a quick key echoes like a
-/// typed command. An empty line echoes as itself.
+/// The quick key a line that starts with `head` fires: one of that
+/// name with a verb set.
+fn quick_key<'a>(c: &'a Connection, head: &str) -> Option<&'a QuickKey> {
+    c.target
+        .quick_keys
+        .iter()
+        .find(|q| q.name == head && !q.verb.is_empty())
+}
+
+/// Whether `line`, typed, fires a quick key, whose echo Vosh draws in
+/// place of the page's, as [`process_line`] reads it: its first word
+/// names a quick key and it is neither a `#` command nor a target word.
+fn fires_quick_key(c: &Connection, line: &str) -> bool {
+    let trimmed = line.trim_start();
+    let (head, _) = split_first_word(trimmed);
+    !trimmed.starts_with('#')
+        && !matches!(head, "tar" | "tarn" | "tarp" | "tarclear")
+        && quick_key(c, head).is_some()
+}
+
+/// The echo of a command you send, as the command line draws it: the
+/// mark from [`echo_mark`], then the command in the Command color when
+/// one is set, faint when Dim sent commands is on. The mark keeps its own
+/// color and never dims. Mirrors `commandEcho` and `echoMark` in
+/// src/input/maskedInput.ts, so a quick key echoes like a typed command.
+/// The bytes for each case sit in fixtures/input/echo-marks.json. An
+/// empty line echoes as itself.
 pub(crate) fn command_echo(line: &str, ui: &crate::profile::ui::UiConfig) -> String {
     if line.is_empty() {
         return String::new();
     }
-    let caret = if ui.input_echo_caret { ECHO_CARET } else { "" };
-    match ui.input_echo_color.as_deref().and_then(echo_rgb) {
-        Some((r, g, b)) => format!("{caret}\x1b[38;2;{r};{g};{b}m{line}\x1b[0m"),
-        None => format!("{caret}{line}"),
+    let mark = echo_mark(ui);
+    let color = ui.input_echo_color.as_deref().and_then(echo_rgb);
+    match (ui.input_echo_dim, color) {
+        (true, Some((r, g, b))) => format!("{mark}\x1b[2;38;2;{r};{g};{b}m{line}\x1b[0m"),
+        (true, None) => format!("{mark}\x1b[2m{line}\x1b[0m"),
+        (false, Some((r, g, b))) => format!("{mark}\x1b[38;2;{r};{g};{b}m{line}\x1b[0m"),
+        (false, None) => format!("{mark}{line}"),
     }
 }
 
-/// The grey `›` and space before each command you send, in the theme's
-/// bright black (SGR 90). The same bytes as `ECHO_CARET` in
-/// src/input/maskedInput.ts. Each renderer leaves it out when the row your
-/// echo lands on already ends in `>`, as a game's prompt such as
-/// `Account name> ` does (`TermGrid::local_write` and
-/// `TermGrid::session_output` in the native grid, and the page's
-/// `RegionWriter`).
-pub(crate) const ECHO_CARET: &str = "\x1b[90m\u{203a} \x1b[0m";
+/// The mark before each command you send, empty while it is off or your
+/// own text is blank: the Mark color, or the theme's bright black (SGR
+/// 90) when none is set, then `›`, `>` or your own text, then a space and
+/// a reset. Each renderer leaves it out when the row your echo lands on
+/// already ends in `>`, as a game's prompt such as `Account name> ` does
+/// (`TermGrid::local_write` and `TermGrid::session_output` in the native
+/// grid, which strips these bytes, and the page's `RegionWriter`).
+pub(crate) fn echo_mark(ui: &crate::profile::ui::UiConfig) -> String {
+    let text = match ui.input_echo_mark.as_str() {
+        "off" => return String::new(),
+        "gt" => ">",
+        "own" => ui.input_echo_mark_text.as_str(),
+        _ => "\u{203a}",
+    };
+    if text.is_empty() {
+        return String::new();
+    }
+    match ui.input_echo_mark_color.as_deref().and_then(echo_rgb) {
+        Some((r, g, b)) => format!("\x1b[38;2;{r};{g};{b}m{text} \x1b[0m"),
+        None => format!("\x1b[90m{text} \x1b[0m"),
+    }
+}
 
-/// The red, green and blue of a Sent command color, the six hex digits
+/// Tell the native grid of `session` the `mark` [`echo_mark`] gave, so
+/// the grid leaves out exactly that mark after a prompt that ends in `>`.
+pub(crate) fn keep_echo_mark(session: crate::sessions::SessionId, mark: String) {
+    #[cfg(any(native_surface, test))]
+    crate::native::grid::set_echo_mark(session, mark.into_bytes());
+    #[cfg(not(any(native_surface, test)))]
+    let _ = (session, mark);
+}
+
+/// Tell the native grid of every session on `open` the mark its profile
+/// gives, after a `#profile reset` or `#profile load` laid it over.
+pub(crate) async fn keep_profile_echo_mark(
+    state: &AppState,
+    open: &Arc<crate::profile::open::OpenProfile>,
+) {
+    let sessions = state.all_sessions();
+    let (players, mark) = {
+        let p = open.lock().await;
+        let players: Vec<_> = p.players(&sessions).map(|s| s.id).collect();
+        (players, echo_mark(&p.ui))
+    };
+    for session in players {
+        keep_echo_mark(session, mark.clone());
+    }
+}
+
+/// The red, green and blue of a Command or Mark color, the six hex digits
 /// at its start after an optional `#`, or None when it does not read.
 fn echo_rgb(color: &str) -> Option<(u8, u8, u8)> {
     let hex = color.trim();

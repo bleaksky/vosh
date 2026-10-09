@@ -10,15 +10,20 @@ import { MacrosEditor } from './MacrosEditor';
 import { PresetsEditor } from './PresetsEditor';
 import { TimersEditor } from './TimersEditor';
 import { TriggersEditor } from './TriggersEditor';
-import { isAutomationKind, isListKind, type AutomationKind, type DirtyReport } from './types';
+import {
+  isAutomationKind,
+  isListKind,
+  type AutomationKind,
+  type DirtyReport,
+  type TriggersLink,
+} from './types';
 import { useCloseGuard } from '../useCloseGuard';
 
-// Settings, Automation (the approved SettingsAutomation board). One
-// list and detail editor for every kind behind the kind switcher, with
-// Import… at the right of the switcher row. Each kind edits a draft,
-// and the save bar at the bottom writes it through the kind's existing
-// API. Leaving a kind, leaving Automation, or closing the window with
-// unsaved changes asks first.
+// Settings, Automation. One list and detail editor for every kind
+// behind the kind switcher, with Import… at the right of the switcher
+// row. Each kind edits a draft, and the save bar at the bottom writes
+// it through the kind's existing API. Leaving a kind, leaving
+// Automation, or closing the window with unsaved changes asks first.
 //
 // In loadout mode, triggers, aliases, and macros live in the shared
 // catalog, and the same API edits it. So does the list of presets that
@@ -42,22 +47,50 @@ interface View {
   panel: Panel;
   /** Goes up each time a link asks for the Tick. */
   tickSeq: number;
+  /** The preset a link asked for last, by id, and a count that goes up
+   *  with each such link. */
+  preset: { key: string; seq: number } | null;
+  /** The trigger or the filter a preset's card opened Triggers on last. */
+  triggers: TriggersLink | null;
 }
 
-const START: View = { kind: 'triggers', panel: 'list', tickSeq: 0 };
+const START: View = {
+  kind: 'triggers',
+  panel: 'list',
+  tickSeq: 0,
+  preset: null,
+  triggers: null,
+};
+
+const PRESET_ANCHOR = 'presets:';
+const TRIGGER_ANCHOR = 'triggers:';
 
 /** The view a target asks for, or null to stay put. The section names
- *  the kind. The anchors open Import, the JSON view, or the Tick. */
-function viewFor(target: SettingsTarget, current: View): View | null {
+ *  the kind. The anchors open Import, the JSON view, the Tick, a preset
+ *  as `presets:<id>`, or a trigger as `triggers:<name>`. */
+function viewFor(target: SettingsTarget, from: View): View | null {
+  // A link from a preset's card opens Triggers once, never again on the
+  // next visit.
+  const current = { ...from, triggers: null };
   const kind = isAutomationKind(target.section) ? target.section : null;
   if (target.anchor === 'import') return { ...current, panel: 'import' };
   if (target.anchor === 'json') {
     const wanted = kind ?? current.kind;
     return { ...current, kind: isListKind(wanted) ? wanted : 'triggers', panel: 'json' };
   }
+  if (target.anchor?.startsWith(PRESET_ANCHOR)) {
+    const key = target.anchor.slice(PRESET_ANCHOR.length);
+    const seq = (current.preset?.seq ?? 0) + 1;
+    return { ...current, kind: 'presets', panel: 'list', preset: { key, seq } };
+  }
+  if (target.anchor?.startsWith(TRIGGER_ANCHOR)) {
+    const select = target.anchor.slice(TRIGGER_ANCHOR.length);
+    const seq = (from.triggers?.seq ?? 0) + 1;
+    return { ...current, kind: 'triggers', panel: 'list', triggers: { select, seq } };
+  }
   if (!kind) return null;
   const tickSeq = target.anchor === 'tick' ? current.tickSeq + 1 : current.tickSeq;
-  return { kind, panel: 'list', tickSeq };
+  return { ...current, kind, panel: 'list', tickSeq };
 }
 
 /** Whether moving from one view to the next drops the current draft. */
@@ -138,6 +171,22 @@ export function AutomationPage({
   useCloseGuard(dirty !== null, ask);
 
   const kinds = pathB ? [...KINDS, LOADOUTS] : KINDS;
+  const openTriggers = useCallback(
+    (to: Omit<TriggersLink, 'seq'>) => {
+      const current = viewRef.current;
+      const seq = (current.triggers?.seq ?? 0) + 1;
+      go({ ...current, kind: 'triggers', panel: 'list', triggers: { ...to, seq } });
+    },
+    [go],
+  );
+  const openPreset = useCallback(
+    (key: string) => {
+      const current = viewRef.current;
+      const seq = (current.preset?.seq ?? 0) + 1;
+      go({ ...current, kind: 'presets', panel: 'list', preset: { key, seq }, triggers: null });
+    },
+    [go],
+  );
   const openJson = useCallback(
     (open: boolean) => setView({ ...viewRef.current, panel: open ? 'json' : 'list' }),
     [setView],
@@ -161,6 +210,8 @@ export function AutomationPage({
             onJson={openJson}
             onDirty={onDirty}
             onError={onError}
+            open={view.triggers}
+            onOpenPreset={openPreset}
           />
         );
         break;
@@ -200,7 +251,16 @@ export function AutomationPage({
         break;
       case 'presets':
         body = config ? (
-          <PresetsEditor key="presets" setConfig={setConfig} onDirty={onDirty} onError={onError} />
+          <PresetsEditor
+            key="presets"
+            config={config}
+            setConfig={setConfig}
+            pathB={pathB}
+            onDirty={onDirty}
+            onError={onError}
+            selectPreset={view.preset}
+            onOpenTriggers={openTriggers}
+          />
         ) : null;
         break;
       case 'loadouts':
@@ -222,7 +282,7 @@ export function AutomationPage({
           label="Kind"
           options={kinds}
           value={view.panel === 'import' ? null : view.kind}
-          onChange={(kind) => go({ ...viewRef.current, kind, panel: 'list' })}
+          onChange={(kind) => go({ ...viewRef.current, kind, panel: 'list', triggers: null })}
         />
         <Button onClick={() => go({ ...viewRef.current, panel: 'import' })}>Import…</Button>
       </div>

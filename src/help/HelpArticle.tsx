@@ -1,15 +1,16 @@
 import { forwardRef, Fragment, type CSSProperties, type ReactNode } from 'react';
 import { codePieces } from './helpCode';
-import { parseHelpBody, type HelpTopic } from './helpContent';
+import { parseHelpBody, type HelpAction, type HelpTopic } from './helpContent';
 import { inlinePieces, keyGlyph, keyParts, type InlinePiece } from './helpInline';
 import { helpItemId, matchRanges, type OutlineEntry } from './helpNav';
-import { Keycap } from '../ui';
+import { openGetStarted } from '../ipc/getStarted';
+import { Button, Keycap } from '../ui';
 
-// One help topic as the approved Help boards draw it: the H1 at 26/32,
-// prose and lists on a 528 measure at 14/22, a table as a Settings
-// card, a code block on the same band in your terminal font, and each
-// backticked span as a mono chip, an SF 600 label, or keycaps
-// (src/help/helpInline.ts). While the search holds words every
+// One help topic as it draws: the H1 at 26/32, prose and lists on a 528
+// measure at 14/22, a table as a Settings card, a code block on the
+// same band in your terminal font, a button as a primary Settings
+// button, and each backticked span as a mono chip, an SF 600 label, or
+// keycaps (src/help/helpInline.ts). While the search holds words every
 // match is marked the way the session logs page marks one, and the
 // match you are on carries a ring.
 
@@ -21,9 +22,17 @@ interface Props {
   current: number;
   /** The rows of On this page, whose items take ids to scroll to. */
   outline: OutlineEntry[] | null;
-  /** The mark fill and its ring, from the theme's ANSI yellow. */
-  markColors: { fill: string; ring: string } | null;
+  /** The mark fills for every match and the current one, from the
+   *  theme's ANSI yellow. */
+  markColors: { fill: string; current: string } | null;
 }
+
+/** What each help button runs. */
+const RUN_ACTION: Record<HelpAction, () => void> = {
+  'get-started': () => {
+    openGetStarted().catch((e: unknown) => console.error('[help] open get started failed', e));
+  },
+};
 
 /** Hands out match numbers in reading order as the article draws. */
 class Marker {
@@ -91,7 +100,7 @@ function piece(p: InlinePiece, key: number, marker: Marker): ReactNode {
       );
     case 'key': {
       const keys = (
-        <kbd className="hp-keys">
+        <kbd className="keys">
           {(keyParts(p.text) ?? [p.text]).map((part, i) => (
             <Keycap key={i}>{keyGlyph(part)}</Keycap>
           ))}
@@ -130,7 +139,7 @@ export const HelpArticle = forwardRef<HTMLHeadingElement, Props>(function HelpAr
   const marker = new Marker(query, current);
   const outlined = new Set((outline ?? []).map((e) => helpItemId(e.block, e.item)));
   const style = markColors
-    ? ({ '--hp-mark': markColors.fill, '--hp-mark-ring': markColors.ring } as CSSProperties)
+    ? ({ '--hp-mark': markColors.fill, '--hp-mark-current': markColors.current } as CSSProperties)
     : undefined;
   // The title first, then each block in order, so the match numbers run
   // in reading order, the order countMatches counts them in.
@@ -154,6 +163,15 @@ export const HelpArticle = forwardRef<HTMLHeadingElement, Props>(function HelpAr
             )}
           </code>
         </pre>
+      );
+    }
+    if (block.kind === 'action') {
+      return (
+        <div key={b} className="hp-actions">
+          <Button variant="primary" onClick={RUN_ACTION[block.action]}>
+            {marker.text(block.label)}
+          </Button>
+        </div>
       );
     }
     if (block.kind === 'list') {

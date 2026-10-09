@@ -8,8 +8,8 @@
 //   panel       the terminal ground itself, so the window is one surface
 //   lines       steps in OKLab L, white over a dark ground and black
 //               over a light one. The line (sep) steps 11, the divider
-//               6, hover 4 and a dark selected row 7, all over the
-//               panel, and the input band 2.5 over the ground. OKLab L
+//               6 and a dark selected row 7, both over the panel, and
+//               the input band 2.5 over the ground. OKLab L
 //               runs so steep near pure black that a step of 11 lands
 //               on #040404 there, so on a dark ground each step keeps
 //               at least the alpha it takes on Obsidian Ember's #050403.
@@ -39,7 +39,7 @@
 //               tier on it. The selection text token travels with the
 //               fill, so the window and both renderers draw one pair.
 //   controls    the field, the off switch track, the keycap ring, the
-//               menu highlight and the edge are washes, white on dark
+//               hover and the edge are washes, white on dark
 //               and black on light, at the alpha that steps the surface
 //               each sits on by WASH_STEP, with the same floor near
 //               black. A wash, so a field takes its step on the panel
@@ -73,6 +73,7 @@ import {
   liftAtHue,
   oklabToRgb,
   oklchToRgbInGamut,
+  paintOver,
   parseHex,
   rgbToOklab,
   rgbToOklch,
@@ -111,7 +112,7 @@ export interface ChromeTokens {
   divider: string;
   /// Selected row fill.
   selrow: string;
-  /// Hovered row fill.
+  /// The hovered or keyboard row, button or menu item, on any surface.
   hover: string;
   /// Command input band fill.
   inputband: string;
@@ -146,8 +147,6 @@ export interface ChromeTokens {
   field: string;
   /// A switch track while the switch is off.
   track: string;
-  /// The hovered or keyboard row on a floating surface.
-  menuHi: string;
   /// Keycap ring, and the ring inside a color swatch, in Settings, on
   /// the prompt card and in the pane menus.
   keyRing: string;
@@ -183,7 +182,6 @@ export const CHROME_COLOR_KEYS = [
   'selectionText',
   'field',
   'track',
-  'menuHi',
   'keyRing',
   'edge',
 ] as const satisfies readonly (keyof ChromeTokens)[];
@@ -196,6 +194,10 @@ export const TERTIARY_CONTRAST = 3.1;
 export const STATUS_CONTRAST = 3.0;
 export const STATUS_TEXT_CONTRAST = 4.5;
 export const ON_ACCENT_CONTRAST = 4.5;
+/// A status color a theme pins at this contrast or better on every
+/// ground text sits on (the High Contrast pair) holds it for every color
+/// vision.
+export const PINNED_STATUS_CONTRAST = 7.0;
 /// The accent, lifted at its hue to this contrast on the panel.
 const ACCENT_CONTRAST = 3.0;
 /// OKLCH chroma above which the cursor counts as a color of its own.
@@ -212,7 +214,6 @@ const INK_MAX_L = 0.24;
 const STEP = {
   sep: 11,
   divider: 6,
-  hover: 4,
   selrow: 7,
   inputband: 2.5,
   raised: 6,
@@ -238,26 +239,26 @@ const SELECTION_ALPHA = { dark: 0.28, light: 0.2 } as const;
 
 /// The steps the control washes take off the surface they sit on, in
 /// OKLab L times 100: the field, the track and the keycap ring off the
-/// panel, the menu highlight off raised, and the edge off the ground.
-/// Each is the step the fixed wash before them took there (Themes
-/// review Q10), white on Obsidian Ember and black on Vellum, so those
-/// two paint as they did. On dark the edge takes the 0.12 of the ring
-/// inside a floating surface, the ring board 11 draws. The window edge
-/// on Windows and Linux took 0.10 in the main window and 0.18 in
-/// Settings, so one edge moves each of them on Ember. On light every
-/// edge took 0.14. A light field is the raised paper, so it has no step.
+/// panel, the hover off raised, and the edge off the ground.
+/// Each is the step the fixed wash before them took there, white on
+/// Obsidian Ember and black on Vellum, so those two paint as they did.
+/// On dark the edge takes the 0.12 of the ring inside a floating
+/// surface. The window edge on Windows and Linux took 0.10 in the main
+/// window and 0.18 in Settings, so one edge moves each of them on Ember.
+/// On light every edge took 0.14. A light field is the raised paper, so
+/// it has no step.
 export const WASH_STEP = {
   dark: {
     field: 7.94, // white 0.06
     track: 18.57, // white 0.16
     keyRing: 16.53, // white 0.14
-    menuHi: 8.35, // white 0.08
+    hover: 8.35, // white 0.08
     edge: 14.46, // white 0.12
   },
   light: {
     track: 10.39, // black 0.14
     keyRing: 8.88, // black 0.12
-    menuHi: 3.86, // black 0.05
+    hover: 3.86, // black 0.05
     edge: 10.39, // black 0.14
   },
 } as const;
@@ -505,9 +506,9 @@ function accentNeedOf(accent: StatusAccent, c: Rgb, vision: ColorVision): number
 // Every color a status color may take for `vision`: its own lightness
 // stepped either way and, for a color the vision turns (`target`), every
 // hue inside its window at the chroma it aims for. Each keeps the
-// contrast the Typical color holds on every ground, up to the 3:1
-// floor, keeps its chroma (CHROMA_KEEP, HUE_CHROMA_KEEP), and stands as
-// far from the text the marks sit beside (`marks`) as the Typical color
+// contrast the Typical color holds on every ground, up to `floor`,
+// keeps its chroma (CHROMA_KEEP, HUE_CHROMA_KEEP), and stands as far
+// from the text the marks sit beside (`marks`) as the Typical color
 // stands, up to VISION_GUARD, both as the vision sees them and as a
 // typical eye does. Each carries its cost: its move, its hue off the
 // target, standing too near the accent, and for a color that must move,
@@ -520,6 +521,7 @@ function statusOptions(
   accent: StatusAccent | null,
   marks: Rgb[],
   moveMin: number,
+  floor: number,
 ): StatusOption[] {
   const c = from.rgb;
   const seenAccent = accent && seenLab(accent.rgb, vision);
@@ -538,7 +540,7 @@ function statusOptions(
   // A pin that is not hex stays as it is.
   if (parseHex(from.css) === null) return [option(c, 0)];
   const lch = rgbToOklch(c);
-  const floors = grounds.map((g) => Math.min(STATUS_CONTRAST, contrast(c, g)));
+  const floors = grounds.map((g) => Math.min(floor, contrast(c, g)));
   const seenMarks = marks.map((m) => seenLab(m, vision));
   const markFloors = marks.map((m) => [
     Math.min(seenApart(c, m, vision), VISION_GUARD),
@@ -585,6 +587,13 @@ function statusOptions(
   return out.length > 0 ? out : [option(c, lch.h)];
 }
 
+/// The status colors a theme pins at PINNED_STATUS_CONTRAST on every
+/// ground text sits on (`grounds`), which a swap keeps there.
+interface AaaStatus {
+  keys: readonly StatusKey[];
+  grounds: Rgb[];
+}
+
 const STATUS_CACHE = new Map<string, { danger: Picked; warn: Picked; success: Picked }>();
 
 /** The status colors swapped for `vision`. Deuteranopia and protanopia
@@ -595,11 +604,12 @@ const STATUS_CACHE = new Map<string, { danger: Picked; warn: Picked; success: Pi
  *  in lightness at its own hue. Floors, firmest first:
  *
  *  1. No color reads fainter on the panel or on raised than the 3:1
- *     floor, or than the Typical color where that sits under it, and
- *     each stands as far from the text the marks sit beside, `marks`, as
- *     the Typical color stands, up to VISION_GUARD, seen and typical. A
- *     turned color keeps CHROMA_KEEP of its chroma, or of the chroma it
- *     aims for if that is less.
+ *     floor, or than the Typical color where that sits under it, and a
+ *     color the theme pins at 7:1 on every ground text sits on (`aaa`)
+ *     keeps 7:1 there. Each stands as far from the text the marks sit
+ *     beside, `marks`, as the Typical color stands, up to VISION_GUARD,
+ *     seen and typical. A turned color keeps CHROMA_KEEP of its chroma,
+ *     or of the chroma it aims for if that is less.
  *  2. No color comes nearer a pinned accent than the Typical color
  *     stands, up to ACCENT_APART.
  *  3. Danger comes no nearer warn, seen, than the Typical colors stand,
@@ -621,6 +631,7 @@ function statusSeenBy(
   grounds: Rgb[],
   accent: StatusAccent | null,
   marks: Rgb[],
+  aaa: AaaStatus,
 ): { danger: Picked; warn: Picked; success: Picked } {
   if (vision === 'typical') return typical;
   const targets = STATUS_SWAP[vision];
@@ -634,6 +645,8 @@ function statusSeenBy(
     ...grounds.map(toHex),
     accent && `${toHex(accent.rgb)} ${accent.pinned}`,
     ...marks.map(toHex),
+    ...aaa.keys,
+    ...aaa.grounds.map(toHex),
   ].join(' ');
   const held = STATUS_CACHE.get(key);
   if (held) return held;
@@ -641,16 +654,19 @@ function statusSeenBy(
     STATUS_CACHE.set(key, typical);
     return typical;
   }
-  const options = (k: StatusKey) =>
-    statusOptions(
+  const options = (k: StatusKey) => {
+    const hold = aaa.keys.includes(k);
+    return statusOptions(
       typical[k],
       targets[k],
-      grounds,
+      hold ? aaa.grounds : grounds,
       vision,
       accent,
       marks,
       targets[k] && k === 'success' ? STATUS_MOVE_MIN : 0,
+      hold ? PINNED_STATUS_CONTRAST : STATUS_CONTRAST,
     );
+  };
   const dangers = options('danger');
   const warns = options('warn');
   const successes = options('success');
@@ -761,6 +777,10 @@ export function deriveChrome(
   }
   const raised = pick(o.raised, dark ? stepOver(panel.rgb, 'raised', true) : raisedLight);
   const grounds = [panel.rgb, raised.rgb];
+  const steps = WASH_STEP[appearance];
+  const selrow = pick(o.selrow, dark ? stepOver(panel.rgb, 'selrow', true) : raised.rgb);
+  const inputband = pick(o.inputband, stepOver(bg.rgb, 'inputband', dark));
+  const hover = o.hover || washOver(raised.rgb, steps.hover, dark);
   const floor = (c: Rgb, target: number) =>
     grounds.reduce((out, ground) => liftAtHue(out, ground, target, dir), c);
 
@@ -807,7 +827,19 @@ export function deriveChrome(
     const accent = o.accent
       ? pinned && { rgb: pinned, pinned: true }
       : { rgb: liftAccent(prefer), pinned: false };
-    tuned = statusSeenBy(vision, t, grounds, accent, [text.rgb, secondary.rgb]);
+    // A pin that reads 7:1 on every ground text sits on keeps 7:1.
+    const textGrounds = [...grounds, inputband.rgb, selrow.rgb];
+    const hi = paintOver(hover, raised.rgb);
+    if (hi) textGrounds.push(hi);
+    const aaa: AaaStatus = {
+      keys: (['danger', 'warn', 'success'] as const).filter(
+        (k) =>
+          o[k] !== undefined &&
+          textGrounds.every((g) => contrast(t[k].rgb, g) >= PINNED_STATUS_CONTRAST),
+      ),
+      grounds: textGrounds,
+    };
+    tuned = statusSeenBy(vision, t, grounds, accent, [text.rgb, secondary.rgb], aaa);
   }
   const { danger, warn, success } = tuned;
   // A danger that clears 3:1 as a dot can still be too dim to read as
@@ -848,7 +880,6 @@ export function deriveChrome(
       : { fill: composite(accent.rgb, bg.rgb, SELECTION_ALPHA[appearance]), text: text.rgb };
 
   // The control washes. An override, like pick's, wins as it stands.
-  const steps = WASH_STEP[appearance];
   const field = dark ? washOver(panel.rgb, WASH_STEP.dark.field, true) : raised.css;
 
   return {
@@ -857,9 +888,8 @@ export function deriveChrome(
     panel: panel.css,
     sep: pick(o.sep, stepOver(panel.rgb, 'sep', dark)).css,
     divider: pick(o.divider, stepOver(panel.rgb, 'divider', dark)).css,
-    selrow: pick(o.selrow, dark ? stepOver(panel.rgb, 'selrow', true) : raised.rgb).css,
-    hover: pick(o.hover, stepOver(panel.rgb, 'hover', dark)).css,
-    inputband: pick(o.inputband, stepOver(bg.rgb, 'inputband', dark)).css,
+    selrow: selrow.css,
+    inputband: inputband.css,
     text: text.css,
     secondary: secondary.css,
     tertiary: pick(o.tertiary, tertiary).css,
@@ -876,7 +906,7 @@ export function deriveChrome(
     selectionText: pick(o.selectionText, selection.text).css,
     field: o.field || field,
     track: o.track || washOver(panel.rgb, steps.track, dark),
-    menuHi: o.menuHi || washOver(raised.rgb, steps.menuHi, dark),
+    hover,
     keyRing: o.keyRing || washOver(panel.rgb, steps.keyRing, dark),
     edge: o.edge || washOver(bg.rgb, steps.edge, dark),
   };

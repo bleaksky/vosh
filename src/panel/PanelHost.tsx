@@ -28,6 +28,7 @@ import { PaneLeafContext } from './paneActions';
 import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
+import { WritingPane } from '../writing/WritingPane';
 import { paneLabel } from './paneTypes';
 import { chatFilterIn, chatFilterLabel, chatLeaves } from './chat/chatFilter';
 import { usePaneMins } from './usePaneMins';
@@ -35,7 +36,7 @@ import { VitalsFooter } from './VitalsFooter';
 import { useVitalsMenu } from './useVitalsMenu';
 import type { TextColors } from './VitalsText';
 
-// The right-hand panel (SPEC 9): the active profile's pane tree from
+// The right-hand panel: the active profile's pane tree from
 // the title band down, then the vitals pinned at the bottom. While your
 // prompt shows pinned above the command line and Hide vitals while your
 // prompt is pinned is on, the vitals go and the panes take their room
@@ -80,6 +81,7 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
   group: () => <GroupPane />,
   chat: () => <ChatPane />,
   imm: () => <ImmPane />,
+  writing: () => <WritingPane />,
 };
 
 // Built-in panes in type order, then Lua panes, each by leafKey within

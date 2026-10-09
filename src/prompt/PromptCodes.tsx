@@ -29,10 +29,11 @@ import { pushToast } from '../stores/toasts';
 import { Button, Field } from '../ui';
 import { CandidateBox, MatchRow } from './PromptCandidate';
 
-// The capture steps on The Forsaken Lands: P2, where you tell Vosh your
-// prompt setting when the game sent none this session, and P3, where
-// Vosh reads your codes and shows what it reads in your newest prompt
-// (P3b when codes run together, P3c for a prompt from a fight).
+// The capture steps on The Forsaken Lands: one where you tell Vosh your
+// prompt setting when the game sent none this session, and one where
+// Vosh reads your codes and shows what it reads in your newest prompt,
+// with a warning when codes run together and a second line for a prompt
+// from a fight.
 
 /** The codes Vosh reads, and where they came from. */
 export interface CodesRequest {
@@ -56,7 +57,7 @@ interface CodesEntryProps {
   onGameSent: () => void;
 }
 
-/** P2: your prompt setting, as Vosh saw it when you typed prompt, from
+/** Your prompt setting, as Vosh saw it when you typed prompt, from
  *  your log, or as you type or paste it. The game's answers fill the
  *  fields while the step is open. */
 export function CodesEntry({ session, initial, onRead, onPoint, onGameSent }: CodesEntryProps) {
@@ -188,12 +189,12 @@ interface CodesReadProps {
   env: BandEnv;
   cellW: number;
   measure: (label: string) => number;
-  /** Hears the newest prompt the codes read, whose values the card marks
-   *  on your prompt. The stepper never moves those marks (D19). */
+  /** Hears the newest prompt the codes read, whose values the card
+   *  marks on your prompt. The stepper never moves those marks. */
   onNewest?: (read: PromptCheckRead | null) => void;
 }
 
-/** P3: what Vosh reads from your codes, shown on your newest prompt with
+/** What Vosh reads from your codes, shown on your newest prompt with
  *  the codes they come from. */
 export function CodesRead({
   session,
@@ -288,7 +289,7 @@ export function CodesRead({
         {report?.error && (
           <div className="pc-match">
             <p className="pc-match-text is-warn is-wrap">
-              <span className="pc-warn-dot" aria-hidden="true" />
+              <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
               <span>{report.error.message}</span>
             </p>
           </div>
@@ -317,7 +318,7 @@ export function CodesRead({
           <div key={`${row.which}-${row.span[0]}-${row.label}`} className="pc-legend-warning">
             <LegendRow row={row} tag={tagOf(row)} />
             <p>
-              <span className="pc-warn-dot" aria-hidden="true" />
+              <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
               <span>{row.warning}</span>
             </p>
           </div>
@@ -391,18 +392,18 @@ interface LineTriggersProps {
   onMove: (name: string) => Promise<void>;
 }
 
-/** The D6 row: once a profile reads your prompt, Line triggers no longer
- *  see it, so the first capture a profile saves names the enabled Line
- *  triggers that matched your recent prompts, each with Move to Prompts.
- *  A trigger a highlight preset installed changes only with its preset,
- *  so it has no button. */
+/** The Line triggers row: once a profile reads your prompt, Line
+ *  triggers no longer see it, so the first capture a profile saves
+ *  names the enabled Line triggers that matched your recent prompts,
+ *  each with Move to Prompts. A trigger a highlight preset installed
+ *  changes only with its preset, so it has no button. */
 export function LineTriggers({ triggers, onMove }: LineTriggersProps) {
   const [busy, setBusy] = useState<string | null>(null);
   if (triggers.length === 0) return null;
   return (
     <div className="pc-d6">
       <p className="pc-d6-text">
-        <span className="pc-warn-dot" aria-hidden="true" />
+        <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
         <span>
           These triggers matched your prompt as a line. Vosh now sends your prompt only to Prompts
           triggers.

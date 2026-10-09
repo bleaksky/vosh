@@ -20,7 +20,7 @@ use super::{entry_stays_inside, read_plugin, PluginManifest, PluginManifestFile}
 use crate::disk::atomic::swap_in;
 
 /// What a command says when a plugin name breaks the rule.
-pub(crate) const NAME_RULE: &str = "Use only letters, digits and underscores in a plugin name.";
+pub(crate) const NAME_RULE: &str = "Use only letters, digits, and underscores in a plugin name.";
 
 /// The version a new plugin starts at.
 const FIRST_VERSION: &str = "0.1.0";
@@ -322,8 +322,7 @@ mod tests {
 
     use super::*;
 
-    /// The two files board 2 of the Scripts design shows New plugin
-    /// writing for `wait_full`.
+    /// The two files New plugin writes for `wait_full`.
     const WAIT_FULL_MANIFEST: &str = "[plugin]
 name = \"wait_full\"
 version = \"0.1.0\"

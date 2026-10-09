@@ -260,7 +260,7 @@ fn a_first_capture_reads_the_prompt_already_on_screen() {
     assert_eq!(engine.vars.prompt_vars().get("wizi"), None);
 
     // Another profile taking over starts with no values read, even
-    // when its codes read the line (section 5).
+    // when its codes read the line.
     let mut engine = first();
     engine.switch_profile();
     engine.set_config(following("[%h/%Hhp] "));
@@ -684,7 +684,7 @@ fn a_capture_you_set_comes_over_and_one_each_game_decides_stays() {
     assert_eq!(engine.config().capture, own);
 
     // The pattern a capture trigger left and the codes the game switched
-    // it to are each the game's, so each engine keeps its own (D10).
+    // it to are each the game's, so each engine keeps its own.
     let migrated = CaptureConfig::Regex(RegexCapture {
         lines: vec![r"<(?<hp>\d+)hp>".into()],
         source: Some(CaptureSource::Migrated),
@@ -788,7 +788,7 @@ fn a_reply_after_your_send_updates_the_capture() {
 fn a_new_prompt_names_the_parts_of_your_design_nothing_feeds_any_more() {
     // Same as the game reads your tank's health. On an older build
     // only %P sends it, so dropping %P in the game leaves that part
-    // blank, and Vosh says so once (P14).
+    // blank, and Vosh says so once.
     let mut engine = older_build("%n%P%C[%h/%Hhp]%c");
     let mut config = engine.config().clone();
     config.template = "%{if:tank}%tank: %{tank_hp:game}%nl%{end}[%hp/%{maxhp}hp]".into();
@@ -972,7 +972,7 @@ fn the_observer_keeps_to_the_forsaken_lands() {
 #[test]
 fn the_code_reader_the_card_chose_reads_the_replies_on_another_host() {
     // A local server of The Forsaken Lands, with no capture yet. More
-    // > Use Forsaken Lands prompt codes… gives it the rules (D17), so
+    // > Use Forsaken Lands prompt codes… gives it the rules, so
     // the reply to prompt fills the card's fields.
     let mut engine = PromptEngine::default();
     engine.connect(false);

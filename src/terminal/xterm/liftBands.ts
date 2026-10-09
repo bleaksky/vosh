@@ -10,14 +10,14 @@
 // wrapped rows, and walking the wrapped rows again from it finds the lift
 // at any width.
 //
-// layoutBands turns lifts into rectangles the way the prompt boards draw
-// the edit band: 4 px past the first and last glyph of the widest row, 2 px
-// above the first row and below the last, radius 4. Two lifts on adjacent
-// rows keep 2 px of ground between them. When your echo follows a prompt
-// whose last row is narrower than the widest, the band steps in 4 px past
-// that row's last glyph, so the echo never sits on it. BandLayer draws them in a layer
-// under xterm's text, repositioned in xterm's own render frame so band and
-// text land in the same composite.
+// layoutBands turns lifts into rectangles drawn as the edit band: 4 px
+// past the first and last glyph of the widest row, 2 px above the first
+// row and below the last, radius 4. Two lifts on adjacent rows keep 2
+// px of ground between them. When your echo follows a prompt whose last
+// row is narrower than the widest, the band steps in 4 px past that
+// row's last glyph, so the echo never sits on it. BandLayer draws them
+// in a layer under xterm's text, repositioned in xterm's own render
+// frame so band and text land in the same composite.
 
 import { getPromptReach, subscribePromptReach } from '../../stores/session/promptReachStore';
 import type { IBufferCell, IDisposable, IMarker, Terminal } from '@xterm/xterm';
@@ -270,7 +270,7 @@ export function markLifted(
 // The native grid draws the same bands in src-tauri/src/native/gpu/bands.rs.
 // Both sides run fixtures/prompt-bands/cases.json, so keep them in step.
 
-/** The band outsets the prompt boards measure, and its corner radius. */
+/** The band outsets, and its corner radius. */
 export const BAND_X = 4;
 export const BAND_Y = 2;
 export const BAND_RADIUS = 4;
@@ -308,10 +308,10 @@ export function layoutBands(
   });
 }
 
-/** `boxes` with the newest lift's band `reach` px wider: the prompt card
- *  adds a ↵ after a row a line break ends and a caret past the last
- *  glyph, and the band grows to hold both (the 2026-09-30 addendum, item
- *  3). A band that steps in around your echo keeps its width. */
+/** `boxes` with the newest lift's band `reach` px wider: the prompt
+ *  card adds a ↵ after a row a line break ends and a caret past the
+ *  last glyph, and the band grows to hold both. A band that steps in
+ *  around your echo keeps its width. */
 export function widenNewest(boxes: BandBox[], reach: number): BandBox[] {
   if (reach <= 0 || boxes.length === 0) return boxes;
   const newest = boxes.reduce((a, b) => (b.id > a.id ? b : a));

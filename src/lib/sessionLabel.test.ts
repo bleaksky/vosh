@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import labelCases from '../../fixtures/session-labels/cases.json';
 import { sessionLabel, typedName, type LabelSource } from './sessionLabel';
 
-// Q7 of the Sessions review: a row reads the name you gave the session,
-// else the character, else the world with its port, else New session.
-// The port shows as quiet meta when it is not the world's own, on a
-// named row too, and on a host Vosh does not know only while another
-// open session shares that host.
+// A row reads the name you gave the session, else the character, else
+// the world with its port, else New session. The port shows as quiet
+// meta when it is not the world's own, on a named row too, and on a
+// host Vosh does not know only while another open session shares that
+// host.
 
 const PLAY = 'play.theforsakenlands.com';
 

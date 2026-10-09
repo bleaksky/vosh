@@ -8,8 +8,8 @@ export interface FieldProps extends Omit<
 > {
   value: string;
   onChange: (value: string) => void;
-  /** Width in px or any CSS length. 240 by default, the boards' field
-   *  width. */
+  /** Width in px or any CSS length. 240 by default, the width of
+   *  most Settings fields. */
   width?: number | string;
   /** Monospace for MUD text only: patterns, sent commands, macro keys,
    *  host and port. Everything else stays in the UI font. */

@@ -24,7 +24,7 @@ const AUTOMATION_LISTS: readonly { id: string; label: string }[] = [
   { id: 'timers', label: 'Timers' },
 ];
 
-/** The Automation lists, the seven Settings pages in the order the
+/** The Automation lists, the eleven Settings pages in the order the
  *  Settings sidebar lists them, then Help. Each Settings row sends the
  *  deep link search sends for the same place, which is where the
  *  palette row for it lands too, so Settings opens there, comes forward,

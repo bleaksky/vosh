@@ -17,8 +17,9 @@ import {
 } from './tickRing';
 
 // The glyphs only the main window draws, the panel toggle in the title
-// band, Hide sessions in the sessions sidebar, and the tick and the game
-// time in the status line. They draw on Glyph from ui/icons.tsx, where
+// band, Hide sessions and the snoop eye in the sessions sidebar, the eye
+// again on the snoop strip, and the tick and the game time in the status
+// line. They draw on Glyph from ui/icons.tsx, where
 // the title band finds its other icons.
 
 export function PanelIcon() {
@@ -40,10 +41,23 @@ export function SidebarIcon() {
   );
 }
 
+/** An eye, for the players a session snoops. At 12 px its strokes keep
+ *  their 16 px weight. */
+export function EyeIcon({ size = 16 }: { size?: 12 | 16 }) {
+  return (
+    <Glyph size={size}>
+      <path
+        d="M1.75 8C3.25 5.1 5.35 3.75 8 3.75S12.75 5.1 14.25 8C12.75 10.9 10.65 12.25 8 12.25S3.25 10.9 1.75 8Z"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx="8" cy="8" r="2" vectorEffect="non-scaling-stroke" />
+    </Glyph>
+  );
+}
+
 // Status line glyphs for the tick and the game time, drawn at 12 px.
 // Unlike the title band chevron, their strokes scale with the icon, 1.25
-// units on the 16 unit grid or about 0.94 px at 12 px, as the approved
-// drawing has them. Held at 1.25 px, the open sun under the horizon
+// units on the 16 unit grid or about 0.94 px at 12 px. Held at 1.25 px, the open sun under the horizon
 // fused with the horizon and its hole shrank to one device pixel.
 
 interface SmallIconProps {

@@ -8,65 +8,66 @@ import {
   type PointerEvent,
 } from 'react';
 import type { SessionRow } from '../ipc/session';
+import { APP_SHORTCUTS } from '../lib/appMenu';
 import { useEscape } from '../lib/escapeStack';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
-import { shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { CloseIcon, PlusIcon } from '../ui/icons';
-import { SidebarIcon } from './icons';
+import { VisuallyHidden } from '../ui/VisuallyHidden';
 import { cardWords, useCardFacts } from './cardFacts';
 import { SessionCard } from './SessionCard';
-import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { ShellMenu } from './ShellMenu';
 import { SessionMark, SessionRowBody, WaitingCount } from './SessionRowBody';
 import { useHoverCard } from './useHoverCard';
 import { useModHeld } from './useModHeld';
 import { partShift, useRowDrag } from '../lib/useRowDrag';
 
-// The sessions sidebar on the left of the main window, board 2 of the
-// Sessions review, drawn to otty's measures (Q17), with the two line
-// rows of the Sessions Sidebar review. MainWindow shows it while two or
-// more sessions are open and you have not hidden it in this window. Its
-// top 32 drags the window and holds the lights on macOS, with New
-// session and Hide sessions at its right. SESSIONS heads the list with
-// how many are open (S8).
+// The sessions sidebar on the left of the main window, with two line
+// rows. MainWindow shows it while two or more sessions are open and you
+// have not hidden it in this window, and over the terminal in a window
+// too narrow for its column. Its top 32 drags the window and holds the
+// lights and the sessions toggle on macOS, with New session at its
+// right. SESSIONS heads the list with how many are open.
 //
-// Each row is two lines (S1). Line one starts with the row's status
-// mark (S2), then the session as sessionLabel names it with the port in
-// quiet meta, and ends in a right column. Line two says what the
-// session is doing, from useSessionLine, with your health at its right
-// (S3). The selected row is a filled pill, and the name takes the tone
-// the row store gives it. The right column holds the count of what
-// waits for you on a row behind (S4). While you hold ⌘ (Ctrl
-// elsewhere), the first nine rows show the key that brings each to the
-// front there instead, as otty does (board 8). Under the pointer a row
-// shows its close button in that place, which closes its session (Q13,
-// S6). Rest the pointer on a row and SessionCard opens beside it with
-// the rest of the session, which a screen reader hears as the row's
-// description. A click selects.
+// Each row is two lines. Line one starts with the row's status mark,
+// then the session as sessionLabel names it with the port in quiet
+// meta, and ends in a right column. Line two says what the session is
+// doing, from useSessionLine, with your health at its right. The
+// selected row is a filled pill, and the name takes the tone the row
+// store gives it. The right column holds the count of what waits for
+// you on a row behind. While you hold ⌘ (Ctrl elsewhere), the first
+// nine rows show the key that brings each to the front there instead.
+// Under the pointer a row shows its close button in that place, which
+// closes its session. Rest the pointer on a row and SessionCard opens
+// beside it with the rest of the session, which a screen reader hears
+// as the row's description. A click selects.
 //
-// A right click opens the row's menu at the pointer, board 9: Rename
-// session…, Edit connection…, Disconnect while the session is
-// connected, and Close session. Rename session… shows F2 beside it when
-// the row had the keyboard as the menu opened. A double click on the
-// name, Return or F2 on a row that has the keyboard, or Rename session…
-// from the row menu or anywhere else while the sidebar shows, brings
-// the session to the front and turns its name into a field in place
-// (Q7, S5 of the Sessions Sidebar review). Space still selects, and F2
-// never reaches the command line from a row. The field spans the name
-// and the right column, the mark stays, and line two says how to finish.
-// Return or a click elsewhere keeps what you typed, Escape leaves the
-// row as it was, and a blank field clears the name, so the row reads
-// the character again.
+// A right click opens the row's menu at the pointer: Rename session…,
+// Edit connection…, Disconnect while the session is connected, and
+// Close session. Rename session… shows F2 beside it when the row had
+// the keyboard as the menu opened. A double click on the name, Return
+// or F2 on a row that has the keyboard, or Rename session… from the row
+// menu or anywhere else while the sidebar shows, brings the session to
+// the front and turns its name into a field in place. Up and Down move
+// the keyboard between rows and stop at either end, so Return or F2
+// renames the row they reach. They select nothing, Space still selects,
+// and F2 never reaches the command line from a row. The field spans the
+// name and the right column, the mark stays, and line two says how to
+// finish. Return or a click elsewhere keeps what you typed, Escape
+// leaves the row as it was, and a blank field clears the name, so the
+// row reads the character again.
 //
 // More rows than fit scroll under SESSIONS, which stays put and draws a
 // hairline once a row has passed under it, and the selected row scrolls
-// into view as ⌘1 to ⌘9 or a step reach it (board 8). Drag a row to move
+// into view as ⌘1 to ⌘9 or a step reach it. Drag a row to move
 // it, see lib/useRowDrag.
 //
-// WebView2 and WebKitGTK focus a button on click. Left on a row or Hide
-// sessions, the caret would take your next Space and press it again, so
-// it goes back to the command line, as it does from the gear.
+// WebView2 and WebKitGTK focus a button on click. Left on a row, the
+// caret would take your next Space and press it again, so it goes back
+// to the command line, as it does from the gear.
 
 interface Props {
   rows: SessionRow[];
@@ -75,8 +76,9 @@ interface Props {
   onNewSession: () => void;
   /** Close a session, asking first while it is connected. */
   onClose: (session: number) => void;
-  /** Fold the sidebar away in this window. */
-  onHide: () => void;
+  /** Put the keyboard on the selected row as the sidebar shows, as it
+   *  does sliding in over the terminal. */
+  takeFocus?: boolean;
   /** Hand the caret back to the command line. */
   onCaret: () => void;
   /** Keep the name typed for a session, or with null clear it. */
@@ -96,11 +98,7 @@ export interface SessionSidebarHandle {
   rename: (session: number) => void;
 }
 
-/** The row menu's width, as board 9 draws it. */
-const ROW_MENU_WIDTH = 212;
-
-/** The rows' pitch, a 44 pill in a 46 slot (S1 of the Sessions Sidebar
- *  review). */
+/** The rows' pitch, a 44 pill in a 46 slot. */
 const ROW_PITCH = 46;
 
 /** Whether a click left the caret on the button it pressed. */
@@ -113,7 +111,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     onSelect,
     onNewSession,
     onClose,
-    onHide,
+    takeFocus = false,
     onCaret,
     onRename,
     onEditConnection,
@@ -134,6 +132,13 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     ROW_PITCH,
   );
   const card = useHoverCard(drag !== null);
+  // Each row's button, by session, for Up and Down. A row being renamed
+  // has none.
+  const buttons = useRef(new Map<number, HTMLButtonElement>());
+  const step = (from: number, delta: number) => {
+    const to = rows[from + delta];
+    if (to) buttons.current.get(to.id)?.focus();
+  };
   // The session whose name is a field, and the row whose menu is open,
   // with the pointer it opened at and whether the row had the keyboard.
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -173,6 +178,17 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
       el.scrollTop = top + ROW_PITCH - el.clientHeight;
   }, [at]);
 
+  // Sliding in over the terminal, the sidebar takes the keyboard on the
+  // selected row, so Up, Down and Space pick a session at once.
+  useEffect(() => {
+    if (!takeFocus) return;
+    const first = rows[0];
+    const row = buttons.current.get(selected) ?? (first && buttons.current.get(first.id));
+    row?.focus();
+    // On mount alone, as the sidebar slides in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const closeMenu = () => {
     setMenu(null);
     onCaret();
@@ -190,26 +206,16 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             type="button"
             className="shell-icon-button"
             aria-label="New session"
+            aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS['session-new'])}
             onClick={onNewSession}
           >
             <PlusIcon />
           </button>
-          <button
-            type="button"
-            className="shell-icon-button"
-            aria-label="Hide sessions"
-            onClick={(e) => {
-              const caret = held(e);
-              onHide();
-              if (caret) onCaret();
-            }}
-          >
-            <SidebarIcon />
-          </button>
         </div>
       </div>
       <h2 className={scrolled ? 'shell-sessions-head is-scrolled' : 'shell-sessions-head'}>
-        Sessions<span className="shell-sessions-total">{rows.length}</span>
+        Sessions<VisuallyHidden>, </VisuallyHidden>
+        <span className="shell-sessions-total">{rows.length}</span>
       </h2>
       <ul
         ref={list}
@@ -226,7 +232,8 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             row={row}
             rows={rows}
             current={row.id === selected}
-            keys={numbered && i < 9 ? shortcutLabel(`Mod+${i + 1}`) : null}
+            keys={i < 9 ? `Mod+${i + 1}` : null}
+            numbered={numbered}
             renaming={row.id === renaming}
             lifted={drag?.id === row.id}
             offset={
@@ -237,6 +244,11 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
                 : 0
             }
             onPress={(e) => press(e, row.id)}
+            onButton={(el) => {
+              if (el) buttons.current.set(row.id, el);
+              else buttons.current.delete(row.id);
+            }}
+            onStep={(delta) => step(i, delta)}
             onRest={(slot) => card.rest(row.id, slot)}
             card={card.shown?.session === row.id ? { slot: card.shown.slot, side } : null}
             dropped={dropped}
@@ -258,14 +270,14 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
         )}
       </ul>
       {menu && menuRow && (
-        <ShellMenu at={menu} width={ROW_MENU_WIDTH} label="Session options" onClose={closeMenu}>
-          <ShellMenuItem
-            shortcut={menu.keyed ? 'F2' : undefined}
+        <ShellMenu at={menu} label="Session options" onClose={closeMenu}>
+          <MenuItem
+            {...(menu.keyed && { keys: 'F2' })}
             onSelect={() => fromMenu(() => startRename(menuRow.id))}
           >
             Rename session…
-          </ShellMenuItem>
-          <ShellMenuItem
+          </MenuItem>
+          <MenuItem
             onSelect={() =>
               fromMenu(() => {
                 if (menuRow.id !== selected) onSelect(menuRow.id);
@@ -274,16 +286,14 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             }
           >
             Edit connection…
-          </ShellMenuItem>
-          <ShellMenuSeparator />
+          </MenuItem>
+          <MenuSeparator />
           {(menuRow.connected || sessionLive(menuRow.id)) && (
-            <ShellMenuItem onSelect={() => fromMenu(() => onDisconnect(menuRow.id))}>
+            <MenuItem onSelect={() => fromMenu(() => onDisconnect(menuRow.id))}>
               Disconnect
-            </ShellMenuItem>
+            </MenuItem>
           )}
-          <ShellMenuItem onSelect={() => fromMenu(() => onClose(menuRow.id))}>
-            Close session
-          </ShellMenuItem>
+          <MenuItem onSelect={() => fromMenu(() => onClose(menuRow.id))}>Close session</MenuItem>
         </ShellMenu>
       )}
     </aside>
@@ -294,9 +304,11 @@ interface SlotProps {
   row: SessionRow;
   rows: SessionRow[];
   current: boolean;
-  /** The key that brings this row to the front, shown while you hold
-   *  Mod, or null. */
+  /** The shortcut spec that brings this row to the front, like Mod+1,
+   *  or null past the ninth row. */
   keys: string | null;
+  /** Mod is held, so the row draws its keys. */
+  numbered: boolean;
   /** Its name is a field while you rename it. */
   renaming: boolean;
   /** It is the row in the air. */
@@ -305,6 +317,10 @@ interface SlotProps {
   offset: number;
   /** A press that may lift the row. */
   onPress: (e: PointerEvent<HTMLButtonElement>) => void;
+  /** Hands the sidebar the row's button, or null as it goes. */
+  onButton: (el: HTMLButtonElement | null) => void;
+  /** Move the keyboard `delta` rows down, or up when negative. */
+  onStep: (delta: number) => void;
   /** The pointer moved on the row's slot. */
   onRest: (slot: HTMLElement) => void;
   /** Where the row's card shows while it does, level with its slot and
@@ -330,10 +346,13 @@ function SessionSlot({
   rows,
   current,
   keys,
+  numbered,
   renaming,
   lifted,
   offset,
   onPress,
+  onButton,
+  onStep,
   onRest,
   card,
   dropped,
@@ -376,10 +395,12 @@ function SessionSlot({
       onPointerMove={(e) => onRest(e.currentTarget)}
     >
       <button
+        ref={onButton}
         type="button"
         className={rowClass}
         aria-current={current ? 'true' : undefined}
         aria-describedby={described}
+        aria-keyshortcuts={keys ? ariaKeyshortcuts(keys) : undefined}
         onPointerDown={onPress}
         onClick={() => {
           if (dropped()) return;
@@ -388,8 +409,13 @@ function SessionSlot({
           onCaret();
         }}
         onKeyDown={(e) => {
-          if (e.key !== 'Enter' && e.key !== 'F2') return;
           if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.nativeEvent.isComposing) return;
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            onStep(e.key === 'ArrowUp' ? -1 : 1);
+            return;
+          }
+          if (e.key !== 'Enter' && e.key !== 'F2') return;
           e.preventDefault();
           e.stopPropagation();
           onRename();
@@ -404,8 +430,12 @@ function SessionSlot({
           rows={rows}
           mark={look.mark}
           end={
-            keys ? (
-              <span className="shell-sessions-key">{keys}</span>
+            numbered && keys ? (
+              // The row names its keys in aria-keyshortcuts, so the glyphs
+              // stay out of its name.
+              <span className="shell-sessions-key" aria-hidden="true">
+                {shortcutLabel(keys)}
+              </span>
             ) : (
               look.count > 0 && !current && <WaitingCount count={look.count} />
             )

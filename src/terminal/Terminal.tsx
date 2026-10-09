@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -6,60 +6,30 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon, type ISearchResultChangeEvent } from '@xterm/addon-search';
 
 import '@xterm/xterm/css/xterm.css';
-import { subscribeBaseAnsi } from '../theme/baseAnsi';
-import {
-  nativeSurfaceSetFont,
-  nativeSurfaceSetTheme,
-  onNativeGridSize,
-} from '../ipc/nativeSurface';
+import { onNativeGridSize } from '../ipc/nativeSurface';
 import { setWindowSize } from '../ipc/session';
 import { othersOnProfile } from '../stores/session/sessionsStore';
 import { loadScrollback, onOutput, terminalLocalWrite } from '../ipc/terminal';
-import { useTauriEvent } from '../ipc/useTauriEvent';
-import { findTheme, onCustomThemesChanged } from '../theme/themes';
-import {
-  getColorVision,
-  getFitGameColors,
-  subscribeColorVision,
-  subscribeFitGameColors,
-} from '../theme/fitGameColors';
-import { setHighlightGround } from './highlightGround';
-import { nativeThemeOf, xtermThemeFor } from './terminalTheme';
-import { getCurrentThemeId, subscribeThemeChanges } from '../theme/theme';
+import { themeFor, washFieldsFor } from './paneTheme';
+import { getCurrentThemeId } from '../theme/theme';
 import { OutputShaper } from './outputShaper';
 import { RegionWriter } from './terminalRegion';
-import { remeasureWhenLoaded } from './terminalFont';
+import { echoMark } from '../input/maskedInput';
+import { getEchoMarkOptions, subscribeEchoMarkOptions } from '../stores/config/echoMarkStore';
 import { nativeSurfaceEnabled } from './terminalRenderer';
 import { BandLayer, LiftTracker, markLifted } from './xterm/liftBands';
 import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalRows';
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
+import { watchSelection } from './xterm/xtermSelection';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
+import { refillsWashes, WashPainter, WashWidth, type WashFields } from './xterm/xtermWash';
 import { XtermBlink } from './xterm/xtermBlink';
 import { xtermWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
 import { PaneSizer } from './paneSizer';
 import { terminalHandle, type TerminalHandle } from './terminalHandle';
-
-// Report the active theme's terminal background to the session, which
-// keeps trigger colors readable on it, on either renderer. Then report the
-// surface colors and resolved ANSI palette to the native renderer so its
-// background/foreground/selection and the 16-color palette match xterm
-// (including the themeTerminalColors tint, Fit game colors and the
-// color vision it fits for),
-// live-updating on theme or toggle change.
-function reportTheme(themeId: string, themeTerminalColors: boolean): void {
-  const theme = findTheme(themeId);
-  setHighlightGround(theme.xterm.background);
-  if (!nativeSurfaceEnabled()) return;
-  const native = nativeThemeOf(theme, themeTerminalColors, getFitGameColors(), getColorVision());
-  void nativeSurfaceSetTheme({
-    background: native.background,
-    foreground: native.foreground,
-    selection: native.selection,
-    ansi: native.ansi,
-  }).catch(() => {});
-}
+import { useTerminalOptions } from './useTerminalOptions';
 
 interface Props {
   /** The session whose terminal this is. It hears that session's output
@@ -127,24 +97,8 @@ interface Props {
   /// (src/terminal/xterm/xtermBlink.ts) while WebGL draws the pane. Off, or on the
   /// DOM renderer, it draws it steady.
   blinkText?: boolean;
-}
-
-// The terminal's palette lives in src/terminal/terminalTheme.ts, which the
-// pinned prompt band reads too.
-
-/** `color`, a #rrggbb ground, fully clear. */
-function clearGround(color: string | undefined): string {
-  const m = /^#?([0-9a-f]{6})/i.exec(color ?? '');
-  return m ? `#${m[1]}00` : 'rgba(0, 0, 0, 0)';
-}
-
-/** The theme xterm draws with: the terminal palette, its ground clear
- *  while the pane lifts your prompts (`clear`), since the bands draw under
- *  xterm's text and the terminal area's ground shows through. */
-function themeFor(themeId: string, tinted: boolean, clear: boolean) {
-  const theme = xtermThemeFor(findTheme(themeId), tinted, getFitGameColors(), getColorVision());
-  if (clear) theme.background = clearGround(theme.background);
-  return theme;
+  /// Scrollback size, the lines xterm keeps above the screen.
+  scrollback?: number;
 }
 
 export function Terminal({
@@ -164,6 +118,7 @@ export function Terminal({
   lentRows = 0,
   anchorBottom = false,
   blinkText = false,
+  scrollback = 10_000,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -205,6 +160,14 @@ export function Terminal({
   // time the user toggles the setting.
   const themeTerminalColorsRef = useRef(themeTerminalColors);
   themeTerminalColorsRef.current = themeTerminalColors;
+  // The wash fields of the theme the pane draws, which every write
+  // paints washed rows in.
+  const washRef = useRef<WashFields>(new Map());
+  // How narrow the pane was for the washes it painted since it last
+  // filled, and how it fills anew in the fields in force, which the
+  // setup effect sets.
+  const washWidthRef = useRef(new WashWidth());
+  const refillRef = useRef<(() => void) | null>(null);
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
   // a fresh arrow function, the effect re-runs, and the xterm instance is
@@ -223,13 +186,25 @@ export function Terminal({
   // xterm's options.
   const appliedLiftRef = useRef(false);
 
+  // Draw with the theme `themeId`, its ground clear while the pane lifts
+  // your prompts, and paint washes in its colors. xterm keeps the colors
+  // a row was written in, so washes already on screen take the new
+  // fields as the pane fills anew from the scrollback.
+  const applyTheme = (term: XTerm, themeId: string = getCurrentThemeId()) => {
+    term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
+    const fields = washFieldsFor(themeId, themeTerminalColorsRef.current);
+    const refill = refillsWashes(washRef.current, fields, washWidthRef.current.washed());
+    washRef.current = fields;
+    if (refill) refillRef.current?.();
+  };
+
   // Turn the bands on or off, with the clear ground they need.
   const applyLift = (term: XTerm) => {
     const on = liftsHere();
     if (on === appliedLiftRef.current) return;
     appliedLiftRef.current = on;
     term.options.allowTransparency = on;
-    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, on);
+    applyTheme(term);
     // The area is every pane's, so the pane that shows marks it, and a
     // pane that hides leaves the mark to the one that shows next.
     const area = containerRef.current?.closest('.terminal-area');
@@ -252,7 +227,7 @@ export function Terminal({
       fontFamily,
       fontSize,
       lineHeight,
-      scrollback: 10000,
+      scrollback,
       allowProposedApi: true,
       convertEol: false,
       // High-precision touchpads emit many small deltaY events per
@@ -265,6 +240,9 @@ export function Terminal({
       scrollSensitivity: 0.75,
       theme: themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, false),
     });
+    washRef.current = washFieldsFor(getCurrentThemeId(), themeTerminalColorsRef.current);
+    const fields = () => washRef.current;
+    const washed = () => washWidthRef.current.painted(term.cols);
 
     // Every write to this xterm goes through one ordered writer, which
     // finds the regions the session marks and replaces them only while
@@ -273,6 +251,12 @@ export function Terminal({
     // parsed what it holds. A copy that fills anew from the scrollback
     // gets a writer of its own (see the mirror below).
     let writer = new RegionWriter(term);
+    // The writer leaves your mark out after a prompt that ends in >, so
+    // it holds the mark the command line echoes with, now and after each
+    // Settings save or profile switch.
+    const echoMarkNow = () => echoMark(getEchoMarkOptions());
+    writer.setEchoMark(echoMarkNow());
+    const stopEchoMark = subscribeEchoMarkOptions(() => writer.setEchoMark(echoMarkNow()));
     const localDecoder = new TextDecoder('utf-8', { fatal: false });
     // The newest output of the prompt stage the writer took, in the order
     // the session sent them.
@@ -299,6 +283,10 @@ export function Terminal({
     });
 
     term.open(containerRef.current);
+    // The output is one Tab stop on its slot (Q22), so xterm's hidden
+    // input leaves the Tab order and never eats a Tab.
+    if (term.textarea) term.textarea.tabIndex = -1;
+    term.attachCustomKeyEventHandler((event) => event.key !== 'Tab');
     const blink = new XtermBlink(term);
     blink.setOn(blinkTextRef.current);
     blinkRef.current = blink;
@@ -426,9 +414,53 @@ export function Terminal({
       }
     };
 
-    // Decoded across outputs and word wrapped (src/terminal/outputShaper.ts).
-    // A copy that fills anew starts a shaper of its own.
-    let shaper = new OutputShaper(term.cols);
+    // Decoded across outputs, word wrapped and its washes painted
+    // (src/terminal/outputShaper.ts). A copy that fills anew starts a
+    // shaper of its own.
+    let shaper = new OutputShaper(term.cols, fields, washed);
+
+    // Fill the copy anew from the session's scrollback, word wrapped as
+    // live output is and in the wash fields in force, and keep the live
+    // pane at its tail. The history pane keeps
+    // the row it shows. Only a copy the screen gave back says the
+    // scrollback was restored, since its writes stopped meanwhile. A fill
+    // that a newer one overtook writes nothing and settles nothing, since
+    // the writer and the screen are the newer fill's. The reset goes in
+    // the stream (RIS), since xterm still parses what an earlier writer
+    // handed it after a reset called from here, and the history would
+    // show twice.
+    let fills = 0;
+    const fill = (banner: boolean, done: () => void) => {
+      const gen = ++fills;
+      const top = term.buffer.active.viewportY;
+      writer.dispose();
+      writer = new RegionWriter(term);
+      writer.setEchoMark(echoMarkNow());
+      if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
+      writer.local('\x1bc');
+      shaper = new OutputShaper(term.cols, fields, washed);
+      washWidthRef.current.filled();
+      const settle = () => {
+        if (gen !== fills) return;
+        if (quietRef.current) {
+          term.scrollToLine(top);
+        } else {
+          padToBottom();
+          keepTail(term);
+        }
+        done();
+      };
+      loadScrollback(false, session)
+        .then(({ bytes }) => {
+          if (gen !== fills) return;
+          if (bytes.length === 0) return settle();
+          writer.local(shaper.whole(localDecoder.decode(bytes)));
+          if (banner) writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
+          // The pad reads where the cursor sits once xterm parsed it all.
+          writer.whenParsed(settle);
+        })
+        .catch(settle);
+    };
 
     // While the native underlay draws the live terminal, the xterm copy
     // hides and takes no writes (src/terminal/xterm/xtermMirror.ts). It keeps its
@@ -440,28 +472,9 @@ export function Terminal({
     const mirror = new XtermMirror({
       owned: () =>
         !quietRef.current && nativeSurfaceEnabled() && underlayShows(document.documentElement),
-      rebuild: (done) => {
-        writer.dispose();
-        term.reset();
-        writer = new RegionWriter(term);
-        if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
-        shaper = new OutputShaper(term.cols);
-        const settle = () => {
-          padToBottom();
-          keepTail(term);
-          done();
-        };
-        loadScrollback(false, session)
-          .then(({ bytes }) => {
-            if (bytes.length === 0) return settle();
-            writer.local(localDecoder.decode(bytes));
-            writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
-            // The pad reads where the cursor sits once xterm parsed it all.
-            writer.whenParsed(settle);
-          })
-          .catch(settle);
-      },
+      rebuild: (done) => fill(true, done),
     });
+    refillRef.current = () => mirror.refill((done) => fill(false, done));
     const underlayWatch = new MutationObserver(() => mirror.check());
     underlayWatch.observe(document.documentElement, {
       attributes: true,
@@ -472,10 +485,13 @@ export function Terminal({
     // it has the same history as xterm; the quiet history pane must not.
     loadScrollback(!quietRef.current && nativeSurfaceEnabled(), session)
       .then(({ bytes, seededNative }) => {
-        // A copy the native grid hides takes none of it.
-        const toXterm = mirror.mirrors();
+        // A copy the native grid hides takes none of it, and neither does
+        // a copy that began filling anew, since the fill writes it all.
+        const toXterm = mirror.mirrors() && fills === 0;
         if (bytes.length > 0) {
-          if (toXterm) writer.local(localDecoder.decode(bytes));
+          if (toXterm) {
+            writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current, washed));
+          }
           if (!quietRef.current) {
             // Explicit 256-palette gray, not dim: xterm and the native
             // renderer dim differently, so dim would show two shades.
@@ -516,6 +532,18 @@ export function Terminal({
         notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
+    // A washed row keeps the width it was written at, so a pane that grows
+    // past it fills anew once the size settles, and the field reaches the
+    // new edge as it does natively.
+    let widthRefill: ReturnType<typeof setTimeout> | null = null;
+    const refillWhenSettled = () => {
+      if (widthRefill) clearTimeout(widthRefill);
+      widthRefill = setTimeout(() => {
+        widthRefill = null;
+        if (washWidthRef.current.outgrown(term.cols)) refillRef.current?.();
+      }, 150);
+    };
+
     // Client-side word wrap. NAWS handles most lines server-side, but
     // some content paths (tells, comm channels) ignore it on certain
     // ROM derivatives. We line-buffer here so a complete line word-
@@ -531,6 +559,7 @@ export function Terminal({
     // the mirror.
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
+      if (washWidthRef.current.outgrown(cols)) refillWhenSettled();
       paneSizer.reportCellSize();
       paneSizer.placeGrid();
       // Same tail-anchor rationale as in onOutput below: a resize
@@ -674,88 +703,19 @@ export function Terminal({
       },
     };
 
-    // Auto-clear selection when it scrolls off the viewport.
-    // xterm's canvas renderer paints the selection overlay at the
-    // selection's current row in the viewport, but the underlying
-    // selection POSITION stays anchored to its original buffer rows
-    // even when new data scrolls the buffer up — the paint then
-    // happens at a stale screen position ("ghost"). Subscribing to
-    // onScroll lets us notice when the selection range has fallen
-    // outside [viewportY, viewportY + rows] and clear it before the
-    // ghost can render.
-    const onScrollClearStaleSelection = () => {
-      const sel = term.getSelectionPosition();
-      if (!sel) return;
-      const top = term.buffer.active.viewportY;
-      const bottom = top + term.rows - 1;
-      const offTop = sel.end.y < top;
-      const offBottom = sel.start.y > bottom;
-      if (offTop || offBottom) {
-        term.clearSelection();
-      }
-    };
-    const scrollDisposable = term.onScroll(onScrollClearStaleSelection);
-
-    // A clock piece in your design leaves your prompt as it is while you
-    // select text here, or while the live pane is off its newest rows.
-    const selectionPart = quietRef.current ? 'historySelection' : 'liveSelection';
-    const readerSelection = term.onSelectionChange(() =>
-      noteReader(selectionPart, term.hasSelection(), session),
-    );
-    const readerBack = quietRef.current
-      ? null
-      : term.onScroll(() =>
-          noteReader(
-            'liveBack',
-            term.buffer.active.viewportY !== term.buffer.active.baseY,
-            session,
-          ),
-        );
-
-    // Ctrl/Cmd + C or X copies the xterm selection. The keystroke
-    // almost always lands while focus is in the Input box (the user
-    // drag-selects xterm output, then hits the shortcut without
-    // clicking back into the terminal), so a keydown listener
-    // attached to xterm alone never fires. Listen at the window
-    // instead, and defer to the focused element's native copy/cut
-    // when it actually has its own selection. A hidden pane keeps its
-    // selection for when it shows, and copies nothing meanwhile.
-    const onCopyKey = (event: KeyboardEvent) => {
-      if (!shownRef.current) return;
-      const key = event.key.toLowerCase();
-      if (key !== 'c' && key !== 'x') return;
-      // Accept any combination of Ctrl or Cmd (without Alt), with or
-      // without Shift. Plain Ctrl+C is the convention most MUD clients
-      // use; the older Ctrl+Shift+C variant still works.
-      const primary = event.ctrlKey || event.metaKey;
-      if (!primary || event.altKey) return;
-      const selection = term.getSelection();
-      if (!selection) return;
-      const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
-      const activeHasSelection =
-        active && 'selectionStart' in active && active.selectionStart !== active.selectionEnd;
-      const domSelection = window.getSelection();
-      const domHasSelection = domSelection !== null && domSelection.toString().length > 0;
-      if (activeHasSelection || domHasSelection) return;
-      void navigator.clipboard.writeText(selection).catch(() => {
-        /* clipboard may be unavailable in some webviews */
-      });
-      event.preventDefault();
-      event.stopPropagation();
-      // Return the caret to the command line so the user keeps typing
-      // instead of leaving focus stranded on the terminal.
-      window.dispatchEvent(new Event('vosh:focus-input'));
-    };
-    window.addEventListener('keydown', onCopyKey, true);
+    const selection = watchSelection(term, quietRef.current, shownRef, session);
 
     return () => {
       paneSizer.stop();
-      window.removeEventListener('keydown', onCopyKey, true);
+      selection.removeCopyKey();
       detachUnderlayInput?.();
       if (naws_timer) clearTimeout(naws_timer);
+      if (widthRefill) clearTimeout(widthRefill);
       unsubOutput?.();
       unsubGridSize?.();
       underlayWatch.disconnect();
+      refillRef.current = null;
+      stopEchoMark();
       writer.dispose();
       bandsRef.current?.dispose();
       bandsRef.current = null;
@@ -763,12 +723,12 @@ export function Terminal({
       blinkRef.current = null;
       lifts?.dispose();
       resultsSub.dispose();
-      scrollDisposable.dispose();
-      readerSelection.dispose();
-      readerBack?.dispose();
+      selection.scroll.dispose();
+      selection.readerSelection.dispose();
+      selection.readerBack?.dispose();
       // A pane that goes takes its selection and its place with it.
-      noteReader(selectionPart, false, session);
-      if (readerBack) noteReader('liveBack', false, session);
+      noteReader(selection.selectionPart, false, session);
+      if (selection.readerBack) noteReader('liveBack', false, session);
       searchAddon.dispose();
       webgl.release();
       term.dispose();
@@ -782,141 +742,36 @@ export function Terminal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The pane shows or hides as a selection moves, before the page
-  // paints, so it never shows a frame at the size it had. The setup
-  // effect applied the state the pane mounted with.
-  useLayoutEffect(() => {
-    if (appliedShownRef.current === shown) return;
-    appliedShownRef.current = shown;
-    if (shown) showingRef.current?.show();
-    else showingRef.current?.hide();
-  }, [shown]);
-
-  // A new count of rows lent to the pinned band applies before the page
-  // paints, in the same commit that grows or shrinks the band, so the
-  // newest line moves with the band's top and never sits under it. So
-  // does the grid starting or stopping keeping to the bottom.
-  useLayoutEffect(() => {
-    if (lentRef.current === lentRows && anchorRef.current === anchorBottom) return;
-    lentRef.current = lentRows;
-    anchorRef.current = anchorBottom;
-    paneSizerRef.current?.relayout();
-  }, [lentRows, anchorBottom]);
-
-  // Blinking text turns on or off live.
-  useEffect(() => {
-    blinkRef.current?.setOn(blinkText);
-  }, [blinkText]);
-
-  // Apply font changes without rebuilding the terminal so scrollback and
-  // listeners survive. xterm reflows on the next fit() call.
-  useEffect(() => {
-    const term = termRef.current;
-    const paneSizer = paneSizerRef.current;
-    if (!term || !paneSizer) return;
-    term.options.fontFamily = fontFamily;
-    term.options.fontSize = fontSize;
-    try {
-      paneSizer.fitKept();
-    } catch {
-      // ignore
-    }
-    if (nativeSurfaceEnabled()) {
-      // The whole list, so the atlas falls back through it the way
-      // xterm does.
-      void nativeSurfaceSetFont({
-        family: fontFamily,
-        size: Math.round(fontSize),
-      }).catch(() => {});
-    }
-    // xterm just measured its cell on the faces that had loaded, and a
-    // face the page mints for this list loads later. Measure again once
-    // the face the list draws with has loaded (src/terminal/terminalFont.ts).
-    if (typeof document === 'undefined' || !document.fonts) return;
-    return remeasureWhenLoaded(document.fonts, term, () => paneSizerRef.current?.refitCell());
-  }, [fontFamily, fontSize]);
-
-  // Apply a line height change without rebuilding the terminal. xterm
-  // resizes its cells on the option change. Under the native surface the
-  // new cell goes out at once, the surface rebuilds its atlas to it, and
-  // its grid size event resizes xterm to match. Otherwise fit reflows.
-  useEffect(() => {
-    const term = termRef.current;
-    if (!term || term.options.lineHeight === lineHeight) return;
-    term.options.lineHeight = lineHeight;
-    if (!quietRef.current && nativeSurfaceEnabled()) {
-      paneSizerRef.current?.reportCellMetrics();
-      return;
-    }
-    try {
-      paneSizerRef.current?.fitKept();
-    } catch {
-      // ignore resize before layout settles
-    }
-  }, [lineHeight]);
-
-  // Re-apply the palette when the canonical-vs-themed toggle flips
-  // without needing to recreate the XTerm instance.
-  useEffect(() => {
-    const term = termRef.current;
-    if (!term) return;
-    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColors, liftsHere());
-    reportTheme(getCurrentThemeId(), themeTerminalColors);
-  }, [themeTerminalColors, liftsHere]);
-
-  // Lift your prompts, or stop, when the choice changes.
-  useEffect(() => {
-    const term = termRef.current;
-    if (term) applyLift(term);
-    // applyLift reads the refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lifted]);
-
-  // Re-apply when the user edits the base ANSI palette (the colors
-  // used while the tint toggle is off), turns Fit game colors on or off,
-  // picks another color vision, or a new custom theme list brings the
-  // theme on screen its fit.
-  useEffect(() => {
-    const reapply = () => {
-      const term = termRef.current;
-      if (!term) return;
-      term.options.theme = themeFor(
-        getCurrentThemeId(),
-        themeTerminalColorsRef.current,
-        liftsHere(),
-      );
-      reportTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
-    };
-    const stopBase = subscribeBaseAnsi(reapply);
-    const stopFit = subscribeFitGameColors(reapply);
-    const stopVision = subscribeColorVision(reapply);
-    const stopList = onCustomThemesChanged(reapply);
-    return () => {
-      stopBase();
-      stopFit();
-      stopVision();
-      stopList();
-    };
-  }, [liftsHere]);
-
-  // Live-refresh the xterm palette when the user switches themes from
-  // the settings window. Listens on the cross-window theme event.
-  useTauriEvent(subscribeThemeChanges, (themeId) => {
-    const term = termRef.current;
-    if (!term) return;
-    term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
-    reportTheme(themeId, themeTerminalColorsRef.current);
+  useTerminalOptions({
+    shown,
+    lentRows,
+    anchorBottom,
+    blinkText,
+    fontFamily,
+    fontSize,
+    scrollback,
+    lineHeight,
+    themeTerminalColors,
+    lifted,
+    termRef,
+    paneSizerRef,
+    blinkRef,
+    showingRef,
+    appliedShownRef,
+    lentRef,
+    anchorRef,
+    themeTerminalColorsRef,
+    quietRef,
+    liftsHere,
+    applyTheme,
+    applyLift,
   });
 
   return (
     <div ref={sizingRef} className="terminal-sizer" hidden={!shown}>
-      <div
-        ref={containerRef}
-        className="terminal-host"
-        role="log"
-        aria-live="polite"
-        aria-label="MUD output"
-      />
+      {/* The host holds xterm's canvas and no text to read. The game
+          reaches a screen reader through ScreenReaderFeed beside it. */}
+      <div ref={containerRef} className="terminal-host" />
     </div>
   );
 }

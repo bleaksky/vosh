@@ -1,11 +1,13 @@
 // How the status line gives way while it carries your vitals and runs
-// short (Vitals Styles Q6, board 4). First your opponent's name ends in
-// an ellipsis and goes, with a Target item on another mob, then the
-// labels go, then Values falls back to Current, then the moons and then
-// the game time go. The tick stays. Every step measures your vitals at
-// their max with room kept for an opponent at 100 percent, so a fight
-// or a value that loses a digit moves nothing. Kept pure for the tests,
-// with every width in CSS px measured by the caller.
+// short. First your opponent's name ends in an ellipsis and goes, with
+// a Target item on another mob, then the labels go, then Values falls
+// back to Current, then the moons, then a fine round trip to the game,
+// and then the game time go. The tick stays, and so does a round trip
+// at 300 ms or more. Every step measures your vitals at their max with
+// room kept for an opponent at 100 percent, and the round trip at its
+// widest, so a fight or a value that loses a digit moves nothing. Kept
+// pure for the tests, with every width in CSS px measured by the
+// caller.
 
 /** The 20 px between items, the 6 px between a label and its value or a
  *  name and its health, and the 8 px between the clock's parts, as
@@ -42,6 +44,11 @@ export interface StatusLineWidths {
   /** A Target item on another mob shows: its caption and the gap
    *  after it, 0 with none. */
   target: number;
+  /** The round trip to the game at its widest, 0 before the first
+   *  reading. */
+  roundTrip: number;
+  /** The round trip reads 300 ms or more, so it never gives way. */
+  slow: boolean;
   /** The clock's parts, 0 for a part that does not show. */
   tick: number;
   time: number;
@@ -55,6 +62,7 @@ export interface StatusLineFit {
   /** Your Values form, or Current where it gave way. */
   current: boolean;
   moons: boolean;
+  roundTrip: boolean;
   time: boolean;
 }
 
@@ -64,14 +72,16 @@ export const FIT_ALL: StatusLineFit = {
   labels: true,
   current: false,
   moons: true,
+  roundTrip: true,
   time: true,
 };
 
-const STEPS: readonly ((fit: StatusLineFit) => StatusLineFit)[] = [
+const STEPS: readonly ((fit: StatusLineFit, w: StatusLineWidths) => StatusLineFit)[] = [
   (fit) => ({ ...fit, names: false }),
   (fit) => ({ ...fit, labels: false }),
   (fit) => ({ ...fit, current: true }),
   (fit) => ({ ...fit, moons: false }),
+  (fit, w) => (w.slow ? fit : { ...fit, roundTrip: false }),
   (fit) => ({ ...fit, time: false }),
 ];
 
@@ -81,7 +91,7 @@ export function statusLineFit(widths: StatusLineWidths): StatusLineFit {
   let fit = FIT_ALL;
   for (const step of STEPS) {
     if (fits(widths, fit)) return fit;
-    fit = step(fit);
+    fit = step(fit, widths);
   }
   return fit;
 }
@@ -99,12 +109,14 @@ function fits(w: StatusLineWidths, fit: StatusLineFit): boolean {
 }
 
 /** The items that keep their width: your vitals, the room for your
- *  opponent's health, and the clock, with the gaps between them. */
+ *  opponent's health, the round trip and the clock, with the gaps
+ *  between them. */
 function fixedWidth(w: StatusLineWidths, fit: StatusLineFit): number {
   const items = w.vitals.map(
     (v) => (fit.labels ? v.label + VALUE_GAP : 0) + (fit.current ? v.current : v.value),
   );
   if (w.foe !== null) items.push(w.foe);
+  if (fit.roundTrip && w.roundTrip > 0) items.push(w.roundTrip);
   const clock = [w.tick, fit.time ? w.time : 0, fit.moons ? w.moons : 0].filter((p) => p > 0);
   if (clock.length > 0) items.push(sum(clock) + CLOCK_GAP * (clock.length - 1));
   const lead = w.lead > 0 ? w.lead + ITEM_GAP : 0;

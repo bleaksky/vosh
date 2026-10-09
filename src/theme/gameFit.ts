@@ -6,9 +6,9 @@
 // its own hue, and chroma gives way only where sRGB runs out, so a red
 // stays the scheme's red.
 //
-// A port of the Themes review's metrics (mud.mjs and fit.mjs). The
-// arithmetic and its order stay as the review wrote them, so a fit here
-// gives the colors the review measured, slot for slot.
+// A port of the metrics in mud.mjs and fit.mjs. The arithmetic and
+// its order stay as those scripts wrote them, so a fit here gives the
+// colors they measured, slot for slot.
 //
 // Where a fit comes from. A built in theme ships its fit in themes.ts
 // (fitted), worked out ahead by this file, and gameFit.test.ts fits
@@ -332,7 +332,7 @@ const ratio = (la: number, lb: number) => (Math.max(la, lb) + 0.05) / (Math.min(
 
 type ToneOf = (slot: 'background' | GameSlot) => Tone;
 
-/** The id and target of every check, in the order the review lists
+/** The id and target of every check, in the order the metrics list
  *  them. T4 takes its range from body text (measure). */
 const CHECK_SPEC: readonly (readonly [string, string])[] = [
   ['T1 fg Lc', '>=75'],
@@ -408,7 +408,7 @@ function measure(t: ToneOf): Measured {
   return { values, oks, dimTop };
 }
 
-/** Every check, in the order the review lists them. */
+/** Every check, in the order the metrics list them. */
 export function checks(p: XtermPalette): GameCheck[] {
   const tones = new Map<string, Tone>();
   const { values, oks, dimTop } = measure((k) => {

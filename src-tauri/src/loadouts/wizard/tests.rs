@@ -153,6 +153,40 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
+/// Your edits to the presets move to catalog.toml with the list of
+/// presets that are on, leave the profile file, and reach every
+/// character.
+#[tokio::test]
+async fn a_loadout_save_keeps_the_preset_edits_in_the_catalog() {
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    loadout_mode(&set, dir.path());
+    let edits = crate::loadouts::preset_edits::PresetEdits::from([(
+        "disarm_buff_fade".to_string(),
+        crate::loadouts::preset_edits::PresetEdit {
+            colors: std::collections::BTreeMap::from([(
+                "line".to_string(),
+                crate::loadouts::preset_edits::EditRow {
+                    value: "#c3a6ff".into(),
+                    was: "fg:178".into(),
+                    seen: None,
+                },
+            )]),
+            ..Default::default()
+        },
+    )]);
+    let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
+    state.selected_profile().await.preset_edits = edits.clone();
+    persist(&state).await;
+    let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
+    assert_eq!(saved.preset_edits, edits);
+    let text = read(&set.active_path());
+    assert!(!text.contains("preset_edits"), "{text}");
+
+    let state = relaunch_as(dir.path(), "Healer").await;
+    assert_eq!(state.selected_profile().await.preset_edits, edits);
+}
+
 #[tokio::test]
 async fn a_catalog_that_does_not_read_is_held_and_never_replaced() {
     let dir = tempfile::tempdir().unwrap();
@@ -1566,7 +1600,10 @@ async fn a_preset_macro_folds_into_one_beside_your_macro_on_its_key() {
         config.ui.enabled_presets = vec!["numpad_movement".into()];
         config.macros.extend(yours);
         config.macros.extend(numpad_movement());
-        crate::loadouts::presets::hold_taken_keys(&mut config.macros);
+        crate::loadouts::presets::hold_taken_keys(
+            &mut config.macros,
+            &std::collections::BTreeSet::new(),
+        );
         config.save(&set.profile_path(name)).unwrap();
     }
     let state = launch_state(dir.path()).await;
@@ -1601,6 +1638,65 @@ async fn a_preset_macro_folds_into_one_beside_your_macro_on_its_key() {
     let presets = catalog.macros.iter().filter(|m| m.preset.is_some());
     assert!(presets.clone().all(|m| m.group.is_none()));
     assert_eq!(presets.count(), 6);
+}
+
+/// What Numpad3 sends for the character a launch plays: each macro on it
+/// that is on, in a group that is on.
+async fn numpad3_sends(state: &SharedState) -> Vec<String> {
+    let p = state.selected_profile().await;
+    p.macros
+        .iter()
+        .filter(|m| m.key == "Numpad3" && m.enabled)
+        .filter(|m| {
+            m.group
+                .as_ref()
+                .is_none_or(|g| !p.disabled_macro_groups.contains(g))
+        })
+        .map(|m| m.command.clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn each_character_keeps_the_preset_key_it_had_after_the_wizard() {
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    // Both characters have Numpad movement on. Default's only Numpad3 is
+    // the preset's d, and Healer binds its own rec there, which holds d
+    // off in its file.
+    for (name, yours) in [
+        (DEFAULT_PROFILE_NAME, None),
+        ("Healer", Some(macro_on("Numpad3", "rec"))),
+    ] {
+        let mut config = ProfileConfig::default();
+        config.ui.enabled_presets = vec!["numpad_movement".into()];
+        config.macros.extend(yours);
+        config.macros.extend(numpad_movement());
+        crate::loadouts::presets::hold_taken_keys(
+            &mut config.macros,
+            &std::collections::BTreeSet::new(),
+        );
+        config.save(&set.profile_path(name)).unwrap();
+    }
+    let state = launch_state(dir.path()).await;
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
+
+    // Healer's rec lands in a group Default keeps off, so Default keeps
+    // going down with Numpad3 and Healer keeps its rec. Default used to
+    // lose d to the rec it never had on.
+    let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+    assert_eq!(numpad3_sends(&state).await, ["d"]);
+    let state = relaunch_as(dir.path(), "Healer").await;
+    assert_eq!(numpad3_sends(&state).await, ["rec"]);
+
+    // catalog.toml holds d off as rec holds it for every character, so
+    // the file says the same whoever saved it last.
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
+    let d = catalog
+        .macros
+        .iter()
+        .find(|m| m.preset.is_some() && m.key == "Numpad3");
+    assert_eq!(d.map(|m| m.enabled), Some(false));
 }
 
 /// Default with the alias kk, a target, and a 300 pixel panel.
@@ -1875,7 +1971,7 @@ async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
         // group names, and every character got every item.
         for (n, name) in names.iter().enumerate() {
             let state = relaunch_as(dir.path(), name).await;
-            let notices = state.take_launch_notices();
+            let notices = state.take_launch_messages();
             let finished = [crate::loadouts::wizard::journal::WIZARD_FINISHED_NOTICE.to_string()];
             if n == 0 {
                 assert_eq!(notices, finished, "stop {stop}");
@@ -1939,7 +2035,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     let state = relaunch_as(dir.path(), "Healer").await;
     assert!(state.relaunch_pending.load(Ordering::Acquire));
     assert!(!state.loadout_mode.load(Ordering::Acquire));
-    assert_eq!(state.take_launch_notices(), [WIZARD_UNFINISHED_NOTICE]);
+    assert_eq!(state.take_launch_messages(), [WIZARD_UNFINISHED_NOTICE]);
     // Loadout mode used to start over the Healer file, which still
     // holds its items under their old groups, so the Healer got
     // every other character's items too. The session runs on the
@@ -2366,4 +2462,96 @@ async fn a_switch_keeps_the_items_a_profile_file_holds_as_launch_does() {
     persist(&state).await;
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(live_rows(&state).await, rows);
+}
+
+/// Save `name`'s file with Disarms and fading buffs on and its line in
+/// `color`.
+fn write_line_color(set: &ProfileSet, name: &str, color: &str) {
+    let mut config = ProfileConfig::default();
+    config.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+    config.preset_edits = crate::loadouts::preset_edits::lilac_line();
+    for edit in config.preset_edits.values_mut() {
+        for row in edit.colors.values_mut() {
+            row.value = color.into();
+        }
+    }
+    config.save(&set.profile_path(name)).unwrap();
+}
+
+/// The color of the line of Disarms and fading buffs in `edits`.
+fn line_color(edits: &crate::loadouts::preset_edits::PresetEdits) -> Option<String> {
+    let row = edits.get("disarm_buff_fade")?.colors.get("line")?;
+    row.value.as_str().map(str::to_string)
+}
+
+/// Edits that differ ask which to keep, the one you pick goes to
+/// catalog.toml for every character, and the table leaves each profile
+/// file.
+#[tokio::test]
+async fn the_preset_edits_you_pick_reach_every_character() {
+    use super::apply::ConflictResolution;
+    use super::plan::ItemKind;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    write_line_color(&set, DEFAULT_PROFILE_NAME, "#c3a6ff");
+    write_line_color(&set, "Healer", "#8fa7d9");
+    let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
+    let presets: Vec<_> = plan
+        .conflicts
+        .iter()
+        .filter(|c| c.kind == ItemKind::Preset)
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(presets, ["disarm_buff_fade"]);
+
+    let pick = ConflictResolution {
+        kind: ItemKind::Preset,
+        name: "disarm_buff_fade".into(),
+        source_profile: "Healer".into(),
+    };
+    apply_migration(&state, &[pick], LIBRARY).await.unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
+    assert_eq!(
+        line_color(&catalog.preset_edits).as_deref(),
+        Some("#8fa7d9")
+    );
+    for name in [DEFAULT_PROFILE_NAME, "Healer"] {
+        let text = read(&set.profile_path(name));
+        assert!(!text.contains("preset_edits"), "{name} {text}");
+        let state = relaunch_as(dir.path(), name).await;
+        let p = state.selected_profile().await;
+        assert_eq!(line_color(&p.preset_edits).as_deref(), Some("#8fa7d9"));
+    }
+}
+
+/// A run that stops after catalog.toml finishes from its journal with
+/// the edits in the catalog and none in a profile file.
+#[tokio::test]
+async fn a_run_the_journal_finishes_keeps_the_preset_edits() {
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    write_line_color(&set, DEFAULT_PROFILE_NAME, "#c3a6ff");
+    write_line_color(&set, "Healer", "#c3a6ff");
+    let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+    // Stop once catalog.toml and loadouts.toml are written.
+    WIZARD_WRITES_BEFORE_A_CRASH.set(Some(2));
+    let run = tokio::spawn({
+        let state = state.clone();
+        async move { apply_migration(&state, &[], LIBRARY).await }
+    })
+    .await;
+    WIZARD_WRITES_BEFORE_A_CRASH.set(None);
+    assert!(run.is_err());
+    assert!(read(&set.profile_path("Healer")).contains("preset_edits"));
+
+    let state = relaunch_as(dir.path(), "Healer").await;
+    let p = state.selected_profile().await;
+    assert_eq!(line_color(&p.preset_edits).as_deref(), Some("#c3a6ff"));
+    for name in [DEFAULT_PROFILE_NAME, "Healer"] {
+        let text = read(&set.profile_path(name));
+        assert!(!text.contains("preset_edits"), "{name} {text}");
+    }
 }

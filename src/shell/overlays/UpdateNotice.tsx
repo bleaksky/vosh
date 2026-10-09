@@ -5,6 +5,7 @@ import {
   installUpdateAndRelaunch,
   type UpdateCheckResult,
 } from '../../ipc/updater';
+import { Button } from '../../ui';
 
 // A press on the notice's buttons leaves the caret on the command line,
 // so a click never strands focus on a button that is about to unmount.
@@ -13,12 +14,12 @@ const keepCaret = (event: MouseEvent) => event.preventDefault();
 
 // Update notice at the bottom right of the terminal column, where the
 // toasts sit. It checks once on mount when auto update is on and shows
-// a floating card (radius 16, the SPEC 3 recipe) while a new version is
-// out: a dot in the accent, Update available, the version in the
-// tertiary tone, then Later and Install and restart. Install downloads,
-// installs, and relaunches from the backend. A failed install turns the
-// dot to danger, says so, and offers Try again. Toasts that arrive
-// meanwhile stack above the card (overlays.css).
+// a floating card (radius 16, the floating card recipe) while a new
+// version is out: a dot in the accent, Update available, the version in
+// the tertiary tone, then Later and Install and restart. Install
+// downloads, installs, and relaunches from the backend. A failed
+// install turns the dot to danger, says so, and offers Try again.
+// Toasts that arrive meanwhile stack above the card (overlays.css).
 export function UpdateNotice() {
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -69,7 +70,10 @@ export function UpdateNotice() {
 
   return (
     <div className={`ov-update${error ? ' is-error' : ''}`} role="status" aria-live="polite">
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span
+        className={`ov-update-dot dot ${error ? 'is-danger' : 'is-accent'}`}
+        aria-hidden="true"
+      />
       <span className="ov-update-msg">{message}</span>
       {meta && (
         <span className="ov-update-meta" title={error ?? undefined}>
@@ -77,24 +81,17 @@ export function UpdateNotice() {
         </span>
       )}
       <span className="ov-update-actions">
-        <button
-          type="button"
-          className="ov-button"
-          onMouseDown={keepCaret}
-          onClick={() => setDismissed(true)}
-          disabled={installing}
-        >
+        <Button onMouseDown={keepCaret} onClick={() => setDismissed(true)} disabled={installing}>
           Later
-        </button>
-        <button
-          type="button"
-          className="ov-button is-primary"
+        </Button>
+        <Button
+          variant="primary"
           onMouseDown={keepCaret}
           onClick={() => void handleInstall()}
           disabled={installing}
         >
           {installing ? 'Installing…' : error ? 'Try again' : 'Install and restart'}
-        </button>
+        </Button>
       </span>
     </div>
   );

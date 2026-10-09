@@ -11,27 +11,8 @@ import {
 } from './settingsNav';
 
 describe('resolveSettingsTarget', () => {
-  it('maps every tab id the old window used', () => {
-    const cases: [string, SettingsTarget][] = [
-      ['general', { group: 'general' }],
-      ['themes', { group: 'appearance', section: 'theme' }],
-      ['typography', { group: 'appearance', section: 'text' }],
-      ['vitals', { group: 'layout', section: 'vitals' }],
-      ['tick', { group: 'automation', section: 'timers', anchor: 'tick' }],
-      ['panels', { group: 'characters', anchor: 'layout' }],
-      ['profiles', { group: 'characters' }],
-      ['loadouts', { group: 'automation', section: 'loadouts' }],
-      ['triggers', { group: 'automation', section: 'triggers' }],
-      ['aliases', { group: 'automation', section: 'aliases' }],
-      ['macros', { group: 'automation', section: 'macros' }],
-      ['timers', { group: 'automation', section: 'timers' }],
-      ['import', { group: 'automation', anchor: 'import' }],
-      ['logs', { group: 'general', section: 'logs' }],
-    ];
-    for (const [raw, target] of cases) expect(resolveSettingsTarget(raw)).toEqual(target);
-  });
-
-  it('reads a bare group in every one of the seven', () => {
+  it('reads a bare group in every one of the eleven', () => {
+    expect(SETTINGS_GROUPS).toHaveLength(11);
     for (const { id } of SETTINGS_GROUPS) expect(resolveSettingsTarget(id)).toEqual({ group: id });
   });
 
@@ -66,29 +47,22 @@ describe('resolveSettingsTarget', () => {
       section: 'timers',
       anchor: 'tick',
     });
-    expect(resolveSettingsTarget('  THEMES ')).toEqual({ group: 'appearance', section: 'theme' });
+    expect(resolveSettingsTarget('  Appearance:THEME ')).toEqual({
+      group: 'appearance',
+      section: 'theme',
+    });
   });
 
-  it('sends the prompt rows that left Input Advanced to the Prompt section', () => {
-    expect(resolveSettingsTarget('input:advanced#prompt')).toEqual({
-      group: 'input',
-      section: 'prompt',
-    });
-    expect(resolveSettingsTarget('Input:Advanced#Prompt-Show')).toEqual({
-      group: 'input',
-      section: 'prompt',
-      anchor: 'prompt-show',
-    });
-    // Paste pacing stays under Advanced.
+  it('keeps a section and an anchor as written', () => {
     expect(resolveSettingsTarget('input:advanced#paste-delay')).toEqual({
       group: 'input',
       section: 'advanced',
       anchor: 'paste-delay',
     });
-    expect(resolveSettingsTarget('input:prompt#prompt-game')).toEqual({
+    expect(resolveSettingsTarget('input:command-line#caret')).toEqual({
       group: 'input',
-      section: 'prompt',
-      anchor: 'prompt-game',
+      section: 'command-line',
+      anchor: 'caret',
     });
   });
 
@@ -103,15 +77,18 @@ describe('resolveSettingsTarget', () => {
   it('opens General on anything it cannot read', () => {
     expect(resolveSettingsTarget('')).toEqual({ group: 'general' });
     expect(resolveSettingsTarget('hud')).toEqual({ group: 'general' });
+    // The tab ids of the old Settings window are no links now.
+    expect(resolveSettingsTarget('themes')).toEqual({ group: 'general' });
     expect(resolveSettingsTarget('tick & chips')).toEqual({ group: 'general' });
     expect(resolveSettingsTarget('nowhere:macros#x')).toEqual({ group: 'general' });
   });
 });
 
 describe('settingsSubpage', () => {
-  it('names the session logs page inside General', () => {
-    expect(settingsSubpage(resolveSettingsTarget('general:logs'))).toBe('Session logs');
-    expect(settingsSubpage(resolveSettingsTarget('logs'))).toBe('Session logs');
+  it('names the pages inside Logs', () => {
+    expect(settingsSubpage(resolveSettingsTarget('logs:search'))).toBe('Search logs');
+    expect(settingsSubpage(resolveSettingsTarget('logs:scene'))).toBe('Save a scene');
+    expect(settingsSubpage({ group: 'logs' })).toBeNull();
   });
 
   it('is null for a group page and its sections', () => {
@@ -193,7 +170,7 @@ describe('settingsScrollIds', () => {
   });
 
   it('never scrolls to a page inside a group', () => {
-    expect(settingsScrollIds({ group: 'general', section: 'logs' })).toEqual([]);
+    expect(settingsScrollIds({ group: 'logs', section: 'search' })).toEqual([]);
   });
 
   it('never scrolls to an Automation kind or a Characters profile', () => {

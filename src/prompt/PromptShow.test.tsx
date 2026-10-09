@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { PromptShow, PromptShowState } from '../ipc/prompt';
 import { BUTTON, checkMarks, menuButtonDom, menuHeight, on } from '../test/menuButtonDom';
-import { MENU_BUTTON_MENU_WIDTH } from './MenuButton';
 import { ShowButton } from './PromptShow';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -37,7 +36,7 @@ describe('the button that says where your prompt shows', () => {
       const html = draw(value);
       expect(html, value).toMatch(
         new RegExp(
-          `<button[^>]*class="st-button st-button-secondary pc-menu-button"[^>]*><span>${label}</span><svg`,
+          `<button[^>]*class="btn is-small pc-menu-button"[^>]*><span>${label}</span><svg`,
         ),
       );
       // A screen reader hears what the button picks and the place now.
@@ -61,7 +60,7 @@ describe('the button that says where your prompt shows', () => {
       expect(html).toContain(`title="${why}"`);
       const id = /aria-describedby="([^"]+)"/.exec(html)?.[1];
       expect(id).toBeTruthy();
-      expect(html).toContain(`<span id="${id}" class="st-visually-hidden">${why}</span>`);
+      expect(html).toContain(`<span id="${id}" class="visually-hidden">${why}</span>`);
       // Off, not gone, so Tab still reaches it and a reader hears why.
       expect(html).not.toMatch(/<button[^>]*disabled=""/);
     }
@@ -103,18 +102,16 @@ describe('the menu of where your prompt shows', () => {
     const menu = m.menu();
     expect(menu).not.toBeNull();
     expect(menu?.getAttribute('aria-label')).toBe('Where your prompt shows');
-    expect(menu?.getAttribute('class')).toBe('pc-menu');
+    expect(menu?.getAttribute('class')).toBe('menu');
     expect(m.button.getAttribute('aria-expanded')).toBe('true');
     expect(m.items().map((el) => el.textContent)).toEqual(['In the text', 'Lifted', 'Pinned']);
     for (const item of m.items()) {
-      expect(item.getAttribute('class')).toBe('ov-menu-item');
+      expect(item.getAttribute('class')).toBe('menu-item');
       expect(checkMarks(item), item.textContent ?? '').toBe(item.textContent === 'Lifted' ? 1 : 0);
     }
     expect(m.checked()).toEqual(['Lifted']);
-    // It opens above the button, their left edges together, the narrow
-    // pane menus' width, and takes focus.
-    expect(MENU_BUTTON_MENU_WIDTH).toBe(160);
-    expect(menu?.style.width).toBe(`${MENU_BUTTON_MENU_WIDTH}px`);
+    // It opens above the button, their left edges together, and takes
+    // focus.
     expect(menu?.style.left).toBe(`${BUTTON.left}px`);
     expect(menu?.style.top).toBe(`${BUTTON.top - 4 - menuHeight(3)}px`);
     expect(doc.activeElement).toBe(menu);

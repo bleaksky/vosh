@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { getUiConfig, subscribeColorVisionChanged, type UiConfig } from '../ipc/uiConfig';
+import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
+import { subscribeColorVisionChanged } from '../ipc/uiConfigEvents';
 import { followReplacedUiConfig } from '../ipc/uiConfigBroadcast';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeHelpFind, subscribeHelpGoto } from '../ipc/windows';
@@ -14,7 +15,7 @@ import {
 import { showAfterThemePaint } from '../lib/reveal';
 import { customToAppTheme, findTheme, setCustomThemes } from '../theme/themes';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
-import { parseHex, toRgba } from '../theme/color';
+import { findMarks } from '../theme/findMarks';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { HELP_TOPICS, type HelpTopic } from './helpContent';
 import {
@@ -36,12 +37,11 @@ import { HelpOutline } from './HelpOutline';
 import { WindowControls } from '../ui/WindowControls';
 import { ChevronDownIcon, ChevronRightIcon, ChevronUpIcon, IconButton } from '../ui';
 
-// The Help window (the approved Help boards), its own window like
-// Settings and in the same frame: a 280 px sidebar with search and the
-// nine sections, and a content column with the breadcrumb in the 32 px
-// band over the article. On macOS the native traffic lights sit over
-// the sidebar. Windows and Linux draw their controls at the right of
-// the band.
+// The Help window, its own window like Settings and in the same frame:
+// a 280 px sidebar with search and the nine sections, and a content
+// column with the breadcrumb in the 32 px band over the article. On
+// macOS the native traffic lights sit over the sidebar. Windows and
+// Linux draw their controls at the right of the band.
 //
 // Every way into Help names a target (src/lib/helpLink.ts): a topic from
 // a Settings book button or the palette, or words from `#help <words>`.
@@ -100,11 +100,11 @@ function scrollArticle(scroller: HTMLElement, move: HelpScroll) {
   }
 }
 
-/** The mark fill and its ring: the theme's ANSI yellow at 28%, the way
- *  the find bar and the session logs page mark a match. */
-function markColors(themeId: string): { fill: string; ring: string } | null {
-  const yellow = parseHex(findTheme(themeId).xterm.yellow);
-  return yellow ? { fill: toRgba(yellow, 0.28), ring: toRgba(yellow, 1) } : null;
+/** The mark fills: the theme's ANSI yellow at 28% for every match and
+ *  60% for the one you are on, the way the terminal find marks them. */
+function markColors(themeId: string): { fill: string; current: string } | null {
+  const marks = findMarks(findTheme(themeId).xterm);
+  return marks ? { fill: marks.match, current: marks.current } : null;
 }
 
 export function HelpWindow() {
@@ -312,7 +312,7 @@ export function HelpWindow() {
   };
 
   return (
-    <div className="st-app hp-app">
+    <div className="st-app hp-app window-edge">
       <HelpSidebar
         topic={shown}
         openSection={openSection}

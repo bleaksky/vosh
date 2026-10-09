@@ -104,6 +104,7 @@ async function load() {
   return {
     target: await import('./targetStore'),
     tick: await import('./tickStore'),
+    roundTrip: await import('./roundTripStore'),
     pinned: await import('./pinnedPromptStore'),
     inputMode: await import('./inputModeStore'),
   };
@@ -213,6 +214,30 @@ describe('the tick store with two sessions', () => {
   });
 });
 
+describe('the round trip store with two sessions', () => {
+  it('shows nothing before the first reading, then the selected session', async () => {
+    const s = await load();
+    expect(s.roundTrip.getRoundTrip()).toBeNull();
+    fire('session://round-trip', { session: TOLLIVER, ms: 38 });
+    fire('session://round-trip', { session: ORLA, ms: 1400 });
+    expect(s.roundTrip.getRoundTrip()).toBe(38);
+    select(ORLA);
+    expect(s.roundTrip.getRoundTrip()).toBe(1400);
+  });
+
+  it('clears the reading of the session that disconnects', async () => {
+    const s = await load();
+    fire('session://round-trip', { session: TOLLIVER, ms: 38 });
+    fire('session://round-trip', { session: ORLA, ms: 412 });
+    state(ORLA, 'disconnected');
+    expect(s.roundTrip.getRoundTrip()).toBe(38);
+    fire('session://round-trip', { session: TOLLIVER, ms: null });
+    expect(s.roundTrip.getRoundTrip()).toBeNull();
+    select(ORLA);
+    expect(s.roundTrip.getRoundTrip()).toBeNull();
+  });
+});
+
 describe('the connection store with two sessions', () => {
   /** The list the app keeps, with Orla playing on the build port while
    *  Tolliver waits unconnected, and `selected` the one selected. */
@@ -268,6 +293,18 @@ describe('the connection store with two sessions', () => {
     expect(connection.getSessionConnection().status.kind).toBe('idle');
     fire('vosh://sessions-changed', rows(ORLA, false));
     expect(connection.sessionLive(ORLA)).toBe(false);
+  });
+  // A reconnect to a character left link dead brings no Char.Status, and
+  // the app names the character you picked at the account menu as
+  // Char.Name.
+  it('names the character of a reconnect from the Char.Name the app sends', async () => {
+    await load();
+    const connection = await import('./connectionStore');
+    state(TOLLIVER, 'connected');
+    fire('session://gmcp/Char-Vitals', { session: TOLLIVER, data: { hp: 1020 } });
+    expect(connection.getSessionConnection().character).toBeNull();
+    fire('session://gmcp/Char-Name', { session: TOLLIVER, data: { name: 'Maren' } });
+    expect(connection.getSessionConnection().character).toBe('Maren');
   });
 });
 

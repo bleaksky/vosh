@@ -99,9 +99,12 @@ export function useMacroKeys(): MacroKeys {
       }),
     );
 
+    // A group that turns can hand a key between your macro and a preset
+    // macro in loadout mode, which turns the preset macro on or off, so
+    // the list comes again with the groups.
     hear(
       subscribeMacroGroupsChanged(() => {
-        if (!cancelled) refreshGroups();
+        if (!cancelled) refresh();
       }),
     );
 

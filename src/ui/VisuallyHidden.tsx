@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
  *  list row's On or Off. */
 export function VisuallyHidden({ children, id }: { children: ReactNode; id?: string }) {
   return (
-    <span id={id} className="st-visually-hidden">
+    <span id={id} className="visually-hidden">
       {children}
     </span>
   );

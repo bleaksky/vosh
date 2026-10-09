@@ -35,8 +35,8 @@ import {
   type ChatFilter,
 } from './chatFilter';
 
-// Channel chat, the line you had from May to September on the theme
-// (the approved Chat A board). Messages sit at the bottom like the
+// Channel chat, the line you had from May to September on the theme.
+// Messages sit at the bottom like the
 // terminal, one mono line each, [channel] Speaker: text in the color
 // the game prints that channel in, or the theme color you picked for it
 // under Channel colors in the pane menu, lifted where it would read
@@ -237,7 +237,7 @@ function ChannelSelect({
   };
   const toggle = (channel: string) => () =>
     onPick(toggleChannel(filter, channel, lone, !restTaken));
-  const check = <CheckIcon className="pane-menu-check" />;
+  const check = <CheckIcon className="menu-check" />;
 
   return (
     <>
@@ -257,7 +257,7 @@ function ChannelSelect({
       {open && anchor && rect && (
         <MenuSurface
           label="Channel"
-          className="pane-menu-narrow"
+          className="menu-narrow"
           anchor={anchor}
           at={{ x: rect.left - 12, y: rect.bottom + 8, flipY: rect.top - 8 }}
           onClose={(reason) => {
@@ -280,7 +280,7 @@ function ChannelSelect({
                 filter.kind === 'rest' ? (
                   check
                 ) : restTaken ? (
-                  <span className="shell-menu-kbd">
+                  <span className="menu-hint">
                     {others === 1 ? 'in your other pane' : 'in another pane'}
                   </span>
                 ) : null
@@ -299,7 +299,7 @@ function ChannelSelect({
                 checked.includes(c) ? (
                   check
                 ) : owned.has(c) ? (
-                  <span className="shell-menu-kbd">in another pane</span>
+                  <span className="menu-hint">in another pane</span>
                 ) : null
               }
             >

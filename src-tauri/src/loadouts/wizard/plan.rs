@@ -22,6 +22,11 @@
 //! library version. So do the copies of a preset macro, one for each
 //! preset and key, which sits beside your macro on that key.
 //!
+//! Your edits to a preset fold into the catalog's table when every
+//! profile that edits it agrees, and make one conflict for the preset,
+//! each profile's version, when they differ, as the copies of an alias
+//! do.
+//!
 //! ## Scope
 //!
 //! This module produces the plan only. The `migration_apply` command
@@ -39,6 +44,7 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 
 use crate::loadouts::catalog::GlobalCatalog;
+use crate::loadouts::preset_edits::{PresetEdit, PresetEdits};
 use crate::loadouts::presets::PRESETS_ON_BY_DEFAULT;
 use crate::loadouts::set::Loadout;
 use crate::profile::file::{GroupFolders, ProfileConfig};
@@ -54,6 +60,8 @@ pub(crate) enum ItemKind {
     Alias,
     Trigger,
     Macro,
+    /// Your edits to one preset, named by its id.
+    Preset,
 }
 
 /// One variant of a (possibly conflicted) item. Carries the source
@@ -79,6 +87,7 @@ pub(crate) enum ItemPayload {
     Alias { item: Alias },
     Trigger { item: Trigger },
     Macro { item: Macro },
+    Preset { item: PresetEdit },
 }
 
 /// One name with two or more non-equivalent variants from different
@@ -104,8 +113,9 @@ pub(crate) struct MigrationPlan {
     /// source agreed on the content. Already carry their catalog group
     /// (see groups.rs).
     pub auto_resolved: GlobalCatalog,
-    /// Aliases and macros with diverging variants. The wizard asks the
-    /// user to pick the one to keep. A trigger keeps every version.
+    /// Aliases, macros and preset edits with diverging variants. The
+    /// wizard asks the user to pick the one to keep. A trigger keeps
+    /// every version.
     pub conflicts: Vec<Conflict>,
     /// One loadout per source profile, with `enabled_groups` naming
     /// every catalog group on for that profile. Connection defaults,
@@ -220,7 +230,72 @@ pub(crate) fn analyze_profiles(
         &mut plan.auto_resolved.macros,
         &mut plan.conflicts,
     );
+    fold_preset_edits(
+        profiles,
+        &mut plan.auto_resolved.preset_edits,
+        &mut plan.conflicts,
+    );
     plan
+}
+
+/// Fold your edits to each preset from `profiles` into `auto`, the
+/// catalog's table, when every profile that edits the preset edits it
+/// the same way. Edits that differ make one conflict for the preset,
+/// with each profile's version, as the copies of an alias do. A profile
+/// that leaves the preset as it ships brings no version, as a profile
+/// without an alias brings none. A version counts as on when its profile
+/// has the preset on, and the wizard keeps the one version on anywhere,
+/// when exactly one is, unless you pick another.
+fn fold_preset_edits(
+    profiles: &[(String, ProfileConfig)],
+    auto: &mut PresetEdits,
+    conflicts: &mut Vec<Conflict>,
+) {
+    let mut by_id: BTreeMap<&str, Vec<(usize, &PresetEdit)>> = BTreeMap::new();
+    for (n, (_, config)) in profiles.iter().enumerate() {
+        for (id, edit) in &config.preset_edits {
+            by_id.entry(id).or_default().push((n, edit));
+        }
+    }
+    for (id, copies) in by_id {
+        let first = copies[0].1;
+        if copies.iter().all(|(_, edit)| *edit == first) {
+            auto.insert(id.to_string(), first.clone());
+            continue;
+        }
+        let on: Vec<bool> = copies
+            .iter()
+            .map(|(n, _)| preset_on(&profiles[*n].1.ui.enabled_presets, id))
+            .collect();
+        let mut versions_on: Vec<&PresetEdit> = Vec::new();
+        for ((_, edit), _) in copies.iter().zip(&on).filter(|(_, on)| **on) {
+            if !versions_on.contains(edit) {
+                versions_on.push(edit);
+            }
+        }
+        let default_holder = match versions_on.len() {
+            1 => copies
+                .iter()
+                .zip(&on)
+                .find(|(_, on)| **on)
+                .map_or(copies[0].0, |((n, _), _)| *n),
+            _ => copies[0].0,
+        };
+        conflicts.push(Conflict {
+            kind: ItemKind::Preset,
+            name: id.to_string(),
+            default_source: profiles[default_holder].0.clone(),
+            variants: copies
+                .into_iter()
+                .zip(on)
+                .map(|((n, edit), switched_on)| Variant {
+                    source_profile: profiles[n].0.clone(),
+                    switched_on,
+                    item: ItemPayload::Preset { item: edit.clone() },
+                })
+                .collect(),
+        });
+    }
 }
 
 /// What the wizard reads and rewrites on an alias, a trigger, or a
@@ -654,7 +729,7 @@ fn resolve<T: CatalogItem>(
 
 /// Make `config` the file `profile` keeps in loadout mode, once the
 /// catalog holds every item. The aliases, triggers, and macros leave the
-/// file. Each group checkbox list names every catalog group of its kind
+/// file, and so do your edits to the presets. Each group checkbox list names every catalog group of its kind
 /// that is off for the profile, built from that kind alone, and the
 /// folder map names the catalog groups each of its folders became (see
 /// [`FileGroups`]). While no active loadout declares any groups, the
@@ -1199,5 +1274,80 @@ pub(super) mod tests {
         let named = ["later_preset".to_string()];
         assert!(preset_on(&named, "later_preset"));
         assert!(!preset_on(&named, "healing_basics"));
+    }
+    /// The Default and Healer profiles, each with Disarms and fading
+    /// buffs on and `default` and `healer` as their edits to it.
+    fn edited(default: PresetEdits, healer: PresetEdits) -> Vec<(String, ProfileConfig)> {
+        [("Default", default), ("Healer", healer)]
+            .into_iter()
+            .map(|(name, preset_edits)| {
+                let mut config = ProfileConfig {
+                    preset_edits,
+                    ..ProfileConfig::default()
+                };
+                config.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+                (name.to_string(), config)
+            })
+            .collect()
+    }
+
+    /// The same table as `lilac_line`, with the line in `color`.
+    fn line_in(color: &str) -> PresetEdits {
+        let mut edits = crate::loadouts::preset_edits::lilac_line();
+        for edit in edits.values_mut() {
+            for row in edit.colors.values_mut() {
+                row.value = color.into();
+            }
+        }
+        edits
+    }
+
+    #[test]
+    fn edits_that_agree_fold_into_the_catalog_table() {
+        let lilac = crate::loadouts::preset_edits::lilac_line();
+        let plan = analyze_profiles(&edited(lilac.clone(), lilac.clone()), &[]);
+        assert!(plan.conflicts.is_empty(), "{:?}", plan.conflicts);
+        assert_eq!(plan.auto_resolved.preset_edits, lilac);
+        // A profile that leaves the preset as it ships brings no version.
+        let plan = analyze_profiles(&edited(lilac.clone(), PresetEdits::new()), &[]);
+        assert!(plan.conflicts.is_empty(), "{:?}", plan.conflicts);
+        assert_eq!(plan.auto_resolved.preset_edits, lilac);
+        // The profile files keep none.
+        assert!(file_after(&plan, "Default").preset_edits.is_empty());
+    }
+
+    #[test]
+    fn edits_that_differ_make_one_conflict_naming_both_profiles() {
+        let plan = analyze_profiles(&edited(line_in("#c3a6ff"), line_in("#8fa7d9")), &[]);
+        assert!(plan.auto_resolved.preset_edits.is_empty());
+        let [conflict] = plan.conflicts.as_slice() else {
+            panic!("{:?}", plan.conflicts);
+        };
+        assert_eq!(conflict.kind, ItemKind::Preset);
+        assert_eq!(conflict.name, "disarm_buff_fade");
+        let sources: Vec<&str> = conflict
+            .variants
+            .iter()
+            .map(|v| v.source_profile.as_str())
+            .collect();
+        assert_eq!(sources, ["Default", "Healer"]);
+        let ItemPayload::Preset { item } = &conflict.variants[1].item else {
+            panic!("{:?}", conflict.variants[1].item);
+        };
+        assert_eq!(item.colors["line"].value, "#8fa7d9".into());
+        assert_eq!(conflict.default_source, "Default");
+
+        // Only the Healer has the preset on, so its version is the one
+        // the wizard keeps unless you pick another.
+        let mut profiles = edited(line_in("#c3a6ff"), line_in("#8fa7d9"));
+        profiles[0].1.ui.enabled_presets = vec!["none".into()];
+        let plan = analyze_profiles(&profiles, &[]);
+        assert_eq!(plan.conflicts[0].default_source, "Healer");
+        let on: Vec<bool> = plan.conflicts[0]
+            .variants
+            .iter()
+            .map(|v| v.switched_on)
+            .collect();
+        assert_eq!(on, [false, true]);
     }
 }

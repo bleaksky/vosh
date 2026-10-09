@@ -25,6 +25,17 @@ export interface ListEntry {
   text: string;
   /** Sits in the trailing preset section when it has no group. */
   preset?: boolean;
+  /** How the dot draws while the item is off. `suggested` wears the
+   *  accent ring of a preset suggested for your world. */
+  dot?: 'suggested';
+  /** Holds your edits, as a preset you changed. The row wears a pencil
+   *  beside its dot. */
+  edited?: boolean;
+  /** Why the row wears the warn ring, on or off, as a fix that changed a
+   *  row you edited. A reader hears it with the row. */
+  warn?: string;
+  /** Deep link and search anchor on the row, like `presets:herb_labels`. */
+  anchor?: string;
 }
 
 export interface ListSection {

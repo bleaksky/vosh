@@ -3,8 +3,8 @@ import type { SessionRow } from '../../ipc/session';
 
 // Drives the row store through a fake Tauri event bus with Tolliver's
 // session (1) selected and Orla's (2) on the build port behind it, to
-// hold it to what a row in the sessions sidebar says (board 3 of the
-// Sessions review). Each test loads fresh store modules.
+// hold it to what a row in the sessions sidebar says. Each test loads
+// fresh store modules.
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Set<Handler>>();

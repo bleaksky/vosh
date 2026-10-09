@@ -29,10 +29,22 @@ const PINNED = new Set<string>([
 ]);
 
 describe('the Settings list in the terminal menu', () => {
-  it('lists the four Automation lists, the seven pages, then Help', () => {
+  it('lists the four Automation lists, the eleven pages, then Help', () => {
     expect(SETTINGS_MENU.map((group) => group.map((row) => row.label))).toEqual([
       ['Triggers', 'Aliases', 'Macros', 'Timers'],
-      ['General', 'Appearance', 'Layout', 'Input', 'Automation', 'Scripts', 'Characters'],
+      [
+        'General',
+        'Appearance',
+        'Accessibility',
+        'Layout',
+        'Vitals',
+        'Prompt',
+        'Input',
+        'Automation',
+        'Scripts',
+        'Logs',
+        'Characters',
+      ],
       ['Help'],
     ]);
   });
@@ -55,7 +67,7 @@ describe('the Settings list in the terminal menu', () => {
   it('opens each list where the palette row for it does', () => {
     const palette: Record<string, string> = golden.palette;
     for (const row of lists) {
-      const sent = palette[`settings-${row.id}`];
+      const sent = palette[`settings-${row.link}`];
       expect(sent, row.label).toBeDefined();
       expect(formatSettingsTarget(resolveSettingsTarget(sent)), row.label).toBe(row.link);
     }

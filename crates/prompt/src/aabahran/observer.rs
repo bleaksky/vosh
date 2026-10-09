@@ -1,5 +1,4 @@
-//! The lines the game answers `prompt` and `fprompt` with (section 3 of
-//! the build spec).
+//! The lines the game answers `prompt` and `fprompt` with.
 //!
 //! Without Char.Prompt this session, Vosh learns your settings from what
 //! the game prints within 2 s after one of your own sends, and from the

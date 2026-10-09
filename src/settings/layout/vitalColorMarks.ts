@@ -5,14 +5,14 @@ import { parseHex } from '../../theme/color';
 import { PAIR_DE, seenApart, type ColorVision } from '../../theme/gameFit';
 import type { XtermPalette } from '../../theme/themes';
 
-// The marks in a vital's color list (Vitals Styles Q5, boards 2 and 6).
-// A vital turns the low tone under one third, and with Warn before you
-// run low on the warn tone under two thirds, so a color near either
-// hides that. A color your vision sees within the fit's pair floor of
-// the window's low tone says Like low, and while the warning is on, one
-// as near its warn tone says Like warn. Both measure the play palette
-// and the status colors as your Color vision sees them. Every color
-// stays allowed, since the value still turns.
+// The marks in a vital's color list. A vital turns the low tone under
+// one third, and with Warn before you run low on the warn tone under
+// two thirds, so a color near either hides that. A color your vision
+// sees within the fit's pair floor of the window's low tone says Like
+// low, and while the warning is on, one as near its warn tone says Like
+// warn. Both measure the play palette and the status colors as your
+// Color vision sees them. Every color stays allowed, since the value
+// still turns.
 
 /** What a color in the list is near. */
 export type ColorMark = 'low' | 'warn';

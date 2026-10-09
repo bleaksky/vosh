@@ -20,14 +20,14 @@ import { Select } from '../ui/Select';
 import { ConnectionForm } from './ConnectionForm';
 import { cancelNewSession } from './newSession';
 
-// The New session form of board 4, for a session New session… opened.
-// Host and port start from the saved world, and the port takes the
-// caret. The Profile row starts on the profile the session opened on and
-// picks again as you edit the address, until you choose one yourself.
-// Each new pick moves the session to that profile, so the window takes
-// its layout. Connect dials on the profile the form shows. The form
-// closes its session again when it goes any other way, by Cancel, Esc or
-// a press outside, and writes nothing.
+// The New session form, for a session New session… opened. Host and
+// port start from the saved world, and the port takes the caret. The
+// Profile row starts on the profile the session opened on and picks
+// again as you edit the address, until you choose one yourself. Each
+// new pick moves the session to that profile, so the window takes its
+// layout. Connect dials on the profile the form shows. The form closes
+// its session again when it goes any other way, by Cancel, Esc or a
+// press outside, and writes nothing.
 
 /** How long an edit to the address rests before the form picks again. */
 const REPICK_MS = 300;

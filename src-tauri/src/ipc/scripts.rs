@@ -40,8 +40,7 @@ pub(crate) struct PluginRow {
     pub(crate) misnamed: bool,
 }
 
-/// Why Vosh stopped a plugin, as the stop lines of the Scripts design
-/// tell it.
+/// Why Vosh stopped a plugin, as its stop line tells you.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PluginStop {
@@ -286,7 +285,8 @@ pub(crate) async fn plugin_install_check(
 /// Install the plugin in `file_name`, a .zip as `bytes` or a dropped
 /// folder as `files`, in place of the plugin of that name you have. It
 /// starts off in every profile, so a profile that turns the name on
-/// turns it off first and its sessions unload it (Q6).
+/// turns it off first and its sessions unload it, so its new code never
+/// runs until you turn it on.
 #[tauri::command]
 pub(crate) async fn plugin_install<R: tauri::Runtime>(
     app: AppHandle<R>,

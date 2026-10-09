@@ -71,11 +71,13 @@ export function daylightTint(
   return toHex(liftToContrast(slot, bg, STATUS_TEXT_CONTRAST, dir));
 }
 
-/** The first game hour of the day, as ROM derived servers keep it. The
- *  day begins at 5 and the night at 20. */
-export const DAY_FIRST_HOUR = 5;
-/** The first game hour of the night. */
-export const NIGHT_FIRST_HOUR = 20;
+/** The first game hour of the day where World.Time names no sunlight.
+ *  Aabahran always names it, and day begins with the hour 6 line, `The
+ *  day has begun.`, so the fallback agrees with it, as tick.rs does. */
+export const DAY_FIRST_HOUR = 6;
+/** The first game hour of the night, the hour 19 line, `The night has
+ *  begun.`. */
+export const NIGHT_FIRST_HOUR = 19;
 
 /** Whether the sun is up, for the sun on its path beside the time.
  *  World.Time sunlight decides when the server sends it. Aabahran

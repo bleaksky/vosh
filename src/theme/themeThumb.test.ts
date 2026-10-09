@@ -3,7 +3,7 @@ import { galleryThemes, themeThumb } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme } from './themes';
 
 describe('themeThumb', () => {
-  // The approved Appearance board paints these exact colors.
+  // The thumbnail paints these exact colors.
   it('matches the board for Nord', () => {
     expect(themeThumb(findTheme('nord'))).toEqual({
       bg: '#2e3440',
@@ -31,8 +31,7 @@ describe('themeThumb', () => {
   });
 
   it('matches the shortlist for Rubric', () => {
-    // Rubric took Vellum's place on the board (Themes review Q14), and
-    // these are its shortlist tokens.
+    // Rubric took Vellum's place, and these are its shortlist tokens.
     expect(themeThumb(findTheme('rubric'))).toEqual({
       bg: '#f0e5cf',
       // The panel sits on the paper under the one ground rule, and the
@@ -64,7 +63,7 @@ describe('themeThumb', () => {
 });
 
 describe('galleryThemes', () => {
-  it('leads with the signature pair and the board order, then the rest by label, then custom themes', () => {
+  it('leads with the signature pair and the board order, then the rest by label, then the high contrast pair, then custom themes', () => {
     const custom = customToAppTheme({
       id: 'aardvark',
       label: 'Aardvark',
@@ -83,9 +82,9 @@ describe('galleryThemes', () => {
       'tokyo-night',
     ]);
     expect(ids).toHaveLength(BUILTIN_THEMES.length + 1);
-    expect(ids[ids.length - 1]).toBe('aardvark');
+    expect(ids.slice(-3)).toEqual(['high-contrast', 'high-contrast-light', 'aardvark']);
     const rest = galleryThemes(BUILTIN_THEMES, [])
-      .slice(7)
+      .slice(7, -2)
       .map((t) => t.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     expect(rest[0]).toBe('Catppuccin');

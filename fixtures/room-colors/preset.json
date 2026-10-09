@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written. The triggers of the Room, time and weather colors preset exactly as presetTriggers in src/lib/presets.ts makes them. presets.test.ts holds the two equal, and the Rust tests in src-tauri install these to run the preset on the session's own steps.",
+  "notes": "Hand written. The triggers of the Room, time, and weather colors preset exactly as presetTriggers in src/automation/presets.ts makes them. src/automation/presets.test.ts holds the two equal, and the Rust tests in src-tauri install these to run the preset on the session's own steps.",
   "triggers": [
     {
       "name": "room.exits",

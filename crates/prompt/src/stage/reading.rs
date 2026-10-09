@@ -53,7 +53,7 @@ pub(super) struct HeldRegion {
 }
 
 /// Which lines above the last one your design hides: every one when it
-/// reads `%{raw}`, else those that carry a value it reads (D7).
+/// reads `%{raw}`, else those that carry a value it reads.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct Hides {
     pub(super) all: bool,

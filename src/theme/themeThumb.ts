@@ -1,9 +1,9 @@
 // Gallery thumbnails for the Appearance tab. Each tile paints a tiny
 // window in five colors derived from the theme (theme/chrome), so an
 // imported theme gets a true thumbnail without anyone picking swatches.
-// The tile recipe (SettingsAppearance board): the ground in bg, a 22 px
-// panel strip in panel behind a 1 px sep line, a 6 px accent dot, and
-// three text bars in text at full, 0.6, and 0.35 opacity.
+// The tile recipe: the ground in bg, a 22 px panel strip in panel
+// behind a 1 px sep line, a 6 px accent dot, and three text bars in
+// text at full, 0.6, and 0.35 opacity.
 
 import type { Appearance } from './chrome';
 import { themeTokens, type AppTheme } from './themes';
@@ -39,9 +39,8 @@ export function themeThumb(theme: AppTheme): ThemeThumb {
   };
 }
 
-/** The themes the gallery shows first: Vosh's signature pair, then the
- *  six the approved board shows first, in its order, less Vellum, which
- *  Rubric replaced (Themes review Q14). */
+/** The themes the gallery shows first: Vosh's signature pair, then six
+ *  more in a set order, less Vellum, which Rubric replaced. */
 export const GALLERY_LEAD_IDS = [
   'triad',
   'rubric',
@@ -52,16 +51,22 @@ export const GALLERY_LEAD_IDS = [
   'tokyo-night',
 ] as const;
 
+/** The themes the gallery shows last among the built ins: the high
+ *  contrast pair, dark then light, as board 14 of the R21 and R25 review
+ *  draws them. */
+export const GALLERY_TAIL_IDS = ['high-contrast', 'high-contrast-light'] as const;
+
 /** Every theme in gallery order: the lead (GALLERY_LEAD_IDS) first, then
- *  the other built ins by label, then your custom themes as you added
- *  them. */
+ *  the other built ins by label, then the tail (GALLERY_TAIL_IDS), then
+ *  your custom themes as you added them. */
 export function galleryThemes(builtins: AppTheme[], custom: AppTheme[]): AppTheme[] {
-  const lead = GALLERY_LEAD_IDS.map((id) => builtins.find((t) => t.id === id)).filter(
-    (t): t is AppTheme => t !== undefined,
-  );
-  const leadIds = new Set<string>(GALLERY_LEAD_IDS);
+  const pick = (ids: readonly string[]) =>
+    ids
+      .map((id) => builtins.find((t) => t.id === id))
+      .filter((t): t is AppTheme => t !== undefined);
+  const placed = new Set<string>([...GALLERY_LEAD_IDS, ...GALLERY_TAIL_IDS]);
   const rest = builtins
-    .filter((t) => !leadIds.has(t.id))
+    .filter((t) => !placed.has(t.id))
     .sort((a, b) => a.label.localeCompare(b.label));
-  return [...lead, ...rest, ...custom];
+  return [...pick(GALLERY_LEAD_IDS), ...rest, ...pick(GALLERY_TAIL_IDS), ...custom];
 }

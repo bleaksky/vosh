@@ -104,6 +104,11 @@ pub(crate) const TARGET: &str = "session://target";
 /// sends. The payload is a [`crate::tick::TickPayload`]. `onTick` hears
 /// it.
 pub(crate) const TICK: &str = "session://tick";
+/// The round trip to the game, every two seconds while it moves, and
+/// null as the connection ends. The payload is a
+/// [`crate::session::round_trip::RoundTripPayload`]. `onRoundTrip`
+/// hears it.
+pub(crate) const ROUND_TRIP: &str = "session://round-trip";
 /// A line a trigger routes to a pane, once for each pane. The payload
 /// is a [`crate::session::RoutedPayload`]. `onRouted` hears it.
 pub(crate) const ROUTED: &str = "session://routed";
@@ -141,7 +146,7 @@ pub(crate) const ALERT: &str = "session://alert";
 /// preset or an alert a trigger or Lua raised, that rang nothing: its
 /// alert is off or quiet, or the 10 second cap held it back. The payload
 /// is the session alone. `onMark` hears it, and the sessions sidebar
-/// marks the row as an alert that rang does (Sessions Q9). Vosh sends it
+/// marks the row as an alert that rang does. Vosh sends it
 /// only for a session other than the selected one.
 pub(crate) const MARK: &str = "session://mark";
 /// The alerts of a Lua owner ended, as its plugin turned off, stopped or
@@ -169,12 +174,40 @@ pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 /// carries its `kind`, `row`, `gauge`, `line` or `rule`. `onLuaPanes`
 /// hears it, and the Lua panes of the main window show it.
 pub(crate) const LUA_PANES: &str = "session://lua-panes";
+/// The players the session snoops, once per read that changed them and
+/// as you stop or close one: every tab in the order they started, with
+/// whether it is live, when it ended and when its player's screen last
+/// got text. The payload is a [`crate::session::snoop::SnoopPayload`].
+/// `onSnoop` hears it, and the snoop store keeps the tabs of each session.
+pub(crate) const SNOOP: &str = "session://snoop";
+/// What one snooped player's screen got in one read, raw with its ANSI.
+/// The payload is a [`crate::session::snoop::SnoopOutputPayload`].
+/// `onSnoopOutput` hears it, and the snoop store hands the text to the
+/// terminal of that player's tab.
+pub(crate) const SNOOP_OUTPUT: &str = "session://snoop-output";
 /// Your vitals text, drawn for the footer or the status line that
 /// watches it through `vitals_text_watch`. The payload is a
 /// [`vosh_prompt::vitals::VitalsText`], the rows at the live values and
 /// at full values with which of them read a fight. `onVitalsText`
 /// hears it.
 pub(crate) const VITALS_TEXT: &str = "session://vitals-text";
+/// Where the walk stands, when that changed: idle, walking or stopped.
+/// The payload is a [`crate::session::walk::WalkProgress`]. `onWalk`
+/// hears it, and the map shows the Walking chip and the Stopped toast.
+pub(crate) const WALK: &str = "session://walk";
+
+/// The payload is a [`crate::session::writer::WritingState`], where the
+/// game takes your input, the card's offer, the job under way, how many
+/// sends wait for it and how the last one ended. `onWriting` hears it,
+/// and the writing card, the offer notice and the command line follow
+/// it.
+pub(crate) const WRITING: &str = "session://writing";
+/// What a screen reader reads of one read while Read new game lines is
+/// on: the plain text of each line that shows, up to 500, how many showed,
+/// your prompt's text when the read brought one, and whether Vosh is in
+/// the background. Sent once per read that holds a line or a prompt.
+/// `onScreenReader` hears it.
+pub(crate) const SCREEN_READER: &str = "session://screen-reader";
 
 // The lists.
 
@@ -207,6 +240,15 @@ pub(crate) const MACROS_CHANGED: &str = "vosh://macros-changed";
 /// the whole list of [`crate::profile::live::Timer`].
 /// `subscribeTimersChanged` hears it.
 pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
+/// Sent to every window when `preset_edits_set` saved your edits to a
+/// preset. The payload names the profile, `{profile}`, see
+/// [`PresetEditsChanged`]. In loadout mode every profile shares the edits.
+pub(crate) const PRESET_EDITS_CHANGED: &str = "vosh://preset-edits-changed";
+/// Sent to every window when `presets_enabled_set` turned presets on or
+/// off. The payload names the profile, `{profile}`, see
+/// [`PresetsChanged`]. In loadout mode every profile shares the list.
+/// The Presets page hears it through `onPresetsChanged`.
+pub(crate) const PRESETS_CHANGED: &str = "vosh://presets-changed";
 
 // Plugins.
 
@@ -262,10 +304,10 @@ pub(crate) const SESSION_SELECTED: &str = "vosh://session-selected";
 /// rows.
 pub(crate) const SESSIONS_CHANGED: &str = "vosh://sessions-changed";
 /// Sent to every window when the game of a session turns to day or
-/// night, from World.Time (Alerts Q16). The payload is a
-/// [`crate::tick::DaylightPayload`] with the session beside it. Switch
-/// themes With the game reads it in the page half. No page listener
-/// hears it yet.
+/// night, from World.Time. The payload is a
+/// [`crate::tick::DaylightPayload`] with the session beside it.
+/// `subscribeDaylightChanged` hears it, and the daylight store keeps the
+/// selected session's for Switch themes With the game.
 pub(crate) const DAYLIGHT_CHANGED: &str = "vosh://daylight-changed";
 /// Sent to every window when sharing the theme category added to the
 /// live custom themes. The payload is the whole list of
@@ -338,9 +380,16 @@ pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 /// Sent to the main window on `#help <words>`. The payload is the
 /// words. `useAppCommands` hears it and opens Help on the best match.
 pub(crate) const HELP_OPEN: &str = "vosh://help-open";
+/// Sent to the main window when Help opens Get started. The payload is
+/// null. `subscribeGetStartedOpen` hears it.
+pub(crate) const GET_STARTED_OPEN: &str = "vosh://get-started-open";
 /// Sent to every window on quit. The payload is the round number, which
 /// each window's answer names. `listenForQuitFlush` hears it.
 pub(crate) const FLUSH_PENDING_WRITES: &str = "vosh://flush-pending-writes";
+/// Sent to every window once Save a scene wrote its file to Downloads.
+/// The payload is `{name}`, the file's name. `subscribeSceneSaved` hears
+/// it, and the main window says so with a button that shows the file.
+pub(crate) const SCENE_SAVED: &str = "vosh://scene-saved";
 /// Sent to the main window when you choose a menu command. The payload
 /// is the command's id. `listenAppMenu` hears it.
 #[cfg(target_os = "macos")]
@@ -353,6 +402,11 @@ pub(crate) const SETTINGS_FIND: &str = "vosh://settings-find";
 /// payload is null. `HelpWindow` hears it.
 #[cfg(target_os = "macos")]
 pub(crate) const HELP_FIND: &str = "vosh://help-find";
+/// Find, chosen while a snoop window is in front, opens Find on the tab
+/// in front there. The payload is the window's session. `SnoopWindow`
+/// hears it.
+#[cfg(target_os = "macos")]
+pub(crate) const SNOOP_FIND: &str = "vosh://snoop-find";
 
 // The native renderer.
 
@@ -387,6 +441,20 @@ pub(crate) struct PromptConfigChanged {
     pub(crate) profile: Option<String>,
 }
 
+/// The payload of [`PRESET_EDITS_CHANGED`]: the profile whose edits
+/// changed, None before any profile loads.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetEditsChanged {
+    pub(crate) profile: Option<String>,
+}
+
+/// The payload of [`PRESETS_CHANGED`]: the profile whose presets turned
+/// on or off, None before any profile loads.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetsChanged {
+    pub(crate) profile: Option<String>,
+}
+
 /// Tell every window the `[prompt]` table of `open` changed, while it is
 /// the profile in front.
 pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(
@@ -406,23 +474,26 @@ fn in_front<R: tauri::Runtime>(app: &AppHandle<R>, open: &Arc<OpenProfile>) -> b
         .is_some_and(|state| state.in_front(open))
 }
 
-/// The trigger and alias list revisions, the prompt table's, and the
-/// counts of macro group toggles and of group toggles in any list, at
-/// one moment.
+/// The trigger and alias list revisions, the session's plugin aliases',
+/// the prompt table's, and the counts of macro group toggles and of
+/// group toggles in any list, at one moment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ListRevisions {
     triggers: u64,
     aliases: u64,
+    plugin_aliases: u64,
     prompt: u64,
     macro_groups: u64,
     groups: u64,
 }
 
 impl ListRevisions {
-    /// The revisions of `profile`'s lists, and of the prompt table the
-    /// engine on `c` holds, which the profile keeps a copy of.
+    /// The revisions of `profile`'s lists, of the aliases the plugins on
+    /// `c` made, and of the prompt table the engine on `c` holds, which
+    /// the profile keeps a copy of.
     pub(crate) fn of(profile: &Profile, c: &Connection) -> Self {
         Self {
+            plugin_aliases: c.plugin_aliases.revision(),
             prompt: c.prompt.revision(),
             ..Self::of_lists(profile)
         }
@@ -435,6 +506,7 @@ impl ListRevisions {
         Self {
             triggers: profile.triggers.revision(),
             aliases: profile.aliases.revision(),
+            plugin_aliases: 0,
             prompt: 0,
             macro_groups: profile.macro_group_toggles,
             groups: profile.group_toggles,
@@ -458,7 +530,8 @@ impl ListChanges {
     pub(crate) fn between(before: ListRevisions, after: ListRevisions) -> Self {
         Self {
             triggers: before.triggers != after.triggers,
-            aliases: before.aliases != after.aliases,
+            aliases: before.aliases != after.aliases
+                || before.plugin_aliases != after.plugin_aliases,
             prompt: before.prompt != after.prompt,
             macro_groups: before.macro_groups != after.macro_groups,
             groups: before.groups != after.groups,

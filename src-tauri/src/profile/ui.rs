@@ -110,6 +110,27 @@ pub(crate) struct UiConfig {
     /// current theme when that theme is dark, else Obsidian Ember.
     #[serde(default)]
     pub dark_theme: String,
+    /// What switches the theme by itself, the Switch themes row: `off`,
+    /// `system` for `light_theme` and `dark_theme` by the OS appearance,
+    /// or `game` for `day_theme` and `night_theme` by the game's dawn and
+    /// dusk. Written only once it is not `off`, and
+    /// `follow_system_appearance` stays true only for `system`, so 0.8.1
+    /// reads `game` as off. A file without the key reads it from
+    /// `follow_system_appearance` (see [`read_theme_follow`]). Part of the
+    /// `theme` scope category. Unknown values coerce back to `off`.
+    #[serde(
+        default = "default_theme_follow",
+        skip_serializing_if = "is_default_theme_follow"
+    )]
+    pub theme_follow: String,
+    /// The theme shown by day while the theme follows the game. Empty
+    /// until you pick one, and left out of the file while empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub day_theme: String,
+    /// The theme shown by night while the theme follows the game. Empty
+    /// until you pick one, and left out of the file while empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub night_theme: String,
     /// Opt in to background update checks. Off by default.
     #[serde(default)]
     pub auto_update: bool,
@@ -166,11 +187,11 @@ pub(crate) struct UiConfig {
     pub enabled_presets: Vec<String>,
     /// The dock layout the side panels had before panes. Nothing edits
     /// it now. `pane_layout` turns it into a pane tree for a profile
-    /// that has never saved one, and saves keep writing it through 1.0
-    /// (D13).
+    /// that has never saved one, and saves keep writing it through 1.0,
+    /// so a rollback still finds it.
     #[serde(default)]
     pub dock_layout: Vec<DockEntryPersist>,
-    /// The one-window panel's pane tree. Always per profile: it is
+    /// The side panel's pane tree. Always per profile: it is
     /// left out of `GlobalConfig`, `ScopeConfig` and
     /// `strip_global_fields`, so each character profile keeps its own
     /// panes. None until the first edit, and `pane_layout` migrates
@@ -230,6 +251,32 @@ pub(crate) struct UiConfig {
     /// never turns it off saves the bytes it saved before.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub readable_highlights: bool,
+    /// Read new game lines. While on, each line the screen shows, after
+    /// gags, also goes to the page for a screen reader to announce. Off
+    /// by default, and written only while on, so a profile that never
+    /// turns it on saves the bytes it saved before.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub screen_reader: bool,
+    /// Read in the background, under Read new game lines. While on, the
+    /// lines are read while Vosh is not the window in front. Off by
+    /// default, and written only while on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub screen_reader_background: bool,
+    /// Read your prompt, under Read new game lines. While on, the prompt
+    /// is read as it changes too. Off by default, and written only while
+    /// on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub screen_reader_prompt: bool,
+    /// Past this many lines in one pulse, the screen reader hears the
+    /// count and the last line instead of each line. 4, 8, 16 or 32,
+    /// and 8, the default, is not written. A hand edit of anything else
+    /// reads as 8 and never stops the profile loading.
+    #[serde(
+        default = "default_screen_reader_burst",
+        deserialize_with = "deserialize_screen_reader_burst",
+        skip_serializing_if = "is_default_screen_reader_burst"
+    )]
+    pub screen_reader_burst: u32,
     /// Collapse repeated lines. While on, a line the game sends that shows
     /// exactly as the line before it on screen, colors included, joins it,
     /// and the screen shows the two once with a count before them. The
@@ -283,15 +330,41 @@ pub(crate) struct UiConfig {
     /// when stacked macro sends make the scrollback too noisy.
     #[serde(default = "default_echo_macros")]
     pub echo_macros: bool,
-    /// When true (the default), the echo of each command you send starts
-    /// with a grey `›` and a space, so your commands stand apart from the
-    /// game's lines. A profile from before the setting reads it on.
-    #[serde(default = "default_input_echo_caret")]
+    /// The switch the mark grew from, kept in step with
+    /// `input_echo_mark` on every save (true unless the mark is `off`), so
+    /// an older build still marks your commands or leaves them bare. A
+    /// file without `input_echo_mark` reads the mark from it (see
+    /// [`read_input_echo_mark`]).
+    #[serde(default = "default_true")]
     pub input_echo_caret: bool,
+    /// The mark the echo of each command you send starts with, so your
+    /// commands stand apart from the game's lines. `off`, `chevron` for
+    /// `›`, `gt` for `>`, or `own` for `input_echo_mark_text`. Written
+    /// only once it is not `chevron`. Unknown values coerce to `chevron`.
+    #[serde(
+        default = "default_input_echo_mark",
+        skip_serializing_if = "is_default_input_echo_mark"
+    )]
+    pub input_echo_mark: String,
+    /// Your own mark, at most four characters. It stays while another
+    /// mark is picked, so picking `own` again brings it back.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub input_echo_mark_text: String,
+    /// CSS hex color of the mark. None means the theme's bright black,
+    /// SGR 90.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_echo_mark_color: Option<String>,
+    /// Draw the echo of each command you send faint. The mark keeps its
+    /// own color. Off by default.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub input_echo_dim: bool,
+    /// Start the line you type in with the same mark. On by default.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub input_line_mark: bool,
     /// Whether the old side panel zones filled the window height. The
-    /// one window panel has no such zones, so nothing reads it. Every
+    /// pane panel has no such zones, so nothing reads it. Every
     /// save writes back the value it loaded, so 0.7.2 keeps it on a
-    /// downgrade (D12, D14).
+    /// downgrade.
     #[serde(default)]
     pub side_panels_fill_height: bool,
     /// Milliseconds to wait between lines when sending a multi-line
@@ -307,6 +380,16 @@ pub(crate) struct UiConfig {
     /// for roleplay-heavy users.
     #[serde(default)]
     pub spellcheck_prompt: bool,
+    /// Offer the writing card in a notice when you open the game's line
+    /// editor yourself on a text Vosh can name, `description edit` or
+    /// `note edit` Default on.
+    #[serde(default = "default_writing_offer")]
+    pub writing_offer: bool,
+    /// The writing card asks before it posts a note. Off, Post posts at
+    /// once, and the card still asks when a report would record a room
+    /// other than the one you began it in. Default on.
+    #[serde(default = "default_writing_ask_post")]
+    pub writing_ask_post: bool,
     /// Shape of the command-line caret: `block` (default),
     /// `block_outline`, `half_block`, `underline`, `underline_thick`,
     /// `pipe`, or `pipe_thick`. Every shape is painted inside the same
@@ -314,6 +397,56 @@ pub(crate) struct UiConfig {
     /// values coerce back to `block` on save.
     #[serde(default = "default_input_cursor_style")]
     pub input_cursor_style: String,
+    /// The command-line caret blinks. On by default, and Reduce motion
+    /// still holds it steady.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub input_caret_blink: bool,
+    /// CSS hex color of the caret. None means the theme accent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_caret_color: Option<String>,
+    /// CSS hex color of what you type. None means the theme text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_line_color: Option<String>,
+    /// The command line's background: `theme` (the default), `tint` for
+    /// a slight tint of the accent, or `own` for
+    /// `input_line_background_color`. Written only once it is not
+    /// `theme`. Unknown values coerce to `theme`.
+    #[serde(
+        default = "default_input_line_background",
+        skip_serializing_if = "is_default_input_line_background"
+    )]
+    pub input_line_background: String,
+    /// Your own background color. It stays while another background is
+    /// picked, so picking `own` again brings it back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_line_background_color: Option<String>,
+    /// Size in px of the text you type. 0, the default, follows the
+    /// terminal size. Anything else is held to 6 to 64.
+    #[serde(
+        default = "default_input_line_size",
+        skip_serializing_if = "is_default_input_line_size"
+    )]
+    pub input_line_size: u32,
+    /// Color the command line as you type, by what Vosh knows the first
+    /// word to be. Off by default.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub input_type_colors: bool,
+    /// CSS hex color of a line that starts with one of your aliases. None
+    /// means the theme's cyan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_alias_color: Option<String>,
+    /// CSS hex color of a line that starts with a Vosh `#` command. None
+    /// means the theme's magenta.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_hash_color: Option<String>,
+    /// CSS hex color of a chat line, the whole line. None means the
+    /// theme's yellow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_chat_color: Option<String>,
+    /// CSS hex color of a `#` command Vosh does not know. None means the
+    /// theme's danger color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_unknown_color: Option<String>,
     /// A copy of `[prompt] draw`, which holds the switch now. Every save
     /// writes it, so an older build that reads only this key still draws
     /// your prompt. A file with no `[prompt]` reads the switch from
@@ -327,7 +460,7 @@ pub(crate) struct UiConfig {
     /// The old vitals bar look. The vitals under the panes read
     /// `vitals_density` and the rows after it instead, so nothing reads
     /// this. Every save writes back the table it loaded, so 0.7.2 keeps
-    /// it on a downgrade (D12, D14).
+    /// it on a downgrade.
     #[serde(default)]
     pub vitals: VitalsConfig,
     /// How the vitals under the panel's panes lay out: `rows` (one row
@@ -359,7 +492,8 @@ pub(crate) struct UiConfig {
     #[serde(default = "default_true")]
     pub vitals_hide_when_pinned: bool,
     /// The vitals style you picked from the gallery: `ledger`, `gauges`,
-    /// `pips` or `text`. None for Rows and One line, which stay in
+    /// `pips`, `bands`, `ladders`, `blocks`, `traces`, `dials`, `rings`,
+    /// `vials`, `orbs`, `candles` or `text`. None for Rows and One line, which stay in
     /// `vitals_density`, so a build without styles reads your look. The
     /// keys from here to `vitals_text_previous` are written only once
     /// they differ from the default, so a profile that never picks saves
@@ -409,9 +543,14 @@ pub(crate) struct UiConfig {
     /// keeps `previous_templates`, so a reset never loses one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vitals_text_previous: Vec<String>,
+    /// Show each hit: the part a hit took stays pale for a moment on
+    /// every style with a fill, then drains. Off by default and written
+    /// only once you turn it on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub vitals_hit: bool,
     /// Where the old status bar drew the moons. The status line places
     /// them itself, so nothing reads this. Every save writes back the
-    /// value it loaded, so 0.7.2 keeps it on a downgrade (D12, D14).
+    /// value it loaded, so 0.7.2 keeps it on a downgrade.
     #[serde(default = "default_moons_position")]
     pub moons_position: String,
     /// Rendering style for tick / mud time chips. Values:
@@ -480,6 +619,105 @@ pub(crate) struct UiConfig {
         skip_serializing_if = "is_default_affects_almost_gone_hours"
     )]
     pub affects_almost_gone_hours: u32,
+    /// The share of the terminal column the snoop split takes, from 0.05
+    /// to 0.95. You set it by dragging the line between the split and the
+    /// terminal, and 0.4, the default, is not written, so a profile that
+    /// never snoops saves the bytes it saved before. A hand edit that is
+    /// not a number reads as the default.
+    #[serde(
+        default = "default_snoop_share",
+        deserialize_with = "deserialize_snoop_share",
+        skip_serializing_if = "is_default_snoop_share"
+    )]
+    pub snoop_share: f64,
+    /// The snoop split folded to its strip. Off by default, and written
+    /// only while on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub snoop_folded: bool,
+    /// Log sessions: the session log keeps every line this profile's
+    /// sessions show. None until you choose, which logs every
+    /// connection but one to this computer, see [`logs_connection`].
+    /// Your choice always wins.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_sessions: Option<bool>,
+    /// Scrollback size: how many lines both renderers keep above the
+    /// screen and the scrollback file keeps for the next launch. From
+    /// 1,000 to 100,000, and 10,000, the default, is not written.
+    #[serde(
+        default = "default_scrollback_lines",
+        deserialize_with = "deserialize_scrollback_lines",
+        skip_serializing_if = "is_default_scrollback_lines"
+    )]
+    pub scrollback_lines: u32,
+    /// Where you dragged the writing card, its left and top edges in CSS
+    /// pixels from the main window's corner. None until you move it,
+    /// which keeps the place over the terminal the card works out for
+    /// itself. The page keeps the card on screen as the window resizes.
+    /// A hand edit that is not a number reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_left: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_top: Option<f64>,
+    /// The rows the writing card's text box shows, from dragging its foot.
+    /// None until you drag it, which lets the box grow with the text.
+    /// From 6 to 500, and anything else in a hand edit reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_rows",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_rows: Option<u32>,
+    /// The columns of text the writing card's box shows, from dragging the
+    /// grip at its corner. None until you drag it, which keeps 80. From 75
+    /// to 500, and anything else in a hand edit reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_cols",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_cols: Option<u32>,
+    /// The writing card opens in its pane in the panel. Off by default,
+    /// and written only while on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub writing_card_pinned: bool,
+    /// Where the snoop window sat when you last moved or sized it, its
+    /// outer left and top edges and its inner width and height in logical
+    /// pixels. Only Rust writes these, as the window moves, and the page
+    /// never reads them. None until the window moves, which opens it at
+    /// 760 by 480 where the system puts it. A hand edit that is not a
+    /// number, or a width under 480 or a height under 240, reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_left: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_top: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_snoop_window_width",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_width: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_snoop_window_height",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_height: Option<f64>,
     /// The chat pane's channel colors, picked from its own menu. Each
     /// key is a channel name in lowercase and each value one of the
     /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
@@ -614,7 +852,7 @@ pub(crate) struct VitalsConfig {
     /// CSS font-family stack used **only** for the bar glyphs (the
     /// label / percent / numeric / delta columns still use the app
     /// font). Empty means "use the app font." Useful when the user
-    /// wants `Berkeley` `Mono` or `JetBrains` `Mono` just for the bar to
+    /// wants `JetBrains` `Mono` just for the bar to
     /// get clean partial-block / braille rendering while keeping a
     /// different font for the rest of the UI.
     #[serde(default)]
@@ -659,10 +897,10 @@ impl Default for VitalsConfig {
 
 impl VitalsConfig {
     /// The style that grew from these 0.7 vitals, which the gallery marks
-    /// Yours in 0.7 (Q13 of the Vitals Styles review). A template that was
-    /// on drew in place of every layout, so it gives `text`. Otherwise
-    /// `gauges`, `pips`, `line` for strip and inline, and `rows` for
-    /// stacked. Every profile saved `ember` by default, so it gives none.
+    /// Yours in 0.7. A template that was on drew in place of every layout,
+    /// so it gives `text`. Otherwise `gauges`, `pips`, `line` for strip
+    /// and inline, and `rows` for stacked. Every profile saved `ember` by
+    /// default, so it gives none.
     pub(crate) fn legacy_style(&self) -> Option<&'static str> {
         if self.template_enabled {
             return Some("text");
@@ -686,8 +924,7 @@ impl VitalsConfig {
 
 impl UiConfig {
     /// The text the Text style draws. Yours, or while you have none the
-    /// 0.7 template that was on (Q13 of the Vitals Styles review), or
-    /// Vosh's.
+    /// 0.7 template that was on, or Vosh's.
     pub(crate) fn vitals_text_drawn(&self) -> Cow<'_, str> {
         if !self.vitals_text.is_empty() {
             Cow::Borrowed(&self.vitals_text)
@@ -923,11 +1160,255 @@ where
     lenient_affects_hours(deser, DEFAULT_AFFECTS_ALMOST_GONE_HOURS)
 }
 
+/// Whether a connection to `host` writes the session log: your Log
+/// sessions choice, or until you choose, every host but this computer,
+/// such as a test server run beside Vosh, which would fill the log with
+/// tests.
+pub(crate) fn logs_connection(ui: &UiConfig, host: &str) -> bool {
+    ui.log_sessions
+        .unwrap_or_else(|| !vosh_log::is_local_host(host))
+}
+
+/// The lines of scrollback each terminal keeps until you pick another
+/// Scrollback size, the 10,000 both renderers kept before it.
+pub(crate) const DEFAULT_SCROLLBACK_LINES: u32 = 10_000;
+
+fn default_scrollback_lines() -> u32 {
+    DEFAULT_SCROLLBACK_LINES
+}
+
+fn is_default_scrollback_lines(lines: &u32) -> bool {
+    *lines == DEFAULT_SCROLLBACK_LINES
+}
+
+/// Hold a scrollback size to 1,000 to 100,000 lines, the most the native
+/// grid keeps.
+pub(crate) fn coerce_scrollback_lines(lines: u32) -> u32 {
+    lines.clamp(1_000, 100_000)
+}
+
+/// Read the scrollback size leniently, so a hand edit never stops a
+/// profile loading. A number holds to its range, and anything else reads
+/// as the default.
+pub(crate) fn deserialize_scrollback_lines<'de, D>(deser: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_scrollback_lines(u32::try_from(n.max(0)).unwrap_or(u32::MAX)),
+        Raw::Other(_) => DEFAULT_SCROLLBACK_LINES,
+    })
+}
+
+/// The lines in one pulse the screen reader reads one by one until you
+/// pick another burst.
+pub(crate) const DEFAULT_SCREEN_READER_BURST: u32 = 8;
+
+/// The bursts you can pick.
+pub(crate) const SCREEN_READER_BURSTS: [u32; 4] = [4, 8, 16, 32];
+
+fn default_screen_reader_burst() -> u32 {
+    DEFAULT_SCREEN_READER_BURST
+}
+
+fn is_default_screen_reader_burst(burst: &u32) -> bool {
+    *burst == DEFAULT_SCREEN_READER_BURST
+}
+
+/// Hold a burst to 4, 8, 16 or 32, and read anything else as 8.
+pub(crate) fn coerce_screen_reader_burst(burst: u32) -> u32 {
+    if SCREEN_READER_BURSTS.contains(&burst) {
+        burst
+    } else {
+        DEFAULT_SCREEN_READER_BURST
+    }
+}
+
+/// Read the burst leniently, so a hand edit never stops a profile
+/// loading. A number holds to the four bursts, and anything else reads
+/// as the default.
+pub(crate) fn deserialize_screen_reader_burst<'de, D>(deser: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_screen_reader_burst(u32::try_from(n).unwrap_or(0)),
+        Raw::Other(_) => DEFAULT_SCREEN_READER_BURST,
+    })
+}
+
+/// The share of the terminal column a snoop split takes until you drag it.
+pub(crate) const DEFAULT_SNOOP_SHARE: f64 = 0.4;
+
+fn default_snoop_share() -> f64 {
+    DEFAULT_SNOOP_SHARE
+}
+
+// The default is a constant, so the exact compare is the one meant.
+#[allow(clippy::float_cmp)]
+fn is_default_snoop_share(share: &f64) -> bool {
+    *share == DEFAULT_SNOOP_SHARE
+}
+
+/// Hold the snoop split's share to 0.05 to 0.95, so neither the split
+/// nor the terminal under it ever closes. Anything that is not a finite
+/// number is the default.
+pub(crate) fn coerce_snoop_share(share: f64) -> f64 {
+    if share.is_finite() {
+        share.clamp(0.05, 0.95)
+    } else {
+        DEFAULT_SNOOP_SHARE
+    }
+}
+
+/// Read the snoop share leniently, so a hand edit never stops a profile
+/// loading. A number holds to 0.05 to 0.95 and anything else reads as
+/// the default.
+pub(crate) fn deserialize_snoop_share<'de, D>(deser: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(f64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_snoop_share(n),
+        Raw::Other(_) => DEFAULT_SNOOP_SHARE,
+    })
+}
+
+/// The fewest and most rows the writing card's text box keeps.
+pub(crate) const WRITING_CARD_ROWS_MIN: u32 = 6;
+pub(crate) const WRITING_CARD_ROWS_MAX: u32 = 500;
+
+/// The fewest and most columns of text the writing card's box keeps.
+pub(crate) const WRITING_CARD_COLS_MIN: u32 = 75;
+pub(crate) const WRITING_CARD_COLS_MAX: u32 = 500;
+
+/// Hold a writing card edge to a finite number of pixels, or None.
+pub(crate) fn coerce_writing_card_edge(edge: Option<f64>) -> Option<f64> {
+    edge.filter(|e| e.is_finite())
+        .map(|e| e.clamp(-100_000.0, 100_000.0))
+}
+
+/// Hold the writing card's rows to 6 to 500.
+pub(crate) fn coerce_writing_card_rows(rows: Option<u32>) -> Option<u32> {
+    rows.map(|r| r.clamp(WRITING_CARD_ROWS_MIN, WRITING_CARD_ROWS_MAX))
+}
+
+/// Hold the writing card's columns to 75 to 500.
+pub(crate) fn coerce_writing_card_cols(cols: Option<u32>) -> Option<u32> {
+    cols.map(|c| c.clamp(WRITING_CARD_COLS_MIN, WRITING_CARD_COLS_MAX))
+}
+
+/// Read a writing card edge leniently, so a hand edit never stops a
+/// profile loading. Anything but a finite number reads as None.
+pub(crate) fn deserialize_writing_card_edge<'de, D>(deser: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(f64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_writing_card_edge(Some(n)),
+        Raw::Other(_) => None,
+    })
+}
+
+/// Read the writing card's rows leniently. A whole number holds to 6 to
+/// 500, and anything else reads as None.
+pub(crate) fn deserialize_writing_card_rows<'de, D>(deser: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(u64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_writing_card_rows(Some(u32::try_from(n).unwrap_or(u32::MAX))),
+        Raw::Other(_) => None,
+    })
+}
+
+/// Read the writing card's columns leniently. A whole number holds to 75
+/// to 500, and anything else reads as None.
+pub(crate) fn deserialize_writing_card_cols<'de, D>(deser: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(u64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_writing_card_cols(Some(u32::try_from(n).unwrap_or(u32::MAX))),
+        Raw::Other(_) => None,
+    })
+}
+
+/// The smallest snoop window a saved place may ask for, in logical pixels.
+pub(crate) const SNOOP_WINDOW_MIN_WIDTH: f64 = 480.0;
+pub(crate) const SNOOP_WINDOW_MIN_HEIGHT: f64 = 240.0;
+
+/// Hold a snoop window side to the writing card edge rule, and read one
+/// under `min` as None.
+pub(crate) fn coerce_snoop_window_side(side: Option<f64>, min: f64) -> Option<f64> {
+    coerce_writing_card_edge(side).filter(|s| *s >= min)
+}
+
+/// Read the snoop window's saved width leniently. A number under 480
+/// or anything but a number reads as None.
+pub(crate) fn deserialize_snoop_window_width<'de, D>(deser: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let edge = deserialize_writing_card_edge(deser)?;
+    Ok(coerce_snoop_window_side(edge, SNOOP_WINDOW_MIN_WIDTH))
+}
+
+/// Read the snoop window's saved height leniently. A number under 240
+/// or anything but a number reads as None.
+pub(crate) fn deserialize_snoop_window_height<'de, D>(deser: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let edge = deserialize_writing_card_edge(deser)?;
+    Ok(coerce_snoop_window_side(edge, SNOOP_WINDOW_MIN_HEIGHT))
+}
+
 fn default_echo_macros() -> bool {
     true
 }
 
-fn default_input_echo_caret() -> bool {
+fn default_writing_offer() -> bool {
+    true
+}
+
+fn default_writing_ask_post() -> bool {
     true
 }
 
@@ -986,6 +1467,9 @@ impl Default for UiConfig {
             follow_system_appearance: false,
             light_theme: default_light_theme(),
             dark_theme: String::new(),
+            theme_follow: default_theme_follow(),
+            day_theme: String::new(),
+            night_theme: String::new(),
             auto_update: false,
             font_family: default_font_family(),
             font_size: default_font_size(),
@@ -1003,6 +1487,10 @@ impl Default for UiConfig {
             fit_game_colors: true,
             color_vision: default_color_vision(),
             readable_highlights: true,
+            screen_reader: false,
+            screen_reader_background: false,
+            screen_reader_prompt: false,
+            screen_reader_burst: DEFAULT_SCREEN_READER_BURST,
             collapse_repeats: false,
             collapse_fight_lines: true,
             collapse_attack_lines: false,
@@ -1012,10 +1500,28 @@ impl Default for UiConfig {
             input_echo_color: None,
             echo_macros: true,
             input_echo_caret: true,
+            input_echo_mark: default_input_echo_mark(),
+            input_echo_mark_text: String::new(),
+            input_echo_mark_color: None,
+            input_echo_dim: false,
+            input_line_mark: true,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,
+            writing_offer: true,
+            writing_ask_post: true,
             input_cursor_style: default_input_cursor_style(),
+            input_caret_blink: true,
+            input_caret_color: None,
+            input_line_color: None,
+            input_line_background: default_input_line_background(),
+            input_line_background_color: None,
+            input_line_size: default_input_line_size(),
+            input_type_colors: false,
+            input_type_alias_color: None,
+            input_type_hash_color: None,
+            input_type_chat_color: None,
+            input_type_unknown_color: None,
             prompt_template_enabled: false,
             prompt_template: String::new(),
             vitals: VitalsConfig::default(),
@@ -1032,6 +1538,7 @@ impl Default for UiConfig {
             vitals_colors: BTreeMap::new(),
             vitals_text: String::new(),
             vitals_text_previous: Vec::new(),
+            vitals_hit: false,
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
             tick_count: default_tick_count(),
@@ -1041,6 +1548,19 @@ impl Default for UiConfig {
             affects_tint: false,
             affects_running_out_hours: DEFAULT_AFFECTS_RUNNING_OUT_HOURS,
             affects_almost_gone_hours: DEFAULT_AFFECTS_ALMOST_GONE_HOURS,
+            snoop_share: DEFAULT_SNOOP_SHARE,
+            snoop_folded: false,
+            log_sessions: None,
+            scrollback_lines: DEFAULT_SCROLLBACK_LINES,
+            writing_card_left: None,
+            writing_card_top: None,
+            writing_card_rows: None,
+            writing_card_cols: None,
+            writing_card_pinned: false,
+            snoop_window_left: None,
+            snoop_window_top: None,
+            snoop_window_width: None,
+            snoop_window_height: None,
             chat_colors: BTreeMap::new(),
         }
     }
@@ -1048,7 +1568,7 @@ impl Default for UiConfig {
 
 /// The theme a file without the key reads, and the fallback. A new
 /// install starts on Triad instead, which `NEW_INSTALL_THEME` in
-/// profile/set.rs writes before the first launch (Themes review Q3).
+/// profile/set.rs writes before the first launch.
 fn default_theme() -> String {
     "obsidian-ember".to_string()
 }
@@ -1056,7 +1576,7 @@ fn default_theme() -> String {
 /// The light theme a file without the key reads. Vellum is retired, and
 /// the frontend shows Rubric for it (`RETIRED_THEMES` in themes.ts),
 /// while Vosh 0.8.1 still reads it as Vellum. A new install starts with
-/// Rubric itself, from `NEW_INSTALL_LIGHT_THEME` in profile/set.rs (Q4).
+/// Rubric itself, from `NEW_INSTALL_LIGHT_THEME` in profile/set.rs.
 fn default_light_theme() -> String {
     "vellum".to_string()
 }
@@ -1073,6 +1593,118 @@ pub(crate) fn coerce_light_theme(value: String) -> String {
 /// Trim a dark theme pick. A blank one stays blank, which the page reads
 /// as the current theme.
 pub(crate) fn normalize_dark_theme(value: String) -> String {
+    value.trim().to_string()
+}
+
+/// The modes of the Switch themes row. Anything else saves as `off`.
+pub(crate) const THEME_FOLLOWS: [&str; 3] = ["off", "system", "game"];
+
+fn default_theme_follow() -> String {
+    "off".to_string()
+}
+
+fn is_default_theme_follow(value: &str) -> bool {
+    value == "off"
+}
+
+/// Keep a known Switch themes mode and turn anything else into `off`.
+pub(crate) fn coerce_theme_follow(value: String) -> String {
+    if THEME_FOLLOWS.contains(&value.as_str()) {
+        value
+    } else {
+        default_theme_follow()
+    }
+}
+
+/// The Switch themes mode a file reads as. `follow_system_appearance`
+/// true is `system` whatever `theme_follow` says, so a file without the
+/// key keeps the choice 0.8.1 saved, and an older Vosh that turns it on
+/// in a file that says `game` wins. Else `game` stays, and anything else
+/// is `off`, since `system` without the switch means an older Vosh turned
+/// it off.
+pub(crate) fn read_theme_follow(follow_system_appearance: bool, theme_follow: &str) -> String {
+    match (follow_system_appearance, theme_follow) {
+        (true, _) => "system".to_string(),
+        (false, "game") => "game".to_string(),
+        _ => default_theme_follow(),
+    }
+}
+
+/// Set the Switch themes mode and keep `follow_system_appearance` true
+/// only for `system`.
+pub(crate) fn set_theme_follow(ui: &mut UiConfig, value: String) {
+    ui.theme_follow = coerce_theme_follow(value);
+    ui.follow_system_appearance = ui.theme_follow == "system";
+}
+
+/// Turn Follow system appearance on or off, which is the `system` mode
+/// of Switch themes. Off leaves `game` as it is.
+pub(crate) fn set_follow_system_appearance(ui: &mut UiConfig, on: bool) {
+    let mode = match (on, ui.theme_follow.as_str()) {
+        (true, _) => "system".to_string(),
+        (false, "system") => default_theme_follow(),
+        (false, kept) => kept.to_string(),
+    };
+    set_theme_follow(ui, mode);
+}
+
+/// The marks the echo of a command you send can start with. Anything
+/// else saves as `chevron`.
+pub(crate) const INPUT_ECHO_MARKS: [&str; 4] = ["off", "chevron", "gt", "own"];
+
+/// The most characters your own mark keeps.
+pub(crate) const INPUT_ECHO_MARK_TEXT_MAX: usize = 4;
+
+fn default_input_echo_mark() -> String {
+    "chevron".to_string()
+}
+
+fn is_default_input_echo_mark(value: &str) -> bool {
+    value == "chevron"
+}
+
+/// Keep a known mark and turn anything else into `chevron`.
+pub(crate) fn coerce_input_echo_mark(value: String) -> String {
+    if INPUT_ECHO_MARKS.contains(&value.as_str()) {
+        value
+    } else {
+        default_input_echo_mark()
+    }
+}
+
+/// Your own mark as it saves. Control characters drop, the ends trim, and
+/// it keeps at most [`INPUT_ECHO_MARK_TEXT_MAX`] characters.
+pub(crate) fn coerce_input_echo_mark_text(value: String) -> String {
+    let clean: String = value.chars().filter(|c| !c.is_control()).collect();
+    let kept: String = clean
+        .trim()
+        .chars()
+        .take(INPUT_ECHO_MARK_TEXT_MAX)
+        .collect();
+    kept.trim_end().to_string()
+}
+
+/// The mark a file reads as. `input_echo_caret` false is `off` whatever
+/// `input_echo_mark` says, so a file without the key keeps the choice an
+/// older build saved. True with `off` means an older build turned the mark
+/// back on, which reads as `chevron`. Else the mark stays, coerced.
+pub(crate) fn read_input_echo_mark(input_echo_caret: bool, input_echo_mark: &str) -> String {
+    match (input_echo_caret, input_echo_mark) {
+        (false, _) => "off".to_string(),
+        (true, "off") => default_input_echo_mark(),
+        (true, mark) => coerce_input_echo_mark(mark.to_string()),
+    }
+}
+
+/// Set the mark and keep `input_echo_caret` true unless it is `off`.
+pub(crate) fn set_input_echo_mark(ui: &mut UiConfig, value: String) {
+    ui.input_echo_mark = coerce_input_echo_mark(value);
+    ui.input_echo_caret = ui.input_echo_mark != "off";
+}
+
+/// Trim a day or night theme pick. A blank one stays blank, which the
+/// page reads as the theme showing.
+pub(crate) fn normalize_day_night_theme(value: String) -> String {
     value.trim().to_string()
 }
 
@@ -1165,7 +1797,10 @@ pub(crate) fn coerce_vitals_meter(value: String) -> String {
 
 /// The vitals styles the gallery adds to Rows and One line. Anything
 /// else saves as None, which draws `vitals_density`.
-pub(crate) const VITALS_STYLES: [&str; 4] = ["ledger", "gauges", "pips", "text"];
+pub(crate) const VITALS_STYLES: [&str; 13] = [
+    "ledger", "gauges", "pips", "bands", "ladders", "blocks", "traces", "dials", "rings", "vials",
+    "orbs", "candles", "text",
+];
 
 /// Keep a known style and turn anything else into None.
 pub(crate) fn coerce_vitals_style(value: Option<String>) -> Option<String> {
@@ -1327,14 +1962,15 @@ fn default_font_family() -> String {
     "\"JetBrainsMono Bundled\", Menlo, Consolas, ui-monospace, monospace".to_string()
 }
 
-/// The default font list while Vosh bundled Berkeley Mono. Profile files
-/// saved then hold it where you never picked a font, and it keeps
-/// rendering as Berkeley Mono where you have it installed.
+/// The default font list before the current one.
+/// Profile files saved then hold it where you never picked a font, and
+/// it draws as the default list does now (`rendered_families` in
+/// native/gpu/atlas.rs and `renderFontStack` in src/lib/fontLoader.ts).
 pub(crate) const RETIRED_DEFAULT_FONT_FAMILY: &str =
     "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace";
 
 /// Whether `family` is the default font list, this one or the one before
-/// Vosh stopped bundling Berkeley Mono.
+/// it.
 pub(crate) fn is_default_font_family(family: &str) -> bool {
     family == default_font_family() || family == RETIRED_DEFAULT_FONT_FAMILY
 }
@@ -1417,6 +2053,48 @@ pub(crate) fn coerce_input_cursor_style(value: String) -> String {
     }
 }
 
+/// The backgrounds the command line draws. Anything else saves as the
+/// default, the theme's.
+pub(crate) const INPUT_LINE_BACKGROUNDS: [&str; 3] = ["theme", "tint", "own"];
+
+fn default_input_line_background() -> String {
+    "theme".to_string()
+}
+
+fn is_default_input_line_background(value: &str) -> bool {
+    value == "theme"
+}
+
+/// Keep a known background and turn anything else into `theme`.
+pub(crate) fn coerce_input_line_background(value: String) -> String {
+    if INPUT_LINE_BACKGROUNDS.contains(&value.as_str()) {
+        value
+    } else {
+        default_input_line_background()
+    }
+}
+
+/// What the command line Size row saves to follow the terminal size.
+pub(crate) const INPUT_LINE_SIZE_TERMINAL: u32 = 0;
+
+fn default_input_line_size() -> u32 {
+    INPUT_LINE_SIZE_TERMINAL
+}
+
+fn is_default_input_line_size(size: &u32) -> bool {
+    *size == INPUT_LINE_SIZE_TERMINAL
+}
+
+/// Hold a command line size to the terminal size's 6 to 64 pixels,
+/// keeping 0, which follows the terminal size.
+pub(crate) fn coerce_input_line_size(size: u32) -> u32 {
+    if size == INPUT_LINE_SIZE_TERMINAL {
+        size
+    } else {
+        coerce_font_size(size)
+    }
+}
+
 pub(crate) fn default_true() -> bool {
     true
 }
@@ -1450,6 +2128,13 @@ mod tests {
         let default = include_str!("../../../fixtures/config/profile.default.toml");
         let ui = ProfileConfig::from_toml(default).unwrap().ui;
         assert_eq!(ui.vitals_text_drawn(), vosh_prompt::DEFAULT_VITALS_TEXT);
+    }
+
+    #[test]
+    fn update_checks_stay_off_until_you_turn_them_on() {
+        assert!(!UiConfig::default().auto_update);
+        let parsed = ProfileConfig::from_toml("[ui]\nfont_size = 14\n").unwrap();
+        assert!(!parsed.ui.auto_update);
     }
 
     #[test]
@@ -1539,23 +2224,216 @@ name = "haste"
     }
 
     #[test]
-    fn a_profile_from_before_mark_your_commands_reads_it_on() {
-        let parsed = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
-        assert!(parsed.ui.input_echo_caret);
-        let off = ProfileConfig::from_toml("[ui]\ninput_echo_caret = false\n").unwrap();
-        assert!(!off.ui.input_echo_caret);
-        assert!(off.to_toml().unwrap().contains("input_echo_caret = false"));
+    fn the_old_mark_switch_reads_as_the_mark_and_saves_in_step() {
+        let read = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        // A profile from before the setting, or with the switch on, reads ›.
+        for text in [
+            "[ui]\ntheme = \"nord\"\n",
+            "[ui]\ninput_echo_caret = true\n",
+        ] {
+            assert_eq!(read(text).input_echo_mark, "chevron", "{text}");
+        }
+        let off = read("[ui]\ninput_echo_caret = false\n");
+        assert_eq!(off.input_echo_mark, "off");
+        let text = through_text(&off);
+        assert!(text.contains("input_echo_caret = false"), "{text}");
+        assert!(text.contains("input_echo_mark = \"off\""), "{text}");
+        // An older build that turns the switch off drops the mark, and one
+        // that turns it back on reads as ›.
+        assert_eq!(
+            read("[ui]\ninput_echo_caret = false\ninput_echo_mark = \"gt\"\n").input_echo_mark,
+            "off"
+        );
+        assert_eq!(
+            read("[ui]\ninput_echo_caret = true\ninput_echo_mark = \"off\"\n").input_echo_mark,
+            "chevron"
+        );
+        // Every mark but off saves the switch on, and only › is left out.
+        for mark in INPUT_ECHO_MARKS {
+            let mut ui = UiConfig::default();
+            set_input_echo_mark(&mut ui, mark.to_string());
+            let text = through_text(&ui);
+            let on = mark != "off";
+            assert!(
+                text.contains(&format!("input_echo_caret = {on}")),
+                "{mark}: {text}"
+            );
+            assert_eq!(
+                text.contains("input_echo_mark ="),
+                mark != "chevron",
+                "{mark}: {text}"
+            );
+            assert_eq!(through_toml(&ui).input_echo_mark, mark);
+        }
+        let mut ui = UiConfig::default();
+        set_input_echo_mark(&mut ui, "caret".into());
+        assert_eq!(
+            (ui.input_echo_mark.as_str(), ui.input_echo_caret),
+            ("chevron", true)
+        );
     }
 
-    /// Save `ui` to a profile file and read it back.
-    fn through_toml(ui: &UiConfig) -> UiConfig {
+    #[test]
+    fn your_own_mark_keeps_four_characters_and_no_control_ones() {
+        for (typed, kept) in [
+            ("T>", "T>"),
+            ("  ab  ", "ab"),
+            ("\u{1b}[1m>>", "[1m>"),
+            ("a\tb\nc", "abc"),
+            ("abc def", "abc"),
+            ("ᚠᚢᚦᚨᚱ", "ᚠᚢᚦᚨ"),
+            ("\u{7}", ""),
+        ] {
+            assert_eq!(coerce_input_echo_mark_text(typed.into()), kept, "{typed:?}");
+        }
+        let ui = ProfileConfig::from_toml("[ui]\ninput_echo_mark_text = \" >>>>> \"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.input_echo_mark_text, ">>>>");
+    }
+
+    #[test]
+    fn the_mark_settings_save_only_once_they_change() {
+        let text = through_text(&UiConfig::default());
+        for key in [
+            "input_echo_mark",
+            "input_echo_mark_text",
+            "input_echo_mark_color",
+            "input_echo_dim",
+            "input_line_mark",
+        ] {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let ui = UiConfig {
+            input_echo_mark: "own".into(),
+            input_echo_mark_text: "T>".into(),
+            input_echo_mark_color: Some("#c6a46a".into()),
+            input_echo_dim: true,
+            input_line_mark: false,
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert_eq!(back.input_echo_mark, "own");
+        assert_eq!(back.input_echo_mark_text, "T>");
+        assert_eq!(back.input_echo_mark_color.as_deref(), Some("#c6a46a"));
+        assert!(back.input_echo_dim);
+        assert!(!back.input_line_mark);
+    }
+
+    #[test]
+    fn the_command_line_look_saves_only_once_it_changes() {
+        let text = through_text(&UiConfig::default());
+        for key in [
+            "input_caret_blink",
+            "input_caret_color",
+            "input_line_color",
+            "input_line_background",
+            "input_line_background_color",
+            "input_line_size",
+        ] {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&UiConfig::default());
+        assert!(back.input_caret_blink);
+        assert_eq!(back.input_caret_color, None);
+        assert_eq!(back.input_line_color, None);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_background_color, None);
+        assert_eq!(back.input_line_size, 0);
+        let ui = UiConfig {
+            input_caret_blink: false,
+            input_caret_color: Some("#c6a46a".into()),
+            input_line_color: Some("#d8dee9".into()),
+            input_line_background: "tint".into(),
+            input_line_background_color: Some("#1d1f21".into()),
+            input_line_size: 16,
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert!(!back.input_caret_blink);
+        assert_eq!(back.input_caret_color.as_deref(), Some("#c6a46a"));
+        assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
+        assert_eq!(back.input_line_background, "tint");
+        assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
+        assert_eq!(back.input_line_size, 16);
+        for pick in ["theme", "tint", "own"] {
+            let ui = UiConfig {
+                input_line_background: pick.into(),
+                ..UiConfig::default()
+            };
+            assert_eq!(through_toml(&ui).input_line_background, pick);
+        }
+    }
+
+    #[test]
+    fn coloring_as_you_type_saves_only_once_it_changes() {
+        let keys = [
+            "input_type_colors",
+            "input_type_alias_color",
+            "input_type_hash_color",
+            "input_type_chat_color",
+            "input_type_unknown_color",
+        ];
+        let text = through_text(&UiConfig::default());
+        for key in keys {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&UiConfig::default());
+        assert!(!back.input_type_colors);
+        assert_eq!(back.input_type_alias_color, None);
+        assert_eq!(back.input_type_hash_color, None);
+        assert_eq!(back.input_type_chat_color, None);
+        assert_eq!(back.input_type_unknown_color, None);
+        let ui = UiConfig {
+            input_type_colors: true,
+            input_type_alias_color: Some("#8abeb7".into()),
+            input_type_hash_color: Some("#b294bb".into()),
+            input_type_chat_color: Some("#f0c674".into()),
+            input_type_unknown_color: Some("#cc6666".into()),
+            ..UiConfig::default()
+        };
+        let text = through_text(&ui);
+        for key in keys {
+            assert!(text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&ui);
+        assert!(back.input_type_colors);
+        assert_eq!(back.input_type_alias_color.as_deref(), Some("#8abeb7"));
+        assert_eq!(back.input_type_hash_color.as_deref(), Some("#b294bb"));
+        assert_eq!(back.input_type_chat_color.as_deref(), Some("#f0c674"));
+        assert_eq!(back.input_type_unknown_color.as_deref(), Some("#cc6666"));
+    }
+
+    #[test]
+    fn an_unknown_command_line_background_reads_as_the_theme() {
+        for value in ["theme", "tint", "own"] {
+            assert_eq!(coerce_input_line_background(value.into()), value);
+        }
+        for value in ["", "Tint", "glass"] {
+            assert_eq!(coerce_input_line_background(value.into()), "theme");
+        }
+    }
+
+    #[test]
+    fn a_command_line_size_holds_to_the_terminal_sizes_and_keeps_same_as_terminal() {
+        assert_eq!(coerce_input_line_size(INPUT_LINE_SIZE_TERMINAL), 0);
+        assert_eq!(coerce_input_line_size(3), 6);
+        assert_eq!(coerce_input_line_size(14), 14);
+        assert_eq!(coerce_input_line_size(90), 64);
+    }
+
+    /// The profile file a save of `ui` writes.
+    fn through_text(ui: &UiConfig) -> String {
         let config = ProfileConfig {
             ui: ui.clone(),
             ..ProfileConfig::default()
         };
-        ProfileConfig::from_toml(&config.to_toml().unwrap())
-            .unwrap()
-            .ui
+        config.to_toml().unwrap()
+    }
+
+    /// Save `ui` to a profile file and read it back.
+    fn through_toml(ui: &UiConfig) -> UiConfig {
+        ProfileConfig::from_toml(&through_text(ui)).unwrap().ui
     }
 
     #[test]
@@ -1597,6 +2475,83 @@ name = "haste"
             ..UiConfig::default()
         };
         assert_eq!(through_toml(&ui).dark_theme, "nord");
+    }
+
+    #[test]
+    fn the_switch_themes_keys_round_trip_and_stay_out_of_the_file_at_their_defaults() {
+        let written = ProfileConfig::default().to_toml().unwrap();
+        for key in ["theme_follow", "day_theme", "night_theme"] {
+            assert!(!written.contains(key), "{key}: {written}");
+        }
+        let mut ui = UiConfig::default();
+        set_theme_follow(&mut ui, "game".into());
+        ui.day_theme = "classic-vivid".into();
+        ui.night_theme = "nord".into();
+        let back = through_toml(&ui);
+        assert_eq!(back.theme_follow, "game");
+        assert_eq!(back.day_theme, "classic-vivid");
+        assert_eq!(back.night_theme, "nord");
+        set_theme_follow(&mut ui, "system".into());
+        assert_eq!(through_toml(&ui).theme_follow, "system");
+    }
+
+    #[test]
+    fn a_file_from_0_8_1_reads_its_switch_as_the_mode() {
+        for (text, mode) in [
+            ("[ui]\nfollow_system_appearance = true\n", "system"),
+            ("[ui]\nfollow_system_appearance = false\n", "off"),
+            ("[ui]\ntheme = \"nord\"\n", "off"),
+            // An older Vosh turned the switch on in a file that says game.
+            (
+                "[ui]\nfollow_system_appearance = true\ntheme_follow = \"game\"\n",
+                "system",
+            ),
+            // An older Vosh turned the switch off in a file that says system.
+            (
+                "[ui]\nfollow_system_appearance = false\ntheme_follow = \"system\"\n",
+                "off",
+            ),
+            ("[ui]\ntheme_follow = \"dusk\"\n", "off"),
+        ] {
+            let ui = ProfileConfig::from_toml(text).unwrap().ui;
+            assert_eq!(ui.theme_follow, mode, "{text}");
+            assert_eq!(ui.follow_system_appearance, mode == "system", "{text}");
+        }
+    }
+
+    #[test]
+    fn game_writes_the_switch_off_so_0_8_1_reads_it_as_off() {
+        let mut ui = UiConfig::default();
+        set_follow_system_appearance(&mut ui, true);
+        set_theme_follow(&mut ui, "game".into());
+        assert!(!ui.follow_system_appearance);
+        let text = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(text.contains("follow_system_appearance = false"), "{text}");
+        assert!(text.contains("theme_follow = \"game\""), "{text}");
+    }
+
+    #[test]
+    fn the_follow_system_switch_moves_between_system_and_off_and_leaves_game() {
+        let mut ui = UiConfig::default();
+        set_follow_system_appearance(&mut ui, true);
+        assert_eq!(
+            (ui.theme_follow.as_str(), ui.follow_system_appearance),
+            ("system", true)
+        );
+        set_follow_system_appearance(&mut ui, false);
+        assert_eq!(
+            (ui.theme_follow.as_str(), ui.follow_system_appearance),
+            ("off", false)
+        );
+        set_theme_follow(&mut ui, "game".into());
+        set_follow_system_appearance(&mut ui, false);
+        assert_eq!(ui.theme_follow, "game");
+        assert_eq!(coerce_theme_follow("Game".into()), "off");
     }
 
     #[test]
@@ -1685,6 +2640,22 @@ name = "haste"
     }
 
     #[test]
+    fn show_each_hit_stays_out_of_the_file_until_you_turn_it_on() {
+        let written = ProfileConfig::default().to_toml().unwrap();
+        assert!(!written.contains("vitals_hit"), "{written}");
+        assert!(!ProfileConfig::from_toml("[ui]\n").unwrap().ui.vitals_hit);
+
+        let ui = UiConfig {
+            vitals_hit: true,
+            vitals_style: Some("candles".into()),
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert!(back.vitals_hit);
+        assert_eq!(back.vitals_style.as_deref(), Some("candles"));
+    }
+
+    #[test]
     fn junk_in_the_vitals_styles_keys_saves_as_something_vosh_draws() {
         let strings = |list: &[&str]| list.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
         for style in VITALS_STYLES {
@@ -1694,7 +2665,7 @@ name = "haste"
             );
         }
         // Rows and One line live in vitals_density, so they are no style.
-        for junk in ["rows", "line", "Gauges", ""] {
+        for junk in ["rows", "line", "Gauges", "Rings", ""] {
             assert_eq!(coerce_vitals_style(Some(junk.into())), None, "{junk}");
         }
         assert_eq!(coerce_vitals_style(None), None);
@@ -1937,6 +2908,55 @@ name = "haste"
     }
 
     #[test]
+    fn the_screen_reader_switches_round_trip_and_are_written_only_while_on() {
+        let mut config = ProfileConfig::default();
+        let off = config.to_toml().unwrap();
+        assert!(!off.contains("screen_reader"), "{off}");
+        config.ui.screen_reader = true;
+        config.ui.screen_reader_background = true;
+        config.ui.screen_reader_prompt = true;
+        let on = config.to_toml().unwrap();
+        for key in [
+            "screen_reader = true",
+            "screen_reader_background = true",
+            "screen_reader_prompt = true",
+        ] {
+            assert!(on.contains(key), "{on}");
+        }
+        let back = through_toml(&config.ui);
+        assert!(back.screen_reader && back.screen_reader_background && back.screen_reader_prompt);
+        // A file from before the switches reads them off.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(!old.ui.screen_reader);
+        assert!(!old.ui.screen_reader_background);
+        assert!(!old.ui.screen_reader_prompt);
+        assert_eq!(old.ui.screen_reader_burst, 8);
+    }
+
+    #[test]
+    fn the_screen_reader_burst_is_written_only_off_8_and_a_hand_edit_reads_8() {
+        let mut config = ProfileConfig::default();
+        assert!(!config.to_toml().unwrap().contains("screen_reader_burst"));
+        for burst in SCREEN_READER_BURSTS {
+            config.ui.screen_reader_burst = burst;
+            assert_eq!(through_toml(&config.ui).screen_reader_burst, burst);
+        }
+        config.ui.screen_reader_burst = 16;
+        assert!(config
+            .to_toml()
+            .unwrap()
+            .contains("screen_reader_burst = 16"));
+        for value in ["7", "\"x\"", "-4", "0", "4294967300", "16.0"] {
+            let ui = ProfileConfig::from_toml(&format!("[ui]\nscreen_reader_burst = {value}\n"))
+                .unwrap()
+                .ui;
+            assert_eq!(ui.screen_reader_burst, 8, "{value}");
+        }
+        assert_eq!(coerce_screen_reader_burst(32), 32);
+        assert_eq!(coerce_screen_reader_burst(7), 8);
+    }
+
+    #[test]
     fn readable_highlights_is_written_only_while_off() {
         let mut config = ProfileConfig::default();
         let on = config.to_toml().unwrap();
@@ -2005,6 +3025,172 @@ name = "haste"
         assert!(old.ui.collapse_repeats);
         assert!(old.ui.collapse_fight_lines);
         assert!(!old.ui.collapse_attack_lines);
+    }
+
+    #[test]
+    fn the_snoop_split_is_written_only_off_its_defaults() {
+        let mut config = ProfileConfig::default();
+        let first = config.to_toml().unwrap();
+        assert!(!first.contains("snoop_"), "{first}");
+        config.ui.snoop_share = 0.25;
+        config.ui.snoop_folded = true;
+        let changed = config.to_toml().unwrap();
+        assert!(changed.contains("snoop_share = 0.25"), "{changed}");
+        assert!(changed.contains("snoop_folded = true"), "{changed}");
+        let back = through_toml(&config.ui);
+        assert!((back.snoop_share - 0.25).abs() < f64::EPSILON);
+        assert!(back.snoop_folded);
+        // A file from before the split reads its defaults.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!((old.ui.snoop_share - DEFAULT_SNOOP_SHARE).abs() < f64::EPSILON);
+        assert!(!old.ui.snoop_folded);
+    }
+
+    #[test]
+    fn the_writing_card_place_is_written_only_once_you_move_it() {
+        let mut config = ProfileConfig::default();
+        let first = config.to_toml().unwrap();
+        assert!(!first.contains("writing_card"), "{first}");
+        config.ui.writing_card_left = Some(140.0);
+        config.ui.writing_card_top = Some(96.0);
+        config.ui.writing_card_rows = Some(14);
+        config.ui.writing_card_cols = Some(96);
+        config.ui.writing_card_pinned = true;
+        let changed = config.to_toml().unwrap();
+        assert!(changed.contains("writing_card_left = 140.0"), "{changed}");
+        assert!(changed.contains("writing_card_rows = 14"), "{changed}");
+        assert!(changed.contains("writing_card_cols = 96"), "{changed}");
+        assert!(changed.contains("writing_card_pinned = true"), "{changed}");
+        let back = through_toml(&config.ui);
+        assert_eq!(back.writing_card_left, Some(140.0));
+        assert_eq!(back.writing_card_top, Some(96.0));
+        assert_eq!(back.writing_card_rows, Some(14));
+        assert_eq!(back.writing_card_cols, Some(96));
+        assert!(back.writing_card_pinned);
+        // A file from before the card moved reads its defaults.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert_eq!(old.ui.writing_card_left, None);
+        assert_eq!(old.ui.writing_card_rows, None);
+        assert_eq!(old.ui.writing_card_cols, None);
+        assert!(!old.ui.writing_card_pinned);
+    }
+
+    #[test]
+    fn a_hand_edited_writing_card_place_never_stops_a_load() {
+        let ui = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        let odd = ui("[ui]\nwriting_card_left = \"left\"\nwriting_card_rows = 2\n");
+        assert_eq!(odd.writing_card_left, None);
+        assert_eq!(odd.writing_card_rows, Some(WRITING_CARD_ROWS_MIN));
+        let big = ui("[ui]\nwriting_card_top = 12.6\nwriting_card_rows = 9000\n");
+        assert_eq!(big.writing_card_top, Some(12.6));
+        assert_eq!(big.writing_card_rows, Some(WRITING_CARD_ROWS_MAX));
+        assert_eq!(ui("[ui]\nwriting_card_rows = -3\n").writing_card_rows, None);
+        let narrow = ui("[ui]\nwriting_card_cols = 40\n").writing_card_cols;
+        assert_eq!(narrow, Some(WRITING_CARD_COLS_MIN));
+        let wide = ui("[ui]\nwriting_card_cols = 9000\n").writing_card_cols;
+        assert_eq!(wide, Some(WRITING_CARD_COLS_MAX));
+        assert_eq!(
+            ui("[ui]\nwriting_card_cols = \"wide\"\n").writing_card_cols,
+            None
+        );
+        assert_eq!(coerce_writing_card_edge(Some(f64::NAN)), None);
+    }
+
+    #[test]
+    fn the_snoop_window_place_is_written_only_once_it_moves() {
+        let mut config = ProfileConfig::default();
+        let first = config.to_toml().unwrap();
+        assert!(!first.contains("snoop_window"), "{first}");
+        config.ui.snoop_window_left = Some(-1200.0);
+        config.ui.snoop_window_top = Some(64.5);
+        config.ui.snoop_window_width = Some(900.0);
+        config.ui.snoop_window_height = Some(520.0);
+        let changed = config.to_toml().unwrap();
+        assert!(changed.contains("snoop_window_left = -1200.0"), "{changed}");
+        assert!(changed.contains("snoop_window_width = 900.0"), "{changed}");
+        let back = through_toml(&config.ui);
+        assert_eq!(back.snoop_window_left, Some(-1200.0));
+        assert_eq!(back.snoop_window_top, Some(64.5));
+        assert_eq!(back.snoop_window_width, Some(900.0));
+        assert_eq!(back.snoop_window_height, Some(520.0));
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert_eq!(old.ui.snoop_window_left, None);
+        assert_eq!(old.ui.snoop_window_width, None);
+    }
+
+    #[test]
+    fn a_hand_edited_snoop_window_place_never_stops_a_load() {
+        let ui = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        let odd = ui("[ui]\nsnoop_window_left = \"left\"\nsnoop_window_width = 300\n");
+        assert_eq!(odd.snoop_window_left, None);
+        assert_eq!(odd.snoop_window_width, None);
+        let short = ui("[ui]\nsnoop_window_height = 200.0\nsnoop_window_width = 480\n");
+        assert_eq!(short.snoop_window_height, None);
+        assert_eq!(short.snoop_window_width, Some(480.0));
+        let far = ui("[ui]\nsnoop_window_top = 1e9\nsnoop_window_height = \"tall\"\n");
+        assert_eq!(far.snoop_window_top, Some(100_000.0));
+        assert_eq!(far.snoop_window_height, None);
+    }
+
+    #[test]
+    fn log_sessions_logs_every_world_but_this_computer_until_you_choose() {
+        let mut ui = UiConfig::default();
+        assert!(logs_connection(&ui, "play.theforsakenlands.com"));
+        assert!(!logs_connection(&ui, "127.0.0.1"));
+        assert!(!logs_connection(&ui, "LocalHost"));
+        ui.log_sessions = Some(true);
+        assert!(logs_connection(&ui, "localhost"));
+        ui.log_sessions = Some(false);
+        assert!(!logs_connection(&ui, "play.theforsakenlands.com"));
+        let mut config = ProfileConfig::default();
+        assert!(!config.to_toml().unwrap().contains("log_sessions"));
+        config.ui.log_sessions = Some(false);
+        assert!(config.to_toml().unwrap().contains("log_sessions = false"));
+        assert_eq!(through_toml(&config.ui).log_sessions, Some(false));
+    }
+
+    #[test]
+    fn scrollback_size_is_written_only_off_its_default_and_holds_to_its_range() {
+        let mut config = ProfileConfig::default();
+        assert!(!config.to_toml().unwrap().contains("scrollback_lines"));
+        config.ui.scrollback_lines = 50_000;
+        assert!(config
+            .to_toml()
+            .unwrap()
+            .contains("scrollback_lines = 50000"));
+        assert_eq!(through_toml(&config.ui).scrollback_lines, 50_000);
+        let read = |value: &str| {
+            ProfileConfig::from_toml(&format!("[ui]\nscrollback_lines = {value}\n"))
+                .unwrap()
+                .ui
+                .scrollback_lines
+        };
+        assert_eq!(read("25000"), 25_000);
+        assert_eq!(read("10"), 1_000);
+        assert_eq!(read("-4"), 1_000);
+        assert_eq!(read("9000000000"), 100_000);
+        assert_eq!(read("\"lots\""), DEFAULT_SCROLLBACK_LINES);
+    }
+
+    #[test]
+    fn a_hand_edited_snoop_share_holds_to_its_range() {
+        let read = |value: &str| {
+            ProfileConfig::from_toml(&format!("[ui]\nsnoop_share = {value}\n"))
+                .unwrap()
+                .ui
+                .snoop_share
+        };
+        for (value, want) in [
+            ("0.6", 0.6),
+            ("2", 0.95),
+            ("0", 0.05),
+            ("-1.5", 0.05),
+            ("\"wide\"", DEFAULT_SNOOP_SHARE),
+            ("nan", DEFAULT_SNOOP_SHARE),
+        ] {
+            assert!((read(value) - want).abs() < f64::EPSILON, "{value}");
+        }
+        assert!((coerce_snoop_share(f64::INFINITY) - DEFAULT_SNOOP_SHARE).abs() < f64::EPSILON);
     }
 
     #[test]

@@ -3,9 +3,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { Reconnect } from '../../stores/session/reconnectStore';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../../test/fakeDom';
 
-// The reconnect notice of board 7 in the Alerts review, for Tolliver's
-// session (3). Each state's words and buttons as the frames draw them,
-// the countdown, and what each button reaches.
+// The reconnect notice, for Tolliver's session (3). Each state's words
+// and buttons, the countdown, and what each button reaches.
 
 const redial = vi.hoisted(() => ({ now: { kind: 'none' } as Reconnect }));
 const calls = vi.hoisted(() => [] as unknown[]);
@@ -110,11 +109,12 @@ describe('the reconnect notice', () => {
   it('counts down while a try waits, with Cancel and Reconnect now', async () => {
     const notice = await mount(waiting(1, 3));
     expect(notice.card().getAttribute('class')).toBe('ov-update is-error');
+    expect(notice.text('ov-update-dot dot is-danger')).toBe('');
     expect(notice.text('ov-update-msg')).toBe('Reconnecting in 3s');
     expect(notice.text('ov-update-meta')).toBe('Try 1 of 8');
     expect(notice.buttons()).toEqual([
-      ['Cancel', 'ov-button'],
-      ['Reconnect now', 'ov-button is-primary'],
+      ['Cancel', 'btn'],
+      ['Reconnect now', 'btn is-primary'],
     ]);
     await notice.tick(1000);
     expect(notice.text('ov-update-msg')).toBe('Reconnecting in 2s');
@@ -131,17 +131,19 @@ describe('the reconnect notice', () => {
   it('rings in the success tone while a try dials, with Cancel only', async () => {
     const notice = await mount({ kind: 'dialing', try: 2, tries: 8 });
     expect(notice.card().getAttribute('class')).toBe('ov-update is-wait');
+    expect(notice.text('ov-update-dot dot is-off is-success')).toBe('');
     expect(notice.text('ov-update-msg')).toBe('Connecting');
     expect(notice.text('ov-update-meta')).toBe('Try 2 of 8');
-    expect(notice.buttons()).toEqual([['Cancel', 'ov-button']]);
+    expect(notice.buttons()).toEqual([['Cancel', 'btn']]);
   });
 
   it('says it stopped once the tries run out, and Try again dials', async () => {
     const notice = await mount({ kind: 'stopped', tries: 8 });
     expect(notice.card().getAttribute('class')).toBe('ov-update is-error');
+    expect(notice.text('ov-update-dot dot is-danger')).toBe('');
     expect(notice.text('ov-update-msg')).toBe('Vosh stopped after 8 tries');
     expect(notice.text('ov-update-meta')).toBeUndefined();
-    expect(notice.buttons()).toEqual([['Try again', 'ov-button is-primary']]);
+    expect(notice.buttons()).toEqual([['Try again', 'btn is-primary']]);
     await notice.press('Try again');
     expect(onTryAgain).toHaveBeenCalledOnce();
     expect(calls).toEqual([]);

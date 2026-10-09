@@ -132,6 +132,27 @@
   font-size: 0.85em;
 }
 
+/* Click to walk. The tip by the room under the pointer is a toast with
+   the steps as its mono meta. MapView sets where it sits. It takes no
+   press, so a click on the room under it still walks. */
+.map-canvas-host .walk-tip {
+  position: absolute;
+  z-index: 4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Where a walk stands, centered 8 px up from the bottom of the map: the
+   Walking chip with Stop, or the toast a stopped walk leaves. */
+.map-canvas-host .walk-chip {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 /* ── Map ─────────────────────────────────────────────────────────── */
 
 .pane-map {

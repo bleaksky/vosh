@@ -1,5 +1,4 @@
-//! A fake Aabahran that plays one connection (section 9 of the build
-//! spec).
+//! A fake Aabahran that plays one connection.
 //!
 //! [`Mud`] answers what a client sends with the bytes the game would
 //! write, in the game's wire order. The game writes each GMCP packet
@@ -11,6 +10,11 @@
 //! fight, a blank line unless you play compact, the prompt that
 //! [`game::prompt`] prints for your PROMPT, and IAC GA, or IAC EOR once
 //! the client asked for it from a game that plays [`Options::eor`].
+//! [`Options::order`] moves the packets into the text, as a game that
+//! writes GMCP into its output buffer sends them, since d50e4a24: the
+//! packets a command wrote where it wrote them, such as the room packets
+//! right after the people of a look, and the prompt time packages after
+//! the reply and before the prompt.
 //!
 //! Three server builds are played, as [`Build`] names them. Output that
 //! comes without a command, such as someone arriving, starts on a new line
@@ -29,11 +33,25 @@
 //! - `blind` makes you blind or lets you see again, so the game withholds
 //!   your opponent's health.
 //! - `split` cuts the next prompt into two writes [`SPLIT_MS`] apart.
+//! - `splitroom` cuts the next look whose room packets follow its people
+//!   into two writes [`SPLIT_MS`] apart, the packets first in the second,
+//!   as a read that ends right after the people brings them.
 //! - `cast N name` puts an affect on you for N hours, or recasts it, and
 //!   `tick` runs one hour of `affect_update`: each timed affect loses an
 //!   hour and one at 0 wears off. Each sends Char.Affects at once.
 //! - `spam N` sends N lines and a prompt, and `pulses N` sends N pulses
 //!   [`PULSE_MS`] apart, as combat rounds come.
+//! - `goto 6909` or `goto 6910` takes an immortal to The Crossroads or to
+//!   Nearing the Crossroads on The Eastern Road, and `east` and `west`
+//!   walk between them. `look` there shows that room. Each look ends with
+//!   the room's Room.Info, Room.Chars and Room.Items, and a walk or a goto
+//!   prints what the room shows you as you come in after them.
+//! - `bash Tolliver`, `bash Maren` or `bash Orla` slams into them as
+//!   `do_bash` prints it and lags you [`Options::bash_ms`], without the
+//!   fight and the damage a real bash brings. The game holds each line
+//!   you send while you are lagged and runs the first once the lag ends,
+//!   then one each [`GAME_PULSE_MS`], as comm.c reads its buffer. The
+//!   fake hands that back as [`Write::after_ms`].
 //!
 //! Anything else gets `Huh?` and a prompt.
 
@@ -41,6 +59,7 @@ use std::fmt::Write as _;
 
 use super::game::{self, State, Tank};
 use super::gmcp;
+use super::rooms;
 
 /// The telnet bytes the fake reads and writes.
 pub mod telnet {
@@ -88,6 +107,12 @@ pub const SPLIT_MS: u64 = 400;
 /// How far apart `pulses N` sends its pulses, in milliseconds.
 pub const PULSE_MS: u64 = 50;
 
+/// Aabahran's pulse, in milliseconds, `1000 / PULSE_PER_SECOND`.
+pub const GAME_PULSE_MS: u64 = 250;
+
+/// How long a bash that lands lags you, its 24 beats (const.c:1881).
+pub const BASH_MS: u64 = 24 * GAME_PULSE_MS;
+
 /// The longest setting `do_prompt` keeps.
 pub const KEEP: usize = 255;
 
@@ -128,6 +153,21 @@ impl Build {
     }
 }
 
+/// Where the prompt time packages come beside the text of their pulse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TickOrder {
+    /// Before the text, as Aabahran sends them: `gmcp_send` writes
+    /// straight to the socket (gmcp.c:21) and the text waits in the output
+    /// buffer until the pulse ends (comm.c:1629).
+    #[default]
+    First,
+    /// After the reply and before the prompt, as a game that writes GMCP
+    /// into its output buffer as it prints the prompt sends them. The
+    /// packets a command wrote come where it wrote them, after the reply
+    /// or, as `do_look` sends the room packets, inside it.
+    Middle,
+}
+
 /// How a connection starts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Options {
@@ -140,9 +180,14 @@ pub struct Options {
     /// The connection takes over a link dead character, so the game
     /// sends no Char.Status and no Char.Prompt.
     pub reconnect: bool,
+    /// The characters your account lists. With any, the game shows the
+    /// account menu first and you pick one by its number, as
+    /// `chargen_acct_menu` (comm.c) reads it, and you play the one you
+    /// picked.
+    pub account: Vec<String>,
     /// `telnetga` is on, so each prompt ends in IAC GA.
     pub ga: bool,
-    /// The game plays server proposal S3 with no state kept: it answers
+    /// The game keeps no EOR state of its own: it answers
     /// each IAC DO EOR it reads with IAC WILL EOR, and once it has, ends
     /// each prompt with IAC EOR in place of GA. A client that answered
     /// each WILL EOR with DO EOR would go back and forth with it forever.
@@ -156,6 +201,10 @@ pub struct Options {
     pub incog: i64,
     /// The affects on you when you log in, as your pfile holds them.
     pub affects: Vec<Affect>,
+    /// How long `bash` lags you, in milliseconds.
+    pub bash_ms: u64,
+    /// Where the prompt time packages come.
+    pub order: TickOrder,
 }
 
 /// An affect on you, one Char.Affects row.
@@ -222,12 +271,15 @@ impl Options {
             prompt: PROMPT.into(),
             fprompt: String::new(),
             reconnect: false,
+            account: Vec::new(),
             ga: true,
             eor: false,
             compact: false,
             wizi: 0,
             incog: 0,
             affects: default_affects(),
+            bash_ms: BASH_MS,
+            order: TickOrder::First,
         }
     }
 }
@@ -262,6 +314,9 @@ impl Write {
 struct Pulse {
     bytes: Vec<u8>,
     prompt_at: Option<usize>,
+    /// Where the packets a command wrote after its text start, when they
+    /// follow it.
+    packets_at: Option<usize>,
 }
 
 /// One connection to the fake game.
@@ -270,6 +325,10 @@ pub struct Mud {
     build: Build,
     name: String,
     reconnect: bool,
+    /// The characters the account menu lists, see [`Options::account`].
+    account: Vec<String>,
+    /// You picked a character at the account menu.
+    picked: bool,
     /// What the game holds for you when it prints the prompt.
     pub state: State,
     /// Your PROMPT and fight prompt as the game stores them.
@@ -291,9 +350,19 @@ pub struct Mud {
     gmcp: bool,
     logged_in: bool,
     split_next: bool,
+    /// `splitroom` asked to cut the next look before its room packets.
+    split_room: bool,
+    bash_ms: u64,
+    /// Where the prompt time packages come, see [`Options::order`].
+    order: TickOrder,
+    /// The lag a skill put on you, which holds your next line.
+    wait_ms: Option<u64>,
     /// Client bytes not read yet, and the line they build.
     input: Vec<u8>,
     line: Vec<u8>,
+    /// The room of The Eastern Road you stand in, or None in the bank
+    /// where you log in.
+    room: Option<u32>,
 }
 
 impl Mud {
@@ -314,6 +383,8 @@ impl Mud {
             build: options.build,
             name: options.name,
             reconnect: options.reconnect,
+            account: options.account,
+            picked: false,
             state,
             prompt: options.prompt,
             fprompt: options.fprompt,
@@ -327,8 +398,13 @@ impl Mud {
             gmcp: false,
             logged_in: false,
             split_next: false,
+            split_room: false,
+            bash_ms: options.bash_ms,
+            order: options.order,
+            wait_ms: None,
             input: Vec::new(),
             line: Vec::new(),
+            room: None,
         }
     }
 
@@ -361,9 +437,12 @@ impl Mud {
 
     /// Read what the client sent. IAC DO GMCP logs you in with GMCP on,
     /// and without GMCP the first line logs you in. After that each line
-    /// is a command. Returns what to write, in order.
+    /// is a command. A line that comes while a skill lags you waits for
+    /// the lag to end, and the lines after it a pulse each. Returns what
+    /// to write, in order.
     pub fn receive(&mut self, bytes: &[u8]) -> Vec<Write> {
         let mut writes = Vec::new();
+        let mut held = false;
         self.input.extend_from_slice(bytes);
         let mut i = 0;
         while i < self.input.len() {
@@ -414,7 +493,21 @@ impl Mud {
                 .to_string();
             self.line.clear();
             if self.logged_in {
-                writes.extend(self.command(&line));
+                let wait = match self.wait_ms.take() {
+                    Some(ms) => {
+                        held = true;
+                        ms
+                    }
+                    None if held => GAME_PULSE_MS,
+                    None => 0,
+                };
+                let mut answer = self.command(&line);
+                if let Some(first) = answer.first_mut() {
+                    first.after_ms += wait;
+                }
+                writes.extend(answer);
+            } else if self.at_menu() {
+                writes.push(Write::now(self.choose(&line)));
             } else {
                 writes.push(Write::now(self.login()));
             }
@@ -428,6 +521,9 @@ impl Mud {
     /// `do_look` sends Room.Info, and the first pulse follows. A reconnect
     /// sends none of those packets.
     pub fn login(&mut self) -> Vec<u8> {
+        if self.at_menu() {
+            return self.account_menu();
+        }
         self.logged_in = true;
         if self.reconnect {
             return self
@@ -457,6 +553,57 @@ impl Mud {
         self.pulse(early, &welcome, false).bytes
     }
 
+    /// The game waits for your pick at the account menu.
+    fn at_menu(&self) -> bool {
+        !self.account.is_empty() && !self.picked
+    }
+
+    /// The account menu as `show_acct_menu` and `acct_menu_row` (comm.c)
+    /// print it with 256 colours off, then the prompt of `acct-menu`
+    /// (tables.c).
+    fn account_menu(&self) -> Vec<u8> {
+        use std::fmt::Write as _;
+        const RST: &str = "\x1B[0m";
+        let mut out = format!(
+            "\n\r \x1B[37mAccount:{RST} \x1B[1;37mwanderer{RST}\n\r \x1B[1;30m{}{RST}\n\r",
+            "\u{2500}".repeat(50)
+        );
+        let (race, class, seen) = ("Human", "Warrior", "2026-10-07");
+        for (i, name) in self.account.iter().enumerate() {
+            let number = i + 1;
+            let _ = write!(
+                out,
+                "  \x1B[1;37m{number:2}{RST}. \x1B[37m{name:<15}{RST} \x1B[36mLv{MORTAL_LEVEL:<3}{RST} \x1B[1;30m{race:<8} {class:<12}{RST}  \x1B[1;30m{seen}{RST}\n\r",
+            );
+        }
+        out.push_str(
+            "\n\r [#] Play   [N]ew character   [L]ink character   [P]assword   [D]isconnect\n\r",
+        );
+        out.push_str("\n\rYour choice> ");
+        out.into_bytes()
+    }
+
+    /// Your answer at the account menu: a number in the list logs you in
+    /// as that character, and anything else shows the menu again.
+    fn choose(&mut self, line: &str) -> Vec<u8> {
+        let pick = line.trim().parse::<usize>().ok();
+        match pick
+            .and_then(|n| n.checked_sub(1))
+            .and_then(|i| self.account.get(i))
+        {
+            Some(name) => {
+                self.name = name.clone();
+                self.picked = true;
+                self.login()
+            }
+            None => {
+                let mut out = b"Invalid selection.\n\r".to_vec();
+                out.extend(self.account_menu());
+                out
+            }
+        }
+    }
+
     /// Run one line you typed. Returns what to write, in order.
     pub fn command(&mut self, line: &str) -> Vec<Write> {
         let trimmed = line.trim_start();
@@ -469,11 +616,15 @@ impl Mud {
             w if w.len() >= 3 && "prompt".starts_with(w) => self.do_prompt(rest),
             w if w.len() >= 2 && "fprompt".starts_with(w) => self.do_fprompt(rest),
             "l" | "lo" | "loo" | "look" => self.look(),
+            "e" | "ea" | "eas" | "east" => self.walk(|room| room.east),
+            "w" | "we" | "wes" | "west" => self.walk(|room| room.west),
+            "goto" => self.goto(rest),
             "fight" | "kill" => self.fight(),
             "lament" => self.lament(),
             "cast" => self.cast(rest),
             "tick" => self.tick(),
             "blind" => self.blind(),
+            "bash" => self.bash(rest),
             "afk" => {
                 self.state.afk = !self.state.afk;
                 let reply = if self.state.afk {
@@ -509,6 +660,10 @@ impl Mud {
                 );
                 self.split_next = true;
                 return vec![Write::now(pulse.bytes)];
+            }
+            "splitroom" => {
+                self.split_room = true;
+                self.pulse(Vec::new(), "The next look comes in two writes.\n\r", false)
             }
             "spam" => {
                 let count = count(rest, 1000);
@@ -552,8 +707,35 @@ impl Mud {
         self.pulse(early, &format!("{reply}\n\r"), true).bytes
     }
 
-    /// Hand over a pulse, cut in two when `split` asked for it.
+    /// The round that starts a fight someone else begins, such as an
+    /// aggressive guard: the guard attacks, `reply` follows on a new line,
+    /// then the prompt with the fight's first Char.Combat.
+    pub fn fight_starts_later(&mut self, reply: &str) -> Vec<u8> {
+        self.state.fighting = true;
+        self.state.hit = FIGHT_HIT;
+        self.state.position = 8;
+        self.state.tank = Some(Tank {
+            name: self.name.clone(),
+            hit: FIGHT_HIT,
+            max_hit: self.state.max_hit,
+        });
+        self.pulse(Vec::new(), &format!("{reply}\n\r"), true).bytes
+    }
+
+    /// Hand over a pulse, cut in two when `split` or `splitroom` asked
+    /// for it.
     fn deliver(&mut self, pulse: Pulse) -> Vec<Write> {
+        if let Some(at) = pulse.packets_at.filter(|_| self.split_room) {
+            self.split_room = false;
+            return vec![
+                Write::now(pulse.bytes[..at].to_vec()),
+                Write {
+                    after_ms: SPLIT_MS,
+                    bytes: pulse.bytes[at..].to_vec(),
+                    close: false,
+                },
+            ];
+        }
         let Some(at) = pulse.prompt_at.filter(|_| self.split_next) else {
             return vec![Write::now(pulse.bytes)];
         };
@@ -573,23 +755,44 @@ impl Mud {
     /// packages, then the text. `later` starts the text on a new line, as
     /// output that no command asked for does.
     fn pulse(&mut self, early: Vec<u8>, reply: &str, later: bool) -> Pulse {
-        let mut out = early;
+        self.pulse_split(early, reply, "", later)
+    }
+
+    /// One pulse whose command wrote its packets (`early`) between the
+    /// text `head` and the text `tail`, as `do_look` writes the room
+    /// packets after the people and before what follows the look. Where
+    /// the game writes packets straight to the socket they come first all
+    /// the same.
+    fn pulse_split(&mut self, early: Vec<u8>, head: &str, tail: &str, later: bool) -> Pulse {
+        let mut packets = Vec::new();
         let ticks = self.build == Build::New || (self.prompt_on && !self.state.afk);
         if self.gmcp && ticks {
-            out.extend(self.vitals());
-            out.extend(self.worth());
-            out.extend(self.combat());
-            out.extend(self.group());
+            packets.extend(self.vitals());
+            packets.extend(self.worth());
+            packets.extend(self.combat());
+            packets.extend(self.group());
             if self.build == Build::New {
-                out.extend(self.char_state());
-                out.extend(self.weather());
+                packets.extend(self.char_state());
+                packets.extend(self.weather());
             }
         }
+        let mut out = Vec::new();
         let mut text = String::new();
         if later {
             text.push_str("\n\r");
         }
-        text.push_str(reply);
+        text.push_str(head);
+        let mut packets_at = None;
+        if self.order == TickOrder::First {
+            out.extend(early);
+            out.append(&mut packets);
+        } else {
+            game::send_to_char(&mut out, &text, &self.state);
+            packets_at = (!early.is_empty()).then_some(out.len());
+            out.extend(early);
+            text.clear();
+        }
+        text.push_str(tail);
         if let Some(line) = self.battle_line() {
             text.push_str(&line);
         }
@@ -597,6 +800,7 @@ impl Mud {
             text.push_str("\n\r");
         }
         game::send_to_char(&mut out, &text, &self.state);
+        out.append(&mut packets);
         let mut prompt_at = None;
         if self.prompt_on {
             prompt_at = Some(out.len());
@@ -610,6 +814,7 @@ impl Mud {
         Pulse {
             bytes: out,
             prompt_at,
+            packets_at,
         }
     }
 
@@ -669,8 +874,50 @@ impl Mud {
         if self.blind {
             return self.pulse(Vec::new(), "You can't see a thing!\n\r", false);
         }
+        if let Some(room) = self.room.and_then(rooms::find) {
+            return self.show(room, "");
+        }
         let early = if self.gmcp { room_info() } else { Vec::new() };
         self.pulse(early, ROOM_TEXT, false)
+    }
+
+    /// `do_look` in `room`, then `after` in the same pulse.
+    fn show(&mut self, room: &rooms::Room, after: &str) -> Pulse {
+        let early = if self.gmcp {
+            room.packets()
+        } else {
+            Vec::new()
+        };
+        let head = room.look(self.state.immortal);
+        self.pulse_split(early, &head, after, false)
+    }
+
+    /// `move_char` (`act_move.c`) through the exit `exit` gives, then what
+    /// the room shows you as you come in.
+    fn walk(&mut self, exit: fn(&rooms::Room) -> Option<u32>) -> Pulse {
+        let to = self
+            .room
+            .and_then(rooms::find)
+            .and_then(exit)
+            .and_then(rooms::find);
+        let Some(room) = to else {
+            return self.pulse(Vec::new(), "Alas, you cannot go that way.\n\r", false);
+        };
+        self.room = Some(room.vnum);
+        self.show(room, room.greet)
+    }
+
+    /// `do_goto` (`act_wiz.c`), for an immortal.
+    fn goto(&mut self, argument: &str) -> Pulse {
+        if !self.state.immortal {
+            return self.pulse(Vec::new(), "Huh?\n\r", false);
+        }
+        let to = argument.trim().parse().ok().and_then(rooms::find);
+        let Some(room) = to else {
+            return self.pulse(Vec::new(), "No such location.\n\r", false);
+        };
+        self.room = Some(room.vnum);
+        self.show(room, "")
     }
 
     fn fight(&mut self) -> Pulse {
@@ -687,6 +934,26 @@ impl Mud {
             max_hit: self.state.max_hit,
         });
         self.pulse(Vec::new(), "A Blackwatch guard attacks you!\n\r", false)
+    }
+
+    /// `do_bash`, skills.c:2090. A bash that lands prints the line
+    /// skills.c:2271 sends you and lags you, so the game holds what you
+    /// send next.
+    fn bash(&mut self, argument: &str) -> Pulse {
+        let target = argument.split_whitespace().next().unwrap_or("");
+        if target.is_empty() {
+            return self.pulse(Vec::new(), "But you aren't fighting anyone!\n\r", false);
+        }
+        let lower = target.to_ascii_lowercase();
+        let Some((name, them)) = BASHED
+            .iter()
+            .find(|(name, _)| name.to_ascii_lowercase().starts_with(&lower))
+        else {
+            return self.pulse(Vec::new(), "They aren't here.\n\r", false);
+        };
+        self.wait_ms = Some(self.bash_ms);
+        let reply = format!("You slam into {name}, and send {them} flying!\n\r");
+        self.pulse(Vec::new(), &reply, false)
     }
 
     /// The fight is over: your health comes back, you stand, and nobody
@@ -1000,6 +1267,9 @@ impl Mud {
 }
 
 /// The room you stand in, as `do_look` prints it.
+/// Who stands in the room for `bash`, and the pronoun `$M` gives them.
+const BASHED: [(&str, &str); 3] = [("Tolliver", "him"), ("Maren", "her"), ("Orla", "her")];
+
 const ROOM_TEXT: &str = "The Bank of Aabahran\n\r  Marble counters line the hall, and a clerk nods at you.\n\r[Exits: south]\n\r";
 
 const BLESS: &str =

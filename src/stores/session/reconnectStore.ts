@@ -7,17 +7,16 @@ import {
 import { createSessionStore } from '../sessionStore';
 
 // Where the redial of each session stands after a drop, for the
-// reconnect notice of the Alerts review (Q13 and Q14). The notice of
-// the selected session counts down while a try waits, says which try
-// dials, and once the tries run out holds until you connect again.
-// session://reconnect moves it. A try that fails leaves it as it is,
-// since the next wait or the end of the series follows. A try that
-// reaches the game, your Cancel and a drop Vosh does not redial clear
-// it. A stopped notice clears at the session's next connect, so Try
-// again or Cmd+R takes it away. The store also keeps where the session
-// last dialed, which is where a series that drop starts dials each try,
-// since Rust keeps the address the drop left and not the one you save
-// after it.
+// reconnect notice. The notice of the selected session counts down
+// while a try waits, says which try dials, and once the tries run out
+// holds until you connect again. session://reconnect moves it. A try
+// that fails leaves it as it is, since the next wait or the end of the
+// series follows. A try that reaches the game, your Cancel and a drop
+// Vosh does not redial clear it. A stopped notice clears at the
+// session's next connect, so Try again or Cmd+R takes it away. The
+// store also keeps where the session last dialed, which is where a
+// series that drop starts dials each try, since Rust keeps the address
+// the drop left and not the one you save after it.
 
 export type Reconnect =
   | { kind: 'none' }

@@ -1,15 +1,15 @@
-// The geometry of the pinned prompt band, measured on the prompt boards
-// P4 to P10: the band reaches 4 px past the text on each side and 2 px
-// above and below its rows, and its bottom sits 9.5 px above the input
-// band. The dock above the command line is as tall as the rows the band
-// shows now, plus a gap under the terminal's text of one blank line and
-// 6 px, as the game leaves a blank line before each prompt. It takes one
-// row and that gap of room under the terminal and borrows the rows past
-// the first from the terminal's bottom (src/terminal/terminalRows.ts).
+// The geometry of the pinned prompt band: the band reaches 4 px past
+// the text on each side and 2 px above and below its rows, and its
+// bottom sits 9.5 px above the input band. The dock above the command
+// line is as tall as the rows the band shows now, plus a gap under the
+// terminal's text of one blank line and 6 px, as the game leaves a
+// blank line before each prompt. It takes one row and that gap of room
+// under the terminal and borrows the rows past the first from the
+// terminal's bottom (src/terminal/terminalRows.ts).
 
 import { parseSgrCells, shownColumns, type Cell } from '../terminal/sgrCells';
 
-/** The space the boards keep between the terminal's text and a band. */
+/** The space kept between the terminal's text and a band. */
 export const DOCK_GAP = 6;
 /** The band's outset above and below its rows. */
 export const BAND_OUTSET_Y = 2;
@@ -17,7 +17,7 @@ export const BAND_OUTSET_Y = 2;
 export const BAND_OUTSET_X = 4;
 /** How far the band's bottom sits above the dock's bottom, which is the
  *  terminal area's 6 px above the input band, so the band ends 9.5 px
- *  above the input band as the boards draw it. */
+ *  above the input band. */
 export const BAND_LIFT = 3.5;
 
 /** The gap between the terminal's text and the band: one blank line,

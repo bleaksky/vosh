@@ -9,12 +9,12 @@ use tracing::warn;
 
 use super::{
     accelerator, between_sessions, connect_label, is_check_id, quit_asks, route, shows_disconnect,
-    staff_listed, theme_rows, MenuState, MenuTheme, Route, SessionRow, ThemeRow, PANE_ROWS,
-    QUIT_ACCELERATOR, SESSION_ROWS,
+    snoop_listed, staff_listed, theme_rows, MenuState, MenuTheme, Route, SessionRow, ThemeRow,
+    PANE_ROWS, QUIT_ACCELERATOR, SESSION_ROWS,
 };
-use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND};
+use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND, SNOOP_FIND};
 use crate::app::state::SharedState;
-use crate::app::windows::{open_aux_window, HELP_WINDOW, SETTINGS_WINDOW};
+use crate::app::windows::{open_aux_window, snoop_in_front, HELP_WINDOW, SETTINGS_WINDOW};
 
 const COPYRIGHT: &str = "Copyright © 2026 James Wright";
 
@@ -31,6 +31,8 @@ pub(super) struct MenuHandles {
     sessions: CheckMenuItem<Wry>,
     panel: CheckMenuItem<Wry>,
     split: CheckMenuItem<Wry>,
+    /// Go to snoop, in View while the session has a snoop open.
+    snoop: MenuItem<Wry>,
     panes: Vec<(&'static str, CheckMenuItem<Wry>)>,
     themes: Submenu<Wry>,
     applied: Mutex<Applied>,
@@ -42,6 +44,7 @@ struct Applied {
     disconnect: bool,
     connect_label: String,
     staff_listed: bool,
+    snoop_listed: bool,
     themes: Vec<MenuTheme>,
     theme_items: Vec<CheckMenuItem<Wry>>,
 }
@@ -52,7 +55,7 @@ impl MenuHandles {
     }
 }
 
-/// Build the menu bar, exactly the board's menus and order, and keep
+/// Build the menu bar, its menus in their order, and keep
 /// the rows that change. Runs once, in the Builder's `.menu()`.
 pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let sep = || PredefinedMenuItem::separator(app);
@@ -74,6 +77,10 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &PredefinedMenuItem::about(app, Some("About Vosh"), Some(about))?,
             &sep()?,
             &item("settings", "Settings…")?,
+            &item("settings-automation:timers", "Timers…")?,
+            &item("settings-automation:aliases", "Aliases…")?,
+            &item("settings-automation:triggers", "Triggers…")?,
+            &item("settings-automation:macros", "Macros…")?,
             &sep()?,
             &PredefinedMenuItem::services(app, Some("Services"))?,
             &sep()?,
@@ -135,6 +142,8 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     sessions.set_enabled(false)?;
     let panel = check("panel", "Show panel")?;
     let split = check("split", "Split terminal")?;
+    // Go to snoop joins after Split terminal once a snoop opens.
+    let snoop = item("snoop", "Go to snoop")?;
     let mut panes = Vec::with_capacity(PANE_ROWS.len());
     for (pane, title) in PANE_ROWS {
         panes.push((pane, check(&format!("pane-{pane}"), title)?));
@@ -188,7 +197,10 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         HELP_SUBMENU_ID,
         "Help",
         true,
-        &[&item("help", "Vosh help")?],
+        &[
+            &item("help", "Vosh help")?,
+            &item("get-started", "Get started")?,
+        ],
     )?;
 
     let menu = Menu::with_items(app, &[&vosh, &session, &edit, &view, &window, &help])?;
@@ -202,12 +214,14 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         sessions,
         panel,
         split,
+        snoop,
         panes,
         themes,
         applied: Mutex::new(Applied {
             disconnect: false,
             connect_label: connect_label(None),
             staff_listed: false,
+            snoop_listed: false,
             themes: Vec::new(),
             theme_items: Vec::new(),
         }),
@@ -290,6 +304,8 @@ pub(crate) fn on_event(app: &AppHandle, event: MenuEvent) {
                 let _ = app.emit_to("settings", SETTINGS_FIND, ());
             } else if is_front(app, "help") {
                 let _ = app.emit_to("help", HELP_FIND, ());
+            } else if let Some((label, session)) = snoop_in_front(app) {
+                let _ = app.emit_to(label.as_str(), SNOOP_FIND, session);
             } else {
                 raise_main(app);
                 emit_main(app, id);
@@ -346,6 +362,22 @@ pub(crate) fn apply_state(app: &AppHandle, state: &MenuState) {
     for (pane, row) in &h.panes {
         let visible = state.panes.iter().any(|p| p.pane == *pane && p.visible);
         log_err(row.set_checked(visible), "pane check");
+    }
+
+    let snoop = snoop_listed(state);
+    if applied.snoop_listed != snoop {
+        if snoop {
+            let at = h
+                .view
+                .items()
+                .ok()
+                .and_then(|items| items.iter().position(|i| i.id() == "split"))
+                .map_or(0, |split| split + 1);
+            log_err(h.view.insert(&h.snoop, at), "add go to snoop");
+        } else {
+            log_err(h.view.remove(&h.snoop), "remove go to snoop");
+        }
+        applied.snoop_listed = snoop;
     }
 
     let staff = staff_listed(state);

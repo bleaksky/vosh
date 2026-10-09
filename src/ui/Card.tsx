@@ -9,8 +9,8 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   columns?: boolean;
 }
 
-/** The settings card (otty's settings UI): radius 12 on the input band
- *  fill. Rows inside it draw their own hairlines. */
+/** The settings card: radius 12 on the input band fill. Rows inside it
+ *  draw their own hairlines. */
 export function Card({ columns = false, className, ...rest }: CardProps) {
   return <div {...rest} className={cx('st-card', columns && 'st-card-columns', className)} />;
 }

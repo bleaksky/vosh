@@ -1,5 +1,6 @@
 //! The frame and the log rows a burst of reads owes, and the batch each read fills.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::AppHandle;
@@ -10,8 +11,10 @@ use vosh_prompt::stage::Output;
 use crate::output::{emit_counted, request_frame};
 use crate::sessions::Session;
 
+use super::connection::RoomChar;
 use super::log_sink::LogSink;
 use super::perf::PerfCounters;
+use super::reader::ReaderFeed;
 
 /// Everything one socket read writes to the terminal and reports, kept
 /// in stream order and sent once at the end of the read, so a prompt
@@ -22,12 +25,18 @@ pub(super) struct ReadBatch {
     pub(super) out: Output,
     /// Log rows, written in one transaction once the socket is quiet.
     pub(super) log: Vec<vosh_log::LogEntry>,
+    /// Where the rows since the last prompt or GA start in `log`, for a
+    /// Comm.Channel packet that comes after its line.
+    pub(super) since_prompt: usize,
     /// A prompt var changed or a prompt was read, so the prompt vars go
     /// out after the output even when they read the same.
     pub(super) prompt_vars: bool,
     /// A plugin changed its panes, so what changed goes out once after
     /// the output.
     pub(super) lua_panes: bool,
+    /// A Snoop packet came, so the tab list and the new text go out once
+    /// after the output.
+    pub(super) snoop: bool,
     /// Vosh read your prompt in this read, so the prompt state goes out
     /// after it while the card watches.
     pub(super) prompt: bool,
@@ -40,10 +49,21 @@ pub(super) struct ReadBatch {
     /// The read ended on a partial that can still become your prompt, so
     /// it waits a moment for the next read instead of painting raw.
     pub(super) hold: bool,
+    /// The read painted a partial raw while Read new game lines is on, so
+    /// a screen reader reads it if it is still there
+    /// [`super::reader::PARTIAL_WAIT`] later.
+    pub(super) reader_wait: bool,
     /// The read brought GMCP packets after the last prompt Vosh read in
     /// it, which can change what that prompt shows. Packets before a
     /// prompt in the same read draw with it.
     pub(super) gmcp: bool,
+    /// What a screen reader reads of the read, filled only while Read new
+    /// game lines is on.
+    pub(super) reader: ReaderFeed,
+    /// The people of the next Room.Chars in this read, with no GA or EOR
+    /// before it, as the event the session is on finds them ahead (see
+    /// [`super::gmcp::room_chars_ahead`]).
+    pub(super) room_ahead: Option<Arc<[RoomChar]>>,
 }
 
 impl ReadBatch {
@@ -53,13 +73,18 @@ impl ReadBatch {
         Self {
             out: Output::new(closed),
             log: Vec::new(),
+            since_prompt: 0,
             prompt_vars: false,
             lua_panes: false,
+            snoop: false,
             prompt: false,
             gag_without_reader: Vec::new(),
             character: None,
             hold: false,
+            reader_wait: false,
             gmcp: false,
+            reader: ReaderFeed::default(),
+            room_ahead: None,
         }
     }
 }
@@ -85,7 +110,10 @@ pub(super) struct Settle {
     since: Option<Instant>,
     /// Log rows waiting for the log, oldest first.
     pub(super) log: Vec<vosh_log::LogEntry>,
-    /// When the oldest row waiting for the log joined the queue.
+    /// The log's row and the character Char.Status first named, waiting
+    /// for the log with the rows.
+    name: Option<(i64, String)>,
+    /// When the oldest row or name waiting for the log joined the queue.
     log_since: Option<Instant>,
 }
 
@@ -102,6 +130,17 @@ impl Settle {
         if !self.log.is_empty() {
             self.log_since.get_or_insert_with(Instant::now);
         }
+    }
+
+    /// The character to name on the log's row joins the queue.
+    pub(super) fn queue_name(&mut self, named: (i64, String)) {
+        self.name = Some(named);
+        self.log_since.get_or_insert_with(Instant::now);
+    }
+
+    /// Whether rows or a name wait for the log.
+    pub(super) fn owes_log(&self) -> bool {
+        !self.log.is_empty() || self.name.is_some()
     }
 
     /// Ask for the frame the output of `session` so far owes, if any.
@@ -147,18 +186,25 @@ impl Settle {
         }
     }
 
-    /// Write the waiting rows to the log, in one transaction.
+    /// Name the character on the log's row, then write the waiting rows
+    /// to the log, in one transaction.
     pub(super) fn write_log(
         &mut self,
         store: Option<&mut vosh_log::LogStore>,
         perf: &mut PerfCounters,
     ) {
         self.log_since = None;
+        let name = self.name.take();
         let rows = std::mem::take(&mut self.log);
-        if rows.is_empty() {
+        let Some(store) = store else {
             return;
+        };
+        if let Some((id, character)) = name {
+            if let Err(e) = store.set_session_character(id, &character) {
+                warn!(error = %e, "failed to name the log session's character");
+            }
         }
-        if let Some(store) = store {
+        if !rows.is_empty() {
             let append_t0 = std::time::Instant::now();
             perf.log_appends += rows.len() as u64;
             if let Err(e) = store.append_batch(&rows) {

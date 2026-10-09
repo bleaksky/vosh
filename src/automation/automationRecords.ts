@@ -6,24 +6,21 @@
 // applied over it, macros and timers go item by item, presets install
 // and remove triggers, and loadouts set the active list.
 
-import { isAlertPresetId } from './alertPresets';
 import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
 import { groupKeyOf, searchText, type ListEntry } from './automationList';
-import { defaultEnabledIds, type Preset, PRESETS, presetMacros, presetTriggers } from './presets';
+import { defaultEnabledIds, type Preset, PRESETS } from './presets';
 import {
   deleteMacro,
   exportAliases,
   importAliases,
-  listMacros,
-  listTriggers,
-  presetsInstall,
-  presetsRemove,
   setMacro,
   timersDelete,
   timersSet,
   type AlertParts,
   type Macro,
+  type PresetSwitch,
 } from '../ipc/automation';
+import type { PresetEdit } from '../ipc/presetEdits';
 import { type TickConfig } from '../ipc/tick';
 import { errorText, listJoin, quoted } from '../lib/text';
 
@@ -460,6 +457,9 @@ export interface PresetToggle {
   /** What an alert preset does, its parts in the profile's `[alerts]`
    *  table. Absent on a preset of the library. */
   alert?: AlertParts;
+  /** Your edits to a preset of the library, its part of the profile's
+   *  `[preset_edits]` table. Absent while it holds none. */
+  edit?: PresetEdit;
 }
 
 /** The presets that are on for a stored enabled_presets list. An empty
@@ -475,32 +475,9 @@ export function presetToggles(stored: readonly string[]): PresetToggle[] {
   return PRESETS.map((p) => ({ id: p.id, enabled: on.has(p.id) }));
 }
 
-/** What to store in enabled_presets for these toggles, the library's
- *  and the alert presets'. The ids in `stored` that name no preset Vosh
- *  knows, such as one from a newer build, stay on the list. */
-export function storedPresetIds(
-  toggles: readonly PresetToggle[],
-  stored: readonly string[] = [],
-): string[] {
-  const known = (id: string) => isAlertPresetId(id) || PRESETS.some((p) => p.id === id);
-  const kept = stored.filter((id) => !known(id) && id !== PRESETS_OFF_MARKER);
-  const on = [...toggles.filter((t) => t.enabled).map((t) => t.id), ...kept];
-  return on.length > 0 ? on : [PRESETS_OFF_MARKER];
-}
-
-export interface PresetSavePlan {
+export interface PresetLaunchPlan {
   install: string[];
   remove: string[];
-}
-
-/** The library presets to install and remove for the toggles that
- *  changed. An alert preset has no triggers, so it takes no part. */
-export function presetSavePlan(draft: Draft<PresetToggle>): PresetSavePlan {
-  const changed = draftChanges(draft).changed.filter((c) => !isAlertPresetId(c.after.id));
-  return {
-    install: changed.filter((c) => c.after.enabled).map((c) => c.after.id),
-    remove: changed.filter((c) => !c.after.enabled).map((c) => c.after.id),
-  };
 }
 
 /** What launch does with the preset triggers and macros. `installed`
@@ -509,13 +486,19 @@ export function presetSavePlan(draft: Draft<PresetToggle>): PresetSavePlan {
  *  patterns replace older copies. Every preset the stores hold that is
  *  off, or that this build no longer has, comes out, so a preset you
  *  turned off stays off even when its triggers or macros came back from
- *  another profile or an older build. */
+ *  another profile or an older build. `switches` turn presets on and off
+ *  over the stored list first. */
 export function presetLaunchPlan(
   stored: readonly string[],
   installed: Iterable<string | null | undefined>,
-): PresetSavePlan {
-  const install = enabledPresetIds(stored);
-  const on = new Set(install);
+  switches: readonly PresetSwitch[] = [],
+): PresetLaunchPlan {
+  const on = new Set(enabledPresetIds(stored));
+  for (const s of switches) {
+    if (s.on) on.add(s.id);
+    else on.delete(s.id);
+  }
+  const install = PRESETS.filter((p) => on.has(p.id)).map((p) => p.id);
   const remove = new Set<string>();
   for (const id of installed) {
     if (id && !on.has(id)) remove.add(id);
@@ -523,66 +506,34 @@ export function presetLaunchPlan(
   return { install, remove: [...remove].sort() };
 }
 
-/** The keys of `preset` that one of your macros uses, in the preset's
- *  order. Yours keeps such a key, and Rust holds the preset's macro on it
- *  off (hold_taken_keys in src-tauri/src/loadouts/presets.rs). `macros` is
- *  every macro the store holds, and a macro a preset added keeps no
- *  key. */
+/** The keys of `preset` one of your macros keeps, in the preset's order.
+ *  `macros` is every macro the store holds. Rust holds the preset's macro
+ *  off on a key yours keeps (hold_taken_keys in
+ *  src-tauri/src/loadouts/presets.rs), so while the store holds it, it
+ *  tells. In loadout mode a macro of yours in a group the character keeps
+ *  off keeps no key there. With the preset off, a key one of your macros
+ *  uses is the one it would keep. */
 export function keysYourMacrosKeep(preset: Preset, macros: readonly Macro[]): string[] {
   const yours = new Set(macros.filter((m) => !m.preset).map((m) => m.key));
-  return (preset.macros ?? []).map((m) => m.key).filter((key) => yours.has(key));
+  const theirs = new Map(macros.filter((m) => m.preset === preset.id).map((m) => [m.key, m]));
+  return (preset.macros ?? [])
+    .map((m) => m.key)
+    .filter((key) => {
+      const held = theirs.get(key);
+      return held ? held.enabled === false : yours.has(key);
+    });
 }
 
 /** What a preset's card says when your macros keep keys the preset
- *  wants, and the card of a preset macro held off by yours. No board
- *  draws more than one such key, so two or more share one plural
- *  sentence, the keys in the order given. */
+ *  wants, and the card of a preset macro held off by yours. Two or more
+ *  such keys are rare, so they share one plural sentence, the keys in
+ *  the order given. */
 export function keptKeyNote(held: readonly Omit<Macro, 'preset'>[]): string {
   const keys = listJoin(held.map((m) => m.key));
   const sends = listJoin(held.map((m) => m.command));
   return held.length === 1
     ? `Your macro on ${keys} keeps the key, so ${sends} has none until you move it.`
     : `Your macros on ${keys} keep their keys, so ${sends} have none until you move them.`;
-}
-
-/** Bring the preset triggers and macros in line with `enabled`, the
- *  stored enabled_presets, at launch. Take out every preset that is off,
- *  or that this build no longer has, and install every one that is on
- *  again, so this build's patterns replace older copies. In loadout mode
- *  the triggers, the macros and the list are shared by every profile, and
- *  without the removal a preset you turned off came back after a launch
- *  as another character. A failed call is logged and the rest still
- *  run. */
-export async function installLaunchPresets(enabled: readonly string[]): Promise<void> {
-  const installed: (string | null | undefined)[] = [];
-  try {
-    installed.push(...(await listTriggers()).map((t) => t.preset));
-  } catch (e) {
-    console.error('[presets] listing triggers failed:', e);
-  }
-  try {
-    installed.push(...(await listMacros()).map((m) => m.preset));
-  } catch (e) {
-    console.error('[presets] listing macros failed:', e);
-  }
-  const plan = presetLaunchPlan(enabled, installed);
-  for (const id of plan.remove) {
-    try {
-      await presetsRemove(id);
-    } catch (e) {
-      console.error(`[presets] removing ${id} failed:`, e);
-    }
-  }
-  const on = PRESETS.filter((p) => plan.install.includes(p.id));
-  const triggers = on.flatMap(presetTriggers);
-  const macros = on.flatMap(presetMacros);
-  if (triggers.length > 0 || macros.length > 0) {
-    try {
-      await presetsInstall(triggers, macros);
-    } catch (e) {
-      console.error('[presets] startup install failed:', e);
-    }
-  }
 }
 
 // ── Loadouts ────────────────────────────────────────────────────────

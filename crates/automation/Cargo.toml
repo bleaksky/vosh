@@ -19,9 +19,5 @@ vosh-protocol = { path = "../protocol" }
 # trigger entry points with the trigger count.
 testkit = []
 
-[dev-dependencies]
-# The SGR model, whose span colors the readable highlight tests read.
-vosh-protocol = { path = "../protocol", features = ["testkit"] }
-
 [lints]
 workspace = true

@@ -14,13 +14,19 @@ describe('SETTINGS_ROWS', () => {
     }
   });
 
-  it('covers all seven groups', () => {
+  it('covers all eleven groups', () => {
     const groups = new Set(SETTINGS_ROWS.map((r) => r.target.group));
+    // In the order search lists their first rows. Rows that moved keep
+    // their place in the list, since search breaks a tie by it.
     expect([...groups]).toEqual([
       'general',
+      'logs',
       'appearance',
+      'accessibility',
       'layout',
+      'vitals',
       'input',
+      'prompt',
       'automation',
       'scripts',
       'characters',
@@ -51,8 +57,62 @@ describe('searchSettingsRows', () => {
       anchor: 'panel-size',
     });
     expect(labels('ghostty')).toEqual(['Import a theme']);
-    expect(labels('cursor')).toEqual(['Caret shape']);
+    expect(labels('cursor')).toEqual(['Caret shape', 'Caret blinks', 'Caret color']);
     expect(labels('missing')).toContain('Tracked affects');
+  });
+
+  it('finds how the command line looks and colors', () => {
+    expect(labels('caret blink')).toEqual(['Caret blinks']);
+    expect(labels('command line tint')).toEqual(['Background']);
+    expect(labels('command line bigger')).toEqual(['Size']);
+    expect(labels('typed foreground')).toEqual(['Text color']);
+    expect(labels('fish')).toEqual(['Color commands as you type']);
+    expect(searchSettingsRows('syntax highlight', mac)[0].target).toEqual({
+      group: 'input',
+      section: 'command-line',
+      anchor: 'type-colors',
+    });
+  });
+
+  it('finds the sent commands rows by the words board 09 gives', () => {
+    const inputHits = (query: string) =>
+      searchSettingsRows(query, mac)
+        .filter((r) => r.target.group === 'input')
+        .map((r) => r.label);
+    const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target;
+    expect(labels('prefix')).toEqual(['Mark before your commands']);
+    expect(target('Mark before your commands')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'mark-commands',
+    });
+    // Two Accessibility rows say faint too.
+    expect(inputHits('faint')).toEqual(['Dim sent commands']);
+    expect(labels('glyph')).toEqual(['Use the same mark in the command line']);
+    expect(labels('mark color')[0]).toBe('Mark color');
+    expect(searchSettingsRows('mark color', mac)[0].target).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'mark-color',
+    });
+    expect(target('Command color')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'sent-color',
+    });
+    expect(target('Show the commands your macros send')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'echo-macros',
+    });
+    // Ties fall in the order the page draws them.
+    expect(inputHits('color')).toEqual([
+      'Color commands as you type',
+      'Mark color',
+      'Command color',
+      'Caret color',
+      'Text color',
+    ]);
   });
 
   it('finds where the session in front connects', () => {
@@ -74,6 +134,22 @@ describe('searchSettingsRows', () => {
     const rows = searchSettingsRows('automation', mac);
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.target.group === 'automation')).toBe(true);
+  });
+
+  it('finds Switch themes and its pairs, by the old follow words too', () => {
+    const anchor = (query: string) => searchSettingsRows(query, mac)[0].target;
+    expect(labels('switch themes')[0]).toBe('Switch themes');
+    expect(anchor('switch themes')).toEqual({
+      group: 'appearance',
+      section: 'theme',
+      anchor: 'switch-themes',
+    });
+    expect(labels('follow system appearance')).toEqual(['Switch themes']);
+    expect(labels('dawn')).toEqual(['Switch themes']);
+    expect(labels('day theme')[0]).toBe('Day theme');
+    expect(anchor('day theme').anchor).toBe('day-theme');
+    expect(labels('night theme')[0]).toBe('Night theme');
+    expect(anchor('night theme').anchor).toBe('night-theme');
   });
 
   it('finds the Theme row by the themes that left Vosh', () => {
@@ -98,8 +174,8 @@ describe('searchSettingsRows', () => {
     ]);
   });
 
-  it('finds Macros and Presets by numpad', () => {
-    expect(labels('numpad')).toEqual(['Macros', 'Presets']);
+  it('finds Macros, Presets and the preset by numpad', () => {
+    expect(labels('numpad')).toEqual(['Numpad movement', 'Macros', 'Presets']);
     expect(labels('walk keys')).toEqual(['Presets']);
   });
 
@@ -117,6 +193,21 @@ describe('searchSettingsRows', () => {
     expect(labels('attacked')).toEqual(['Presets']);
     expect(labels('health')).toContain('Presets');
     expect(labels('connection')).toContain('Presets');
+  });
+
+  it('finds each preset on its card, by its colors and Reset to preset', () => {
+    expect(labels('herb')).toEqual(['Herb labels', 'Potion labels']);
+    expect(searchSettingsRows('disarms', mac)[0].target).toEqual({
+      group: 'automation',
+      section: 'presets',
+      anchor: 'presets:disarm_buff_fade',
+    });
+    const swatches = labels('swatch');
+    expect(swatches).toContain('Room, time, and weather colors');
+    expect(swatches).not.toContain('Numpad movement');
+    expect(swatches).not.toContain('Tells you send');
+    expect(labels('reset to preset')).toContain('Numpad movement');
+    expect(labels('your changes')).toContain('Disarms and fading buffs');
   });
 
   it('shows loadouts only in loadout mode', () => {
@@ -137,11 +228,32 @@ describe('searchSettingsRows', () => {
     expect(labels('repeated')[0]).toBe('Collapse repeated lines');
   });
 
+  it('finds the vitals gallery by each style', () => {
+    for (const style of [
+      'bands',
+      'ladders',
+      'blocks',
+      'traces',
+      'dials',
+      'rings',
+      'vials',
+      'orbs',
+      'candles',
+    ]) {
+      expect(labels(style), style).toContain('Style');
+    }
+  });
+
+  it('finds Show each hit under Customize vitals', () => {
+    expect(labels('trail')).toEqual(['Show each hit']);
+    expect(labels('hit')).toContain('Show each hit');
+  });
+
   it('finds In a fight and Attack lines under Collapse repeated lines', () => {
     expect(labels('fight')[0]).toBe('In a fight');
-    expect(labels('combat')).toEqual(['In a fight', 'Attack lines']);
+    expect(labels('combat').slice(0, 2)).toEqual(['In a fight', 'Attack lines']);
     expect(labels('attack')[0]).toBe('Attack lines');
-    expect(labels('damage')).toEqual(['Attack lines']);
+    expect(labels('damage')).toEqual(['Damage to you', 'Your damage verbs', 'Attack lines']);
     const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target;
     expect(target('In a fight')).toEqual({
       group: 'appearance',
@@ -157,24 +269,17 @@ describe('searchSettingsRows', () => {
 
   it('finds the Input rows, Advanced ones included', () => {
     expect(labels('paste')).toEqual(['Wait between pasted lines']);
-    expect(labels('sent command')[0]).toBe('Sent command color');
+    expect(labels('sent command')).toContain('Command color');
+    expect(labels('mark')).toContain('Mark before your commands');
     const paste = searchSettingsRows('paste', mac)[0];
     expect(paste.target).toEqual({ group: 'input', section: 'advanced', anchor: 'paste-delay' });
   });
 
-  it('finds the Prompt section rows (P12)', () => {
+  it('finds the Prompt section rows (P12) on the Prompt tab', () => {
     const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target ?? null;
-    expect(target("Your game's prompt")).toEqual({
-      group: 'input',
-      section: 'prompt',
-      anchor: 'prompt-game',
-    });
-    expect(target('Draw your own prompt')).toEqual({ group: 'input', section: 'prompt' });
-    expect(target('Where your prompt shows')).toEqual({
-      group: 'input',
-      section: 'prompt',
-      anchor: 'prompt-show',
-    });
+    expect(target("Your game's prompt")).toEqual({ group: 'prompt', anchor: 'prompt-game' });
+    expect(target('Draw your own prompt')).toEqual({ group: 'prompt' });
+    expect(target('Where your prompt shows')).toEqual({ group: 'prompt', anchor: 'prompt-show' });
     expect(labels('prompt template')).toEqual(['Draw your own prompt']);
     expect(labels('customize')).toContain('Draw your own prompt');
     // The fight prompt reads in the same block.
@@ -189,13 +294,14 @@ describe('searchSettingsRows', () => {
     ).toEqual(['Wait between pasted lines']);
   });
 
-  it('finds the Layout rows', () => {
+  it('finds the Layout and Vitals rows', () => {
     expect(labels('vitals')).toContain('Style');
-    expect(labels('one line')).toEqual(['Style']);
+    // Long bursts also reads one line, in its last one, and comes after.
+    expect(labels('one line')).toEqual(['Style', 'Long bursts']);
     expect(labels('gauges')).toEqual(['Style']);
     expect(labels('status line')).toContain('Show your vitals in');
     const style = searchSettingsRows('pips', mac)[0];
-    expect(style.target).toEqual({ group: 'layout', section: 'vitals', anchor: 'style' });
+    expect(style.target).toEqual({ group: 'vitals', anchor: 'style' });
     expect(labels('panel width')[0]).toBe('Width');
     expect(labels('divider')).toEqual(['Divider color']);
     const divider = searchSettingsRows('divider', mac)[0];
@@ -216,9 +322,9 @@ describe('searchSettingsRows', () => {
       (anchor) => SETTINGS_ROWS.find((r) => r.target.anchor === anchor)?.target,
     );
     expect(targets).toEqual([
-      { group: 'layout', section: 'customize-vitals', anchor: 'values' },
-      { group: 'layout', section: 'customize-vitals', anchor: 'meter' },
-      { group: 'layout', section: 'customize-vitals', anchor: 'warn-low' },
+      { group: 'vitals', section: 'customize-vitals', anchor: 'values' },
+      { group: 'vitals', section: 'customize-vitals', anchor: 'meter' },
+      { group: 'vitals', section: 'customize-vitals', anchor: 'warn-low' },
     ]);
   });
 
@@ -231,7 +337,7 @@ describe('searchSettingsRows', () => {
     expect(labels('vitals text')).toContain('Style');
     const order = SETTINGS_ROWS.find((r) => r.label === 'Vitals and their order');
     expect(order?.target).toEqual({
-      group: 'layout',
+      group: 'vitals',
       section: 'customize-vitals',
       anchor: 'vitals-order',
     });
@@ -295,11 +401,48 @@ describe('searchSettingsRows', () => {
     expect(row.target).toEqual({ group: 'general', section: 'advanced', anchor: 'gpu' });
   });
 
-  it('finds the log view by the old tab id target', () => {
+  it('finds the log view at its link', () => {
     const [row] = searchSettingsRows('search logs', mac);
     expect(row.label).toBe('Search logs');
-    expect(row.target).toEqual(resolveSettingsTarget('logs'));
+    expect(row.target).toEqual(resolveSettingsTarget('logs:search'));
     expect(labels('saved logs')[0]).toBe('Session logs');
     expect(labels('saved sessions')[0]).toBe('Session logs');
+  });
+
+  it('finds the rows that moved to Accessibility, by the tab name too', () => {
+    expect(labels('accessibility')).toEqual(
+      expect.arrayContaining([
+        'Color vision',
+        'Fit game colors',
+        'Keep highlight colors readable',
+        'Blinking text',
+      ]),
+    );
+    expect(labels('color vision')[0]).toBe('Color vision');
+    expect(SETTINGS_ROWS.find((r) => r.label === 'Blinking text')?.target).toEqual({
+      group: 'accessibility',
+      section: 'motion',
+      anchor: 'blink-text',
+    });
+  });
+
+  it('finds the screen reader rows on Accessibility by what you call the reader', () => {
+    expect(labels('voiceover')).toEqual([
+      'Read new game lines',
+      'Read in the background',
+      'Read your prompt',
+      'Long bursts',
+    ]);
+    expect(labels('screen reader')).toHaveLength(4);
+    expect(
+      SETTINGS_ROWS.filter((r) => r.target.section === 'screen-reader').map((r) => r.target.anchor),
+    ).toEqual(['read-game-lines', 'read-in-background', 'read-your-prompt', 'long-bursts']);
+    expect(labels('prompt')).toContain('Read your prompt');
+  });
+
+  it('finds the writing card rows in their own Input section', () => {
+    expect(
+      SETTINGS_ROWS.filter((r) => r.target.section === 'writing').map((r) => r.target.anchor),
+    ).toEqual(['writing-offer', 'writing-ask-post']);
   });
 });

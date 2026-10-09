@@ -30,17 +30,20 @@ pub(super) struct LogSink {
 }
 
 impl LogSink {
-    /// Open the log's row for a connection to `host` on `port`, so every
-    /// row the session writes attaches to it. With logging off, or a row
-    /// that fails to open, the session writes no rows.
+    /// Open the log's row for `session`'s connection to `host` on
+    /// `port`, so every row the session writes attaches to it, and note it
+    /// on the session. With `logged` false, which Log sessions off gives,
+    /// with no log store, or with a row that fails to open, the session
+    /// writes no rows.
     pub(super) async fn open(
         logs: SharedLogStore,
-        scrollback: SharedScrollback,
+        logged: bool,
+        session: &Session,
         scrollback_path: Option<PathBuf>,
         host: &str,
         port: u16,
     ) -> Self {
-        let id = {
+        let id = if logged {
             let mut guard = logs.lock().await;
             match guard.as_mut() {
                 Some(store) => match store.start_session(host, port, now_ms()) {
@@ -52,11 +55,16 @@ impl LogSink {
                 },
                 None => None,
             }
+        } else {
+            None
         };
+        if let Some(id) = id {
+            session.note_log(id);
+        }
         Self {
             logs,
             session: LogSession::new(id),
-            scrollback,
+            scrollback: session.scrollback.clone(),
             scrollback_path,
         }
     }
@@ -66,14 +74,15 @@ impl LogSink {
         self.session.id
     }
 
-    /// Name the character the row belongs to, see [`LogSession::name`].
-    pub(super) async fn name(&mut self, character: &str) {
-        self.session.name(&self.logs, character).await;
+    /// The row and the character to name on it, see [`LogSession::name`].
+    pub(super) fn name(&mut self, character: &str) -> Option<(i64, String)> {
+        self.session.name(character)
     }
 
     /// Close the log's row, then save the scrollback ring so the next
     /// launch can restore it. A failure here only warns, so the session
-    /// still ends and says so.
+    /// still ends and says so, and a ring it could not save reads as
+    /// changed, so the next pass or the quit tries again.
     pub(super) async fn close(self) {
         if let Some(sid) = self.session.id {
             let mut guard = self.logs.lock().await;
@@ -84,9 +93,14 @@ impl LogSink {
             }
         }
         if let Some(path) = self.scrollback_path {
-            let bytes = self.scrollback.lock().await.dump();
-            if let Err(e) = std::fs::write(&path, bytes) {
-                warn!(path = %path.display(), error = %e, "scrollback write failed");
+            let snapshot = self.scrollback.lock().await.snapshot();
+            let written = tokio::task::spawn_blocking(move || {
+                crate::logs::write_scrollback(&path, &snapshot)
+            })
+            .await
+            .unwrap_or(false);
+            if !written {
+                self.scrollback.lock().await.mark_changed();
             }
         }
     }
@@ -104,23 +118,17 @@ impl LogSession {
         Self { id, named: false }
     }
 
-    /// Name the character the row belongs to, the first time Char.Status
-    /// names one, so the prompt lookup can tell whose session it was.
-    /// Char.Status comes again on later pulses, and those write nothing.
-    pub(super) async fn name(&mut self, logs: &crate::logs::SharedLogStore, character: &str) {
-        let Some(id) = self.id else {
-            return;
-        };
-        if self.named {
-            return;
+    /// The row and the character it belongs to, the first time
+    /// Char.Status names one, so the prompt lookup can tell whose session
+    /// it was. The name waits with the burst's rows, so a busy log never
+    /// holds the loop for it. Char.Status comes again on later pulses,
+    /// and those name nothing.
+    pub(super) fn name(&mut self, character: &str) -> Option<(i64, String)> {
+        let id = self.id?;
+        if std::mem::replace(&mut self.named, true) {
+            return None;
         }
-        self.named = true;
-        let mut guard = logs.lock().await;
-        if let Some(store) = guard.as_mut() {
-            if let Err(e) = store.set_session_character(id, character) {
-                warn!(error = %e, "failed to name the log session's character");
-            }
-        }
+        Some((id, character.to_string()))
     }
 }
 
@@ -160,6 +168,11 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
         return;
     };
     let plain = vosh_protocol::ansi::plain_text(&bytes);
+    let kind = {
+        let mut c = session.connection.lock();
+        let playing = c.log_kinds.in_play(c.link.playing());
+        c.log_kinds.line(&plain, playing)
+    };
     // Terminate the line on screen. Write only what the end of its read
     // did not paint, to avoid printing the goodbye twice.
     let shown = painted.map_or(0, |(_, len)| len.min(bytes.len()));
@@ -176,6 +189,7 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
                 ts_ms: now_ms(),
                 text: plain,
                 raw: Some(bytes),
+                kind,
             }]) {
                 warn!(error = %e, "disconnect partial log append failed");
             }

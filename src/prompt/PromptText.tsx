@@ -9,15 +9,14 @@ import {
   TOKEN_ROWS,
 } from './textEdit';
 import type { PromptToken } from '../ipc/promptDesign';
-import { Button, PlusIcon } from '../ui';
+import { Button, PlusIcon, VisuallyHidden } from '../ui';
 
-// Edit as text (P9): your design byte for byte in the terminal's face,
-// each token colored by what it is, wrapping only between tokens. The
-// token under the caret carries the selection token, and the part it
-// draws carries the accent tint and ring on your prompt. Every
-// change saves as you type and redraws your prompt. The token rows add a
-// token at the caret, and Insert value… picks a value and adds its token
-// there.
+// Edit as text: your design byte for byte in the terminal's face, each
+// token colored by what it is, wrapping only between tokens. The token
+// under the caret carries the selection token, and the part it draws
+// carries the accent tint and ring on your prompt. Every change saves
+// as you type and redraws your prompt. The token rows add a token at
+// the caret, and Insert value… picks a value and adds its token there.
 
 interface PromptTextProps {
   template: string;
@@ -180,9 +179,7 @@ export function PromptText({
 
   return (
     <div className="pc-body pc-text">
-      <span id="pc-template-label" className="st-visually-hidden">
-        {fieldLabel}
-      </span>
+      <VisuallyHidden id="pc-template-label">{fieldLabel}</VisuallyHidden>
       <div
         ref={fieldRef}
         className="pc-text-field"

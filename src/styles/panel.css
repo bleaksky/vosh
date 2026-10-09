@@ -1,15 +1,13 @@
-/* The One Window panel (SPEC 9 and 10): split panes over pinned
-   vitals, and the floating pane menus. Values are the approved
-   mockups' (Main, PanelTabs, Combat, Session), colors are tokens only.
-   Dense rows are 22 px, pane headers 28 px, text starts at x 18, and
-   a row with a status marker puts the 8 px marker at x 18 and its
-   text at x 34, all at a 12 px panel. Every pane draws in the panel
-   faces and at the panel size, which Settings, Appearance, Panel text
-   picks. As designed, the default Font, keeps the system face for the
-   headers, labels, counts and rows and the terminal face for the game
-   text, and any other pick draws both in one face. The size starts at
-   12 px. The text, the rows, and the gaps between them scale with the
-   size (.panel-host). */
+/* The panel: split panes over pinned vitals, and the floating pane
+   menus. Colors are tokens only. Dense rows are 22 px, pane headers 28
+   px, text starts at x 18, and a row with a status marker puts the 8 px
+   marker at x 18 and its text at x 34, all at a 12 px panel. Every pane
+   draws in the panel faces and at the panel size, which Settings,
+   Appearance, Panel text picks. As designed, the default Font, keeps
+   the system face for the headers, labels, counts and rows and the
+   terminal face for the game text, and any other pick draws both in one
+   face. The size starts at 12 px. The text, the rows, and the gaps
+   between them scale with the size (.panel-host). */
 
 /* The shell's panel slot supplies the ground, the 1 px left edge, and
    the band's 32 px above the first pane. Every pane's text takes the
@@ -138,8 +136,24 @@
   user-select: none;
 }
 
+/* A narrow header gives way in turn. The counts shrink first,
+   sharing the cut as they always have and ending in an ellipsis,
+   until the first count is down to its first digit and a second
+   count is gone. The chat pane's channel filter gives way as a count
+   does. The label gives way last, ending in an ellipsis of its own,
+   so the first count's digit always reads whole. The counts and the
+   filter shrink a million times faster than the label, so the label
+   keeps its width to the pixel while they can still give, and a
+   header that had room for them draws exactly as it did. A label
+   alone, like a long Lua pane title, ends in its ellipsis 40 px from
+   the right edge, clear of the more button. The digit's room is the
+   zero of the count's own face rounded up to a whole px, which holds
+   any of its tabular digits. */
 .pane-label {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin: 0;
   font-size: round(10px * var(--mud-scale), 1px);
   line-height: round(12px * var(--mud-scale), 1px);
@@ -152,23 +166,6 @@
 
 .pane-header > .pane-label + * {
   margin-left: 8px;
-}
-
-/* A narrow header gives way in turn. The counts shrink first, sharing
-   the cut as they always have and ending in an ellipsis, until the
-   first count is down to its first digit and a second count is gone.
-   Only then does the label give way, ending in an ellipsis of its own,
-   so the first count's digit always reads whole. The counts shrink a
-   million times faster than the label, so the label keeps its width to
-   the pixel while a count can still give, and a header that had room
-   for the first count's digit draws exactly as it did. The digit's room
-   is the zero of the count's own face rounded up to a whole px, which
-   holds any of its tabular digits. */
-.pane-label:has(+ .pane-meta) {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .pane-label + .pane-meta {
@@ -248,18 +245,9 @@
   display: block;
 }
 
-/* The chat pane's channel filter, a select set as header meta. It
-   gives way as a count does, a million times faster than the label,
-   so a narrow pane cuts its words to an ellipsis before the more
-   button. The chevron stays whole, with room for one letter or the
-   ellipsis beside it, and only then does the label give way. */
-.pane-label:has(+ .pane-select) {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+/* The chat pane's channel filter, a select set as header meta. Its
+   words end in an ellipsis, and the chevron stays whole with room for
+   one letter or the ellipsis beside it. */
 .pane-label + .pane-select {
   min-width: calc(round(up, 1ch, 1px) + 16px);
 }
@@ -616,6 +604,7 @@
 }
 
 .panel-vitals-meter {
+  position: relative;
   height: var(--vitals-meter, 2px);
   margin-top: var(--vitals-meter-gap, 1px);
   border-radius: var(--vitals-meter-radius, 1px);
@@ -624,6 +613,7 @@
 }
 
 .panel-vitals-fill {
+  position: relative;
   height: 100%;
   border-radius: inherit;
   background: var(--tertiary);
@@ -668,6 +658,27 @@
 
 .panel-vitals-row-combat .panel-vitals-fill {
   background: var(--warn);
+}
+
+/* Show each hit on Rows and One line: the part a hit took in the
+   fill's color at 62 percent, so it still reads on the divider. */
+.panel-vitals-gone {
+  top: 0;
+  bottom: 0;
+  background: color-mix(in oklab, var(--tertiary) 62%, transparent);
+}
+
+.panel-vitals-swatch .panel-vitals-gone {
+  background: color-mix(in oklab, var(--vital-ink) 62%, transparent);
+}
+
+.panel-vitals-row-low .panel-vitals-gone {
+  background: color-mix(in oklab, var(--danger) 62%, transparent);
+}
+
+.panel-vitals-row-warn .panel-vitals-gone,
+.panel-vitals-row-combat .panel-vitals-gone {
+  background: color-mix(in oklab, var(--warn) 62%, transparent);
 }
 
 /* The game hides the value (lamented tears): a quiet `?` over an empty
@@ -719,28 +730,20 @@
   margin-left: 0;
 }
 
-.panel-vitals-label-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* Ledger, Gauges and Pips (Vitals Styles, board 1). Each vital carries
-   its tone as custom properties: the mark, the label and the value. The
-   mark rests in a quiet tone, a color you picked colors the mark and
-   the label, low turns the mark danger and the value danger text, warn
-   turns both warn, and your opponent draws its name in text and its
-   health in warn. A value the game hides reads a tertiary `?` over an
-   empty mark. Each style sets its quiet tone in --vital-quiet, secondary
-   unless it says otherwise. VitalsFooter sets --vitals-min-height only while it waits
-   for your vitals. */
+/* Ledger, Gauges and Pips. Each vital carries its tone as custom
+   properties: the mark, the label and the value. The mark rests in a
+   quiet tone, a color you picked colors the mark and the label, low
+   turns the mark danger and the value danger text, warn turns both
+   warn, and your opponent draws its name in text and its health in
+   warn. A value the game hides reads a tertiary `?` over an empty mark.
+   Each style sets its quiet tone in --vital-quiet, secondary unless it
+   says otherwise. VitalsFooter sets --vitals-min-height only while it
+   waits for your vitals. */
 .vitals-tone {
   --vital-mark: var(--vital-ink, var(--vital-quiet, var(--secondary)));
   --vital-label: var(--vital-ink, var(--vital-quiet, var(--secondary)));
   --vital-value: var(--text);
+  --vital-ghost: color-mix(in oklab, var(--vital-mark) 40%, transparent);
 }
 
 .vitals-tone.is-warn {
@@ -829,6 +832,7 @@
 }
 
 .vitals-ledger-line {
+  position: relative;
   height: var(--vitals-meter, 2px);
   margin-top: round(4px * var(--mud-scale), 1px);
   border-radius: var(--vitals-meter-radius, 1px);
@@ -837,8 +841,15 @@
 }
 
 .vitals-ledger-fill {
+  position: relative;
   height: 100%;
   background: var(--vital-mark);
+}
+
+.vitals-ledger-gone {
+  top: 0;
+  bottom: 0;
+  background: color-mix(in oklab, var(--vital-mark) 62%, transparent);
 }
 
 /* Your opponent across the footer, its name and health on one line and
@@ -1005,6 +1016,16 @@
   background: var(--vital-mark);
 }
 
+.vitals-gauge-fill.is-hit {
+  border-radius: 3px 0 0 3px;
+}
+
+.vitals-gauge-gone {
+  top: 0;
+  bottom: 0;
+  background: var(--vital-ghost);
+}
+
 .vitals-marks.is-under .vitals-gauge {
   grid-column: 1 / -1;
   grid-row: 2;
@@ -1039,6 +1060,14 @@
   );
 }
 
+.vitals-pip.is-gone {
+  background: var(--vital-ghost);
+}
+
+.vitals-pip.is-half-gone {
+  background: linear-gradient(90deg, var(--vital-mark) 50%, var(--vital-ghost) 50%);
+}
+
 .vitals-tone.is-hidden .vitals-pip {
   background: color-mix(in oklab, var(--tertiary) 20%, transparent);
 }
@@ -1047,6 +1076,717 @@
   grid-column: 1 / -1;
   grid-row: 2;
   margin-top: 4px;
+}
+
+/* The other vitals styles. Each mark rests in the secondary tone, as
+   Gauges and Pips do, or your color, and each vital carries mixes of
+   it: --vital-soft for an empty unit, as an unlit Pips disc is, and
+   --vital-rim for the glass of Vials and Orbs. Your opponent draws its
+   name and health on one line across the footer and the style's own
+   mark under them in warn, 10 above your vitals or 10 under them. */
+.vitals-drawn {
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.vitals-drawn .vitals-tone {
+  --vital-soft: color-mix(in oklab, var(--vital-mark) 20%, transparent);
+  --vital-rim: color-mix(in oklab, var(--vital-mark) 55%, transparent);
+}
+
+.vitals-drawn .vitals-marks {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: 10px;
+  padding: 0;
+}
+
+.vitals-foe.is-top {
+  margin-bottom: round(10px * var(--mud-scale), 1px);
+}
+
+.vitals-foe.is-bottom {
+  margin-top: round(10px * var(--mud-scale), 1px);
+}
+
+.vitals-foe-line {
+  display: flex;
+  align-items: center;
+  height: var(--mud-line);
+  min-width: 0;
+}
+
+.vitals-foe-line .vitals-mark-label {
+  flex: 1 1 auto;
+}
+
+.vitals-foe-line .vitals-mark-value {
+  flex: none;
+  margin-left: 8px;
+}
+
+.vitals-foe-mark {
+  margin-top: round(4px * var(--mud-scale), 1px);
+}
+
+/* Bands. Stephen Few's bullet graph laid flat under each label and
+   value: two quiet bands under a quarter and under two thirds, a 4 px
+   bar through the middle, and in a fight a 2 px tick where the vital
+   stood as the fight began. */
+.vitals-band + .vitals-band {
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-band-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--mud-line);
+}
+
+.vitals-band-text .vitals-mark-value {
+  margin-left: 8px;
+}
+
+.vitals-band-graph {
+  position: relative;
+  height: 8px;
+  margin-top: round(3px * var(--mud-scale), 1px);
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--text) 5%, transparent);
+}
+
+.vitals-band-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.vitals-band-zone.is-low {
+  left: 0;
+  width: 25%;
+  background: color-mix(in oklab, var(--text) 17%, transparent);
+}
+
+.vitals-band-zone.is-mid {
+  left: 25%;
+  width: 42%;
+  background: color-mix(in oklab, var(--text) 10%, transparent);
+}
+
+.vitals-band-bar,
+.vitals-band-gone {
+  position: absolute;
+  top: 2px;
+  height: 4px;
+}
+
+.vitals-band-bar {
+  left: 0;
+  background: var(--vital-mark);
+  transition: width 160ms ease-out;
+}
+
+.vitals-band-gone {
+  background: var(--vital-ghost);
+}
+
+.vitals-band-tick {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 8px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+.vitals-band-tick.is-end {
+  margin-left: -2px;
+}
+
+/* The row styles: each vital's label, its mark and its value on a pane
+   row, the Gauges grid (.vitals-drawn .vitals-marks above), the marks
+   starting together after the longest label and ending together before
+   the widest value. Under them each mark sits under its label and
+   value. */
+.vitals-mark {
+  display: block;
+  min-width: 0;
+}
+
+.vitals-marks.is-under .vitals-mark {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 4px;
+}
+
+/* Ladders. 24 segments 8 px tall with 1 px gaps, lit in the vital's
+   tone and unlit at a fifth of it, as a level meter lights. */
+.vitals-ladder {
+  display: flex;
+  gap: 1px;
+  height: 8px;
+}
+
+.vitals-ladder-seg {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 1px;
+  background: var(--vital-soft);
+}
+
+.vitals-ladder-seg.is-lit {
+  background: var(--vital-mark);
+}
+
+/* Blocks. The bar in the game face, a full block for each whole cell
+   and an eighth for the last over the same cells at a fifth of the
+   tone, as btop draws its meters. The label and value share the face,
+   a cell apart. The bar keeps the middle 10 px of the face's full
+   block, so it sits with the other marks. */
+.vitals-drawn.is-blocks {
+  font-family: var(--font-panel-game);
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}
+
+.vitals-drawn .vitals-marks.is-blocks {
+  column-gap: 1ch;
+}
+
+.vitals-blocks {
+  position: relative;
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  white-space: pre;
+  line-height: var(--mud-line);
+}
+
+.vitals-blocks > span {
+  position: absolute;
+  top: -3px;
+  left: 0;
+}
+
+.vitals-blocks-unlit {
+  color: var(--vital-soft);
+}
+
+.vitals-blocks-gone {
+  color: var(--vital-ghost);
+}
+
+.vitals-blocks-lit {
+  color: var(--vital-mark);
+}
+
+.is-blocks .vitals-foe-mark {
+  margin-top: 2px;
+}
+
+/* Traces. Each vital over its last minute, a 1.25 px line over the
+   area it fills on a 26 pt row, a 5 px dot at now. Your opponent's
+   trace runs the footer, 24 tall. */
+.vitals-drawn .vitals-marks.is-traces {
+  grid-auto-rows: round(26px * var(--mud-scale), 1px);
+}
+
+.vitals-trace {
+  position: relative;
+  display: block;
+  height: 18px;
+}
+
+.vitals-foe-mark .vitals-trace {
+  height: 24px;
+}
+
+.vitals-trace svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.vitals-trace-area {
+  fill: var(--vital-soft);
+}
+
+.vitals-trace-line {
+  fill: none;
+  stroke: var(--vital-mark);
+  stroke-width: 1.25px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.vitals-trace-base {
+  stroke: var(--divider);
+  stroke-width: 1px;
+}
+
+.vitals-trace-now {
+  position: absolute;
+  right: -2.5px;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--vital-mark);
+}
+
+/* The column styles stand your vitals in columns 16 apart, as Ledger
+   does, each under the pane label caps, on Ledger's pads. Your
+   opponent takes a 2 px line in warn where a style's mark cannot
+   stretch across the footer. */
+.panel-vitals-marks.is-cols {
+  padding: round(10px * var(--mud-scale), 1px) 0 round(12px * var(--mud-scale), 1px);
+}
+
+.vitals-cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 16px;
+}
+
+.vitals-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.vitals-caps {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vital-ink, var(--tertiary));
+}
+
+.vitals-line-mark {
+  position: relative;
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
+  background: var(--divider);
+}
+
+.vitals-line-fill,
+.vitals-line-gone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.vitals-line-fill {
+  left: 0;
+  background: var(--vital-mark);
+  transition: width 160ms ease-out;
+}
+
+.vitals-line-gone {
+  background: var(--vital-ghost);
+}
+
+/* Dials. A 270 degree arc 60 across and 4 wide on the divider track,
+   the figure inside, the max in the opening at the foot. At 44 the
+   figure takes the text size and the max goes. */
+.vitals-dial {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-dial.is-narrow {
+  width: 44px;
+  height: 44px;
+}
+
+.vitals-dial svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.vitals-dial-track,
+.vitals-dial-arc,
+.vitals-dial-gone {
+  fill: none;
+  stroke-width: 4;
+}
+
+.vitals-dial-track {
+  stroke: var(--divider);
+  stroke-linecap: round;
+}
+
+.vitals-dial-arc {
+  stroke: var(--vital-mark);
+  stroke-linecap: round;
+  transition: stroke-dasharray 160ms ease-out;
+}
+
+.vitals-dial-gone {
+  stroke: var(--vital-ghost);
+}
+
+.vitals-dial-gone.is-draining {
+  transition: stroke-dasharray 400ms linear;
+}
+
+.vitals-dial-figure {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-size: round(14px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--vital-value);
+}
+
+.vitals-dial.is-narrow .vitals-dial-figure {
+  font-size: var(--mud-text);
+}
+
+.vitals-dial-max {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  text-align: center;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--tertiary);
+}
+
+/* Rings. Arcs 4 wide nested in one 56 pt glyph on the divider track,
+   the legend beside it on rows of 19, each label after a 6 px key in
+   the vital's tone. */
+.vitals-rings {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.vitals-rings svg {
+  flex: none;
+  overflow: visible;
+}
+
+.vitals-rings-legend {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vitals-ring-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: round(19px * var(--mud-scale), 1px);
+}
+
+.vitals-ring-row .vitals-mark-value {
+  flex: none;
+  margin-left: 8px;
+}
+
+.vitals-ring-key {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 3px;
+  vertical-align: 1px;
+  background: var(--vital-mark);
+}
+
+.vitals-ring-track,
+.vitals-ring-arc,
+.vitals-ring-gone {
+  fill: none;
+  stroke-width: 4;
+}
+
+.vitals-ring-track {
+  stroke: var(--divider);
+}
+
+.vitals-ring-arc {
+  stroke: var(--vital-mark);
+  stroke-linecap: round;
+  transition: stroke-dasharray 160ms ease-out;
+}
+
+.vitals-ring-gone {
+  stroke: var(--vital-ghost);
+}
+
+.vitals-ring-gone.is-draining {
+  transition: stroke-dasharray 400ms linear;
+}
+
+/* The glass of Vials and Orbs: a 1 px rim at 55 percent of the
+   vital's tone over a 6 percent wash, the liquid in the tone with a
+   1 px surface line a step toward the text color. The liquid eases to
+   its level in 160 ms, and the part a hit took drains down into it. */
+.vitals-glass-rim {
+  fill: none;
+  stroke: var(--vital-rim);
+  stroke-width: 1;
+}
+
+.vitals-glass-wash {
+  fill: color-mix(in oklab, var(--vital-mark) 6%, transparent);
+}
+
+.vitals-glass-liquid {
+  fill: color-mix(in oklab, var(--vital-mark) 82%, transparent);
+}
+
+.vitals-glass-surface {
+  stroke: color-mix(in oklab, var(--vital-mark) 55%, var(--text));
+  stroke-width: 1;
+}
+
+.vitals-glass-level {
+  transition: transform 160ms ease-out;
+}
+
+.vitals-glass-gone {
+  fill: var(--vital-ghost);
+  transform-box: fill-box;
+  transform-origin: bottom;
+}
+
+.vitals-glass-gone.is-draining {
+  transform: scaleY(0);
+  transition: transform 400ms linear;
+}
+
+/* Vials. Each vial 18 by 44 with its caps, figure and max beside it,
+   9 apart, or on a narrow panel the caps over the vial and the figure
+   under it. Your opponent's tube runs the footer, 8 tall. */
+.vitals-vial {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  min-width: 0;
+}
+
+.vitals-vial.is-narrow {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.vitals-vial-glass {
+  flex: none;
+  display: block;
+  overflow: visible;
+}
+
+.vitals-vial.is-narrow .vitals-vial-glass {
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-vial-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vitals-vial.is-narrow .vitals-vial-text {
+  align-items: center;
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-vial-figure {
+  height: round(20px * var(--mud-scale), 1px);
+  font-size: round(16px * var(--mud-scale), 1px);
+  line-height: round(20px * var(--mud-scale), 1px);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--vital-value);
+}
+
+.vitals-vial-max {
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+.vitals-tube {
+  position: relative;
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--vital-mark) 6%, transparent);
+  box-shadow: inset 0 0 0 1px var(--vital-rim);
+}
+
+.vitals-tube-liquid,
+.vitals-tube-gone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.vitals-tube-liquid {
+  left: 0;
+  border-right: 1px solid color-mix(in oklab, var(--vital-mark) 55%, var(--text));
+  background: color-mix(in oklab, var(--vital-mark) 82%, transparent);
+  transition: width 160ms ease-out;
+}
+
+.vitals-tube-gone {
+  background: var(--vital-ghost);
+}
+
+/* Orbs. A 44 pt circle under the caps with the value under it, or 40
+   on a narrow panel, and a 14 pt orb before your opponent's name. */
+.vitals-orb {
+  display: block;
+  margin-top: round(5px * var(--mud-scale), 1px);
+  overflow: visible;
+}
+
+.vitals-orb-value {
+  margin-top: round(5px * var(--mud-scale), 1px);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--vital-value);
+}
+
+.vitals-orb-max {
+  color: var(--tertiary);
+}
+
+.vitals-foe-before {
+  flex: none;
+  display: flex;
+  margin-right: 8px;
+}
+
+.vitals-foe-before .vitals-orb {
+  margin: 0;
+}
+
+/* Candles. A taper laid on its side, the wax 6 tall on a hairline
+   shelf as long as your max, a 1 px wick and a 6 by 9 flame at the
+   end in the theme's yellow, which low dims to a third. The wax eases
+   in 160 ms, and the wax a hit melted stays pale with a drip under it. */
+.vitals-candle {
+  position: relative;
+  display: block;
+  height: var(--mud-row);
+}
+
+.vitals-marks.is-under .vitals-candle {
+  height: 16px;
+}
+
+.vitals-drawn .vitals-marks.is-candles.is-under .vitals-mark {
+  margin-top: 5px;
+}
+
+.vitals-candle > * {
+  position: absolute;
+}
+
+.vitals-candle-shelf {
+  top: 15px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--divider);
+}
+
+.vitals-candle-wax,
+.vitals-candle-melt {
+  top: 9px;
+  height: 6px;
+}
+
+.vitals-candle-wax {
+  left: 0;
+  border-radius: 1.5px 0 0 1.5px;
+  background: var(--vital-mark);
+  transition: width 160ms ease-out;
+}
+
+.vitals-candle-melt {
+  background: var(--vital-ghost);
+}
+
+.vitals-candle-drip {
+  top: 14px;
+  width: 2px;
+  height: 4px;
+  border-radius: 0 0 1px 1px;
+  background: var(--vital-ghost);
+}
+
+.vitals-candle-wick {
+  top: 6px;
+  width: 1px;
+  height: 3px;
+  margin-left: -1px;
+  background: color-mix(in oklab, var(--text) 70%, transparent);
+  transition: left 160ms ease-out;
+}
+
+.vitals-candle-flame {
+  top: -2px;
+  width: 6px;
+  height: 9px;
+  margin-left: -3.5px;
+  overflow: visible;
+  fill: var(--vitals-flame);
+  transition: left 160ms ease-out;
+}
+
+.vitals-tone.is-low .vitals-candle-flame {
+  fill: color-mix(in oklab, var(--vitals-flame) 35%, transparent);
+}
+
+/* Show each hit. The part a hit took holds pale beside the fill, then
+   drains toward it in 400 ms (vitalsHit.ts). With Reduce motion on,
+   every fill jumps and the pale part just goes. */
+.vitals-ghost {
+  position: absolute;
+}
+
+.vitals-ghost.is-draining {
+  transition: width 400ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-vitals-marks *,
+  .vitals-ghost.is-draining {
+    transition: none;
+  }
 }
 
 /* Text. Your vitals text in the game face at your panel size, on the
@@ -1095,7 +1835,7 @@
 
 /* While the vitals text card is open each part of your text takes a
    click, and the part you picked takes the ring the card draws round a
-   part of your prompt (board 5 of the Vitals Styles review). */
+   part of your prompt. */
 .panel-vitals-text-part {
   cursor: default;
 }
@@ -1106,132 +1846,4 @@
   border-radius: 4px;
   background: var(--mark-tint);
   box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-/* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
-
-/* Menus keep the system face whatever the Panel font, like every other
-   menu. */
-.pane-menu {
-  position: fixed;
-  z-index: 1000;
-  min-width: 232px;
-  max-width: 320px;
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  border-radius: var(--r-float);
-  background: var(--raised);
-  box-shadow: var(--shadow-float);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 400;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.pane-menu-narrow,
-.pane-menu-sub {
-  min-width: 160px;
-}
-
-/* A channel's 17 colors run taller than a short window, so a submenu
-   scrolls inside the window instead of running off it. */
-.pane-menu-sub {
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
-}
-
-.pane-menu > li {
-  display: block;
-  margin: 0;
-  padding: 0;
-}
-
-.pane-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-row);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  white-space: nowrap;
-  outline: none;
-  cursor: default;
-}
-
-.pane-menu-item:focus,
-.pane-menu-item[aria-expanded='true'] {
-  background: var(--menu-hi);
-}
-
-.pane-menu-item[aria-disabled='true'] {
-  color: var(--tertiary);
-}
-
-.pane-menu-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pane-menu-chevron,
-.pane-menu-check {
-  display: block;
-  flex: none;
-  margin-left: 16px;
-  margin-right: -4px;
-}
-
-.pane-menu-chevron {
-  color: var(--tertiary);
-}
-
-.pane-menu-check {
-  color: var(--accent);
-}
-
-/* A hint after a row's words, like in another pane in the Chat filter, keeps
-   the gap the check keeps. */
-.pane-menu-item > .shell-menu-kbd {
-  flex: none;
-  margin-left: 16px;
-}
-
-/* The plugin that draws a Lua pane, after its title under Show here
-   instead, as Add a pane shows it. */
-.pane-menu-plugin {
-  flex: none;
-  margin-left: 16px;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--tertiary);
-}
-
-/* The color a chat channel shows, before its name under Channel colors
-   and before each color it can take. The swatch ring keeps black and
-   the ground's own color visible on the menu. */
-.pane-menu-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-right: 8px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--key-ring);
-  vertical-align: -1px;
-}
-
-.pane-menu > .pane-menu-sep {
-  height: 1px;
-  margin: 6px 12px;
-  background: var(--sep);
 }

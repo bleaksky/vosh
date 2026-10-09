@@ -5,10 +5,19 @@
 // saved fields resolve to also lands in the paint cache (theme/themePaint),
 // so the next window to open paints it before React renders.
 //
-// The active theme comes from four saved fields. While
-// follow_system_appearance is off it is `theme`. While it is on it is
+// The active theme comes from seven saved fields. Switch themes Off
+// shows `theme`. With the system, follow_system_appearance on, it is
 // `dark_theme` or `light_theme`, whichever matches the OS appearance,
 // and a prefers-color-scheme listener swaps them when the OS flips.
+// While macOS Increase contrast is on, prefers-contrast more, it shows
+// the high contrast pair instead, the dark one or the light one as the
+// OS appearance says (Q24).
+// With the game, theme_follow `game`, it is `day_theme` or
+// `night_theme`, whichever matches the selected session's daylight
+// (stores/session/daylightStore), and the store swaps them at the
+// game's dawn and dusk. Before the game says, it is the side last
+// shown, which the paint cache keeps through a drop and a relaunch, so
+// a window never flashes the other side first.
 //
 // Every window paints the chrome for your color vision, from UiConfig
 // color_vision, which swaps the status colors (theme/chrome). A window
@@ -17,6 +26,7 @@
 
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import type { Daylight } from '../ipc/tick';
 import {
   emitThemeChanged,
   emitThemePrefsChanged,
@@ -24,15 +34,18 @@ import {
   subscribeThemePrefsChanged,
   type THEME_PREFS_FIELDS,
 } from '../ipc/theme';
-import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
+import { getUiConfig, THEME_FOLLOWS, type ThemeFollow, type UiConfig } from '../ipc/uiConfig';
 import { windowBackdropSet } from '../ipc/windows';
+import { getDaylight, subscribeDaylight } from '../stores/session/daylightStore';
 import { createStore } from '../stores/store';
 import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toHex, toRgba } from './color';
 import { toColorVision, type ColorVision } from './gameFit';
 import {
+  bootPaintPhase,
   bootPaintSide,
   osPrefersDark,
+  osPrefersMoreContrast,
   pageStorage,
   paintRoot,
   samePaintSide,
@@ -52,9 +65,11 @@ import {
 } from './themes';
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
+const CONTRAST_QUERY = '(prefers-contrast: more)';
 
 let cleanupContrastListener: (() => void) | null = null;
 let cleanupSchemeListener: (() => void) | null = null;
+let cleanupDaylightListener: (() => void) | null = null;
 // The theme on screen. Before the first apply that is the one the
 // startup paint put there (src/prepaint.ts runs before this module), so
 // the terminal mounts on its palette instead of the default theme's.
@@ -65,6 +80,9 @@ let windowAppearance: Appearance | 'system' | null = null;
 let themePrefs: ThemePrefs | null = null;
 let followingSystem = false;
 let broadcastFlips = false;
+/** The game's day or night this window last knew, from the startup
+ *  paint until the selected session's game says. */
+let lastDaylight: Daylight | null = bootPaintPhase();
 /** What this window last painted on the root. */
 let lastPaint: ThemePaintSide | null = null;
 /** The theme id lastPaint shows, or null for a fallback still waiting
@@ -79,22 +97,62 @@ const visionStore = createStore<ColorVision>('typical');
 /** The saved fields that decide which theme Vosh shows. */
 export type ThemePrefs = Pick<UiConfig, (typeof THEME_PREFS_FIELDS)[number]>;
 
-/** Just the four theme fields, so a whole UiConfig can be passed in. */
+/** Just the seven theme fields, so a whole UiConfig can be passed in. */
 export function themePrefsOf(ui: ThemePrefs): ThemePrefs {
   return {
     theme: ui.theme,
     follow_system_appearance: ui.follow_system_appearance,
     light_theme: ui.light_theme,
     dark_theme: ui.dark_theme,
+    theme_follow: ui.theme_follow,
+    day_theme: ui.day_theme,
+    night_theme: ui.night_theme,
   };
 }
 
-/** The theme id to show. Pure. `theme` while follow is off, else the
- *  pair entry that matches the OS, falling back to `theme` when that
- *  entry is blank. */
-export function resolveActiveTheme(ui: ThemePrefs, systemDark: boolean): string {
-  if (!ui.follow_system_appearance) return ui.theme;
-  const id = systemDark ? ui.dark_theme : ui.light_theme;
+/** What switches the theme by itself. The game while theme_follow says
+ *  so, the system while follow_system_appearance is on, which Rust keeps
+ *  true only for the system, else nothing. */
+export function themeFollowOf(ui: ThemePrefs): ThemeFollow {
+  if (ui.theme_follow === 'game') return 'game';
+  return ui.follow_system_appearance ? 'system' : 'off';
+}
+
+/** The slot a pick fills and the theme shows, or null for `theme`.
+ *  With the system the slot that matches the OS, with the game the one
+ *  that matches the daylight, and `theme` before the game says. */
+function shownSlot(
+  ui: ThemePrefs,
+  systemDark: boolean,
+  daylight: Daylight | null,
+): 'light_theme' | 'dark_theme' | 'day_theme' | 'night_theme' | null {
+  switch (themeFollowOf(ui)) {
+    case 'off':
+      return null;
+    case 'system':
+      return systemDark ? 'dark_theme' : 'light_theme';
+    case 'game':
+      return daylight === null ? null : daylight === 'day' ? 'day_theme' : 'night_theme';
+  }
+}
+
+/** The theme id to show. Pure. `theme` while Switch themes is off, the
+ *  pair entry that matches the OS while it follows the system, and the
+ *  one that matches `daylight` while it follows the game. A blank entry,
+ *  or a game that has not said, shows `theme`. While it follows the
+ *  system and the OS asks for more contrast, the high contrast theme
+ *  that matches the OS shows instead of either entry. */
+export function resolveActiveTheme(
+  ui: ThemePrefs,
+  systemDark: boolean,
+  daylight: Daylight | null,
+  moreContrast = false,
+): string {
+  if (moreContrast && themeFollowOf(ui) === 'system') {
+    return systemDark ? 'high-contrast' : 'high-contrast-light';
+  }
+  const slot = shownSlot(ui, systemDark, daylight);
+  const id = slot === null ? '' : ui[slot];
   return id.length > 0 ? id : ui.theme;
 }
 
@@ -104,14 +162,28 @@ export function themeAppearance(id: string): Appearance {
 }
 
 /** The fields after you pick a theme in the gallery or the palette.
- *  While follow is off the pick becomes `theme`. While it is on the pick
- *  fills the light or dark slot that matches its own appearance, and
- *  `theme` keeps the manual pick for when follow goes off again. The
- *  caller shows resolveActiveTheme of the result, which is the pick
- *  only when it matches the OS appearance. */
-export function pickTheme<T extends ThemePrefs>(ui: T, id: string): T {
-  if (!ui.follow_system_appearance) return { ...ui, theme: id };
-  return themeAppearance(id) === 'light' ? { ...ui, light_theme: id } : { ...ui, dark_theme: id };
+ *  While Switch themes is off the pick becomes `theme`. While it follows
+ *  the system the pick fills the light or dark slot that matches its own
+ *  appearance, and shows only when that matches the OS. While it follows
+ *  the game the pick fills the day or night slot showing now, as
+ *  `daylight` says, and shows at once. Either way `theme` keeps the
+ *  manual pick for when Switch themes goes off again, and before the
+ *  game says it takes the pick, since it is what shows. */
+export function pickTheme<T extends ThemePrefs>(
+  ui: T,
+  id: string,
+  daylight: Daylight | null = daylightShown(),
+): T {
+  switch (themeFollowOf(ui)) {
+    case 'off':
+      return { ...ui, theme: id };
+    case 'system':
+      return themeAppearance(id) === 'light'
+        ? { ...ui, light_theme: id }
+        : { ...ui, dark_theme: id };
+    case 'game':
+      return { ...ui, [shownSlot(ui, false, daylight) ?? 'theme']: id };
+  }
 }
 
 /** Whether the OS asks for dark. False outside a browser. */
@@ -119,9 +191,23 @@ export function systemPrefersDark(): boolean {
   return osPrefersDark();
 }
 
+/** Whether the OS asks for more contrast, macOS Increase contrast.
+ *  False outside a browser. */
+export function systemPrefersMoreContrast(): boolean {
+  return osPrefersMoreContrast();
+}
+
+/** The selected session's day or night, or the one last shown before
+ *  its game says. Null when this window never knew one. */
+export function daylightShown(): Daylight | null {
+  const now = getDaylight();
+  if (now !== null) lastDaylight = now;
+  return lastDaylight;
+}
+
 /** The theme id the saved fields resolve to right now. */
 export function activeThemeFor(ui: ThemePrefs): string {
-  return resolveActiveTheme(ui, systemPrefersDark());
+  return resolveActiveTheme(ui, systemPrefersDark(), daylightShown(), systemPrefersMoreContrast());
 }
 
 // Match the native window appearance to the theme: on macOS the window
@@ -130,7 +216,9 @@ export function activeThemeFor(ui: ThemePrefs): string {
 // so the main and Settings windows each follow. Outside Tauri, or when
 // the call fails, the window keeps the system appearance.
 //
-// While following the system the window follows the OS instead. On
+// While following the system the window follows the OS instead, and
+// while following the game it takes the appearance of the theme the
+// daylight shows, as for your own pick. On
 // macOS the call sets the appearance for the whole app, and a forced
 // appearance also pins prefers-color-scheme in every webview, so the
 // listener below would never hear the OS flip.
@@ -150,8 +238,9 @@ function syncWindowAppearance(appearance: Appearance) {
   }
 }
 
-// Swap the pair when the OS appearance flips. Installed while follow is
-// on, removed when it goes off.
+// Swap the pair when the OS appearance flips, and swap in the high
+// contrast pair when Increase contrast goes on. Installed while follow
+// is on, removed when it goes off.
 function followSystemScheme(on: boolean) {
   followingSystem = on;
   if (!on) {
@@ -160,35 +249,66 @@ function followSystemScheme(on: boolean) {
     return;
   }
   if (cleanupSchemeListener) return;
-  let mq: MediaQueryList;
+  let dark: MediaQueryList;
+  let contrast: MediaQueryList;
   try {
-    mq = window.matchMedia(DARK_QUERY);
+    dark = window.matchMedia(DARK_QUERY);
+    contrast = window.matchMedia(CONTRAST_QUERY);
   } catch {
     return;
   }
   const update = () => {
-    if (!themePrefs?.follow_system_appearance) return;
-    const id = resolveActiveTheme(themePrefs, mq.matches);
+    if (!themePrefs || themeFollowOf(themePrefs) !== 'system') return;
+    const id = resolveActiveTheme(themePrefs, dark.matches, null, contrast.matches);
     if (id === currentThemeId) return;
     if (broadcastFlips) void applyAndBroadcastTheme(id);
     else applyTheme(id);
   };
-  mq.addEventListener('change', update);
-  cleanupSchemeListener = () => mq.removeEventListener('change', update);
+  dark.addEventListener('change', update);
+  contrast.addEventListener('change', update);
+  cleanupSchemeListener = () => {
+    dark.removeEventListener('change', update);
+    contrast.removeEventListener('change', update);
+  };
+}
+
+// Swap the day and night themes when the selected session's game turns,
+// or when the selection moves to a session whose game shows the other.
+// Installed while the theme follows the game, removed when it stops. A
+// turn that keeps the same theme still leaves the new daylight in the
+// cache, so a relaunch opens on the side the game shows.
+function followGameDaylight(on: boolean) {
+  if (!on) {
+    cleanupDaylightListener?.();
+    cleanupDaylightListener = null;
+    return;
+  }
+  if (cleanupDaylightListener) return;
+  cleanupDaylightListener = subscribeDaylight(() => {
+    if (!themePrefs || themeFollowOf(themePrefs) !== 'game') return;
+    const id = activeThemeFor(themePrefs);
+    if (id !== currentThemeId) {
+      if (broadcastFlips) void applyAndBroadcastTheme(id);
+      else applyTheme(id);
+    } else if (lastPaint && lastStandsFor !== null) {
+      rememberPaint(lastPaint, lastStandsFor);
+    }
+  });
 }
 
 export interface ThemePrefsOptions {
   /** Send the resolved id to every window now. */
   broadcast?: boolean;
-  /** Send the resolved id to every window each time the OS flips. The
-   *  main window owns this, so the Terminal repaints its palette. The
-   *  setting sticks until a later call passes it again. */
+  /** Send the resolved id to every window each time the OS flips or the
+   *  game turns. The main window owns this, so the Terminal repaints its
+   *  palette. The setting sticks until a later call passes it again. */
   broadcastFlips?: boolean;
 }
 
 /** Remember the theme fields, show the theme they resolve to, and follow
- *  the OS while follow is on. Returns the id it applied. A whole
- *  UiConfig also brings the color vision the window paints for. */
+ *  the OS or the game while Switch themes says so. Returns the id it
+ *  applied. A whole UiConfig also brings the color vision the window
+ *  paints for. */
 export function applyThemePrefs(
   prefs: ThemePrefs & { color_vision?: unknown },
   options: ThemePrefsOptions = {},
@@ -196,8 +316,10 @@ export function applyThemePrefs(
   if (prefs.color_vision !== undefined) visionStore.set(toColorVision(prefs.color_vision));
   themePrefs = themePrefsOf(prefs);
   if (options.broadcastFlips !== undefined) broadcastFlips = options.broadcastFlips;
-  followSystemScheme(themePrefs.follow_system_appearance);
-  const id = resolveActiveTheme(themePrefs, systemPrefersDark());
+  const follow = themeFollowOf(themePrefs);
+  followSystemScheme(follow === 'system');
+  followGameDaylight(follow === 'game');
+  const id = activeThemeFor(themePrefs);
   if (options.broadcast) void applyAndBroadcastTheme(id);
   else applyTheme(id);
   return id;
@@ -268,7 +390,6 @@ function applyToRoot(theme: AppTheme, standsFor: string | null = theme.id) {
 // high contrast theme when you asked for more contrast, else the
 // default theme.
 const LEGACY_SYSTEM = 'system';
-const CONTRAST_QUERY = '(prefers-contrast: more)';
 
 function contrastTheme(more: boolean): string {
   return more ? 'high-contrast' : DEFAULT_THEME_ID;
@@ -294,25 +415,45 @@ function shownId(choice: string): string {
 function rememberPaint(shown: ThemePaintSide, standsFor: string) {
   const prefs = themePrefs;
   if (prefs && cachePaint(prefs, shown, standsFor)) {
-    reportBackdrop(shown, prefs.follow_system_appearance);
+    reportBackdrop(shown, themeFollowOf(prefs) === 'system');
   }
 }
 
 // Write the cache for a paint of `standsFor`. Returns whether that is
-// the theme the fields resolve to, so the cache holds it.
+// the theme the fields resolve to, so the cache holds it. While the
+// theme follows the game and no daylight was ever known, the theme shows
+// `theme`, and the cache holds it as your pick.
 function cachePaint(prefs: ThemePrefs, shown: ThemePaintSide, standsFor: string): boolean {
   const systemDark = systemPrefersDark();
-  if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark))) return false;
-  const other = (dark: boolean) =>
-    themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark))));
-  const paint: ThemePaint = prefs.follow_system_appearance
-    ? {
-        v: 1,
-        follow: true,
-        light: systemDark ? other(false) : shown,
-        dark: systemDark ? shown : other(true),
-      }
-    : { v: 1, follow: false, manual: shown };
+  const more = systemPrefersMoreContrast();
+  const daylight = daylightShown();
+  if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark, daylight, more))) return false;
+  const side = (dark: boolean, phase: Daylight | null, contrast = false) =>
+    themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark, phase, contrast))));
+  const follow = themeFollowOf(prefs);
+  let paint: ThemePaint;
+  if (follow === 'system') {
+    // All four sides, the one on screen as painted.
+    const pairSide = (dark: boolean, contrast: boolean) =>
+      dark === systemDark && contrast === more ? shown : side(dark, null, contrast);
+    paint = {
+      v: 1,
+      follow: true,
+      light: pairSide(false, false),
+      dark: pairSide(true, false),
+      more: { light: pairSide(false, true), dark: pairSide(true, true) },
+    };
+  } else if (follow === 'game' && daylight !== null) {
+    paint = {
+      v: 1,
+      follow: 'game',
+      day: daylight === 'day' ? shown : side(systemDark, 'day'),
+      night: daylight === 'night' ? shown : side(systemDark, 'night'),
+      phase: daylight,
+    };
+  } else {
+    paint = { v: 1, follow: false, manual: shown };
+  }
   writeThemePaint(paint, pageStorage());
   return true;
 }
@@ -472,7 +613,10 @@ function isThemePrefs(value: unknown): value is ThemePrefs {
     typeof v.theme === 'string' &&
     typeof v.follow_system_appearance === 'boolean' &&
     typeof v.light_theme === 'string' &&
-    typeof v.dark_theme === 'string'
+    typeof v.dark_theme === 'string' &&
+    THEME_FOLLOWS.some((mode) => mode === v.theme_follow) &&
+    typeof v.day_theme === 'string' &&
+    typeof v.night_theme === 'string'
   );
 }
 

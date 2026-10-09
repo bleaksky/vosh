@@ -8,7 +8,7 @@ use Dir::{Down, East, North, South, Up, West};
 /// What Vosh says when it cannot read `text` after `#walk`.
 fn cannot_read(text: &str) -> String {
     format!(
-        "[#walk cannot read {text}. Use n, e, s, w, u and d, each with an optional count, like 3n2e.]"
+        "[#walk cannot read {text}. Use n, e, s, w, u, and d, each with an optional count, like 3n2e.]"
     )
 }
 

@@ -20,7 +20,7 @@ function clockFor(locale: string | undefined): Intl.DateTimeFormat {
 
 /** Arrival time as the Chat pane shows it, on the wall clock in your
  *  locale's 12 or 24 hour form: `8:41` or `08:41`. A 12 hour clock
- *  drops AM and PM, as the approved boards do, since the messages
+ *  drops AM and PM, since the messages
  *  around it place it in the day. `locale` is for tests. */
 export function chatTime(ts: number, locale?: string): string {
   return clockFor(locale)

@@ -30,7 +30,7 @@ pub struct Replace {
 }
 
 /// The lines a drawn prompt shows as sent right above its region, such as
-/// a tank line your design does not read (D7). A text prompt carries no
+/// a tank line your design does not read. A text prompt carries no
 /// mark before them, so a renderer finds them by their text: when the
 /// rows right above the open region show `plain`, it erases from their
 /// first row and writes `bytes` there in place of the replace's own
@@ -85,6 +85,12 @@ pub struct Output {
     /// renderers keep every byte, and on a repaint of the band alone,
     /// which leaves the row as each renderer has it.
     pub pin_row: Option<bool>,
+    /// The bytes start a row of their own, as a line Vosh prints about
+    /// itself does. Each renderer writes a line end before them when its
+    /// cursor sits past the start of a row, such as after a game prompt
+    /// that landed after your echo, and nothing when line ends it held
+    /// back come first or the cursor already starts a row.
+    pub fresh: bool,
     /// The row a prompt this output pinned left is still open, so the
     /// line end the next write would end it with writes nothing.
     pub(super) row_open: bool,

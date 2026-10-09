@@ -57,10 +57,10 @@ export const getPinnedBand = store.get;
 
 export const subscribePinnedPrompt = store.subscribe;
 
-/** The latest pinned prompt, or null before one comes and after you
- *  disconnect. */
-export function usePinnedPrompt(): string | null {
-  return useSyncExternalStore(subscribePinnedPrompt, getPinnedPrompt);
+/** The latest pinned band with the pieces of your design on it, or
+ *  null before one comes and after you disconnect. */
+export function usePinnedBand(): PinnedBand | null {
+  return useSyncExternalStore(subscribePinnedPrompt, getPinnedBand);
 }
 
 // The last count dockRows gave, so a prompt that changes only its values

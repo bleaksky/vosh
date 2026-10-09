@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { vitalsTextWatch } from '../ipc/vitals';
-import type { ChipStyle, VitalsOptions } from '../ipc/uiConfig';
+import type { ChipStyle } from '../ipc/uiConfig';
+import type { VitalsOptions } from '../ipc/uiConfigVitals';
 import { useBandEnv } from '../prompt/useBandEnv';
 import { usePlayPalette } from '../theme/fitGameColors';
 import { useChipStyle } from '../stores/config/chipStyleStore';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useGameTime } from '../stores/config/gameTimeStore';
 import { useSelected } from '../stores/session/sessionsStore';
+import { useRoundTrip } from '../stores/session/roundTripStore';
 import { useTarget } from '../stores/session/targetStore';
 import { useTickCount } from '../stores/config/tickCountStore';
 import { shownTick, useTick } from '../stores/session/tickStore';
@@ -38,28 +40,38 @@ import { daylightTint, isDaytime } from './daylight';
 import { formatGameTime } from './gameTime';
 import { StatusClock, type ClockMoons, type ClockTick, type ClockTime } from './StatusClock';
 import { FIT_ALL, statusLineFit, type StatusLineFit } from './statusLineFit';
+import { roundTripText, roundTripTone, SLOW_MS, WIDEST_ROUND_TRIP } from './roundTrip';
 import { statusMoons } from './statusMoons';
 import { useVitalsMenu } from '../panel/useVitalsMenu';
+import { VisuallyHidden } from '../ui';
 
-// The quiet line under the input band (SPEC 10 G4): your vitals when
+// The quiet line under the input band: your vitals when
 // the line carries them, your opponent, your target, then the tick, the
-// game time, and the moons together, 20 px apart in the panel face, the
-// Panel font, with tabular numbers.
+// round trip to the game, then the tick, the game time, and the moons
+// together, 20 px apart in the panel face, the Panel font, with tabular
+// numbers.
 //
 // The line carries your vitals with the panel hidden, or with Show your
-// vitals in on Status line, which takes them out of the panel (Vitals
-// Styles Q6). Every drawn style but Text shows one quiet form here,
-// labels and values with no mark and no color. It follows the order,
-// the vitals you turned off, Values and Warn before you run low from
-// Customize vitals, keeps every vital you leave on with or without a
-// max, and ignores Hide vitals while your prompt is pinned. In a fight
-// your opponent follows your vitals with its health in the warn tone,
-// wherever Customize vitals places its row in the panel. A target you
-// set on the same mob joins that item, and a target on another mob
+// vitals in on Status line, which takes them out of the panel, so they
+// never show twice. Every drawn style but Text shows one quiet form
+// here, labels and values with no mark and no color. It follows the
+// order, the vitals you turned off, Values and Warn before you run low
+// from Customize vitals, keeps every vital you leave on with or without
+// a max, and ignores Hide vitals while your prompt is pinned. In a
+// fight your opponent follows your vitals with its health in the warn
+// tone, wherever Customize vitals places its row in the panel. A target
+// you set on the same mob joins that item, and a target on another mob
 // keeps its own Target item after it. Out of a fight, or while the line
 // leaves your vitals to the panel, your target shows by name alone. As
-// the line runs short the opponent's name, the labels, Values, the moons
-// and the game time give way in that order (statusLineFit.ts).
+// the line runs short the opponent's name, the labels, Values, the
+// moons, a fine round trip and the game time give way in that order
+// (statusLineFit.ts).
+//
+// The round trip to the game is the selected session's, which it reads
+// every two seconds. Nothing shows before the first reading or once the
+// connection ends. It reads in tertiary under 300 ms, in the warn tone
+// from 300 ms, and in seconds in the danger text tone from a second,
+// and a slow one never gives way (roundTrip.ts).
 //
 // Text writes your vitals text here on one line, in the terminal face,
 // with a 20 px gap for each new line and each %{right}, and ends in an
@@ -106,8 +118,9 @@ export function StatusLine({ connected, showVitals, textColors }: Props) {
   const text = useLineText(writes, writes && options.place === 'status', textColors);
   const items = statusItems({ showVitals, vitals, target: target.name, combat, options, text });
   const clock = useClock(connected);
+  const roundTrip = useRoundTrip();
   const lineRef = useRef<HTMLDivElement | null>(null);
-  const fit = useStatusFit(lineRef, items, clock, connected);
+  const fit = useStatusFit(lineRef, items, clock, connected, roundTrip);
   const vitalsMenu = useVitalsMenu();
 
   return (
@@ -122,6 +135,7 @@ export function StatusLine({ connected, showVitals, textColors }: Props) {
     >
       {!connected && <span>{NOT_CONNECTED}</span>}
       <StatusItemsView items={items} fit={fit} />
+      {roundTrip !== null && fit.roundTrip && <RoundTripItem ms={roundTrip} />}
       <StatusClock
         style={clock.style}
         tick={clock.tick}
@@ -135,6 +149,19 @@ export function StatusLine({ connected, showVitals, textColors }: Props) {
 
 const NOT_CONNECTED = 'Not connected';
 
+/** The round trip to the game, in its tone, with a plain title. */
+export function RoundTripItem({ ms }: { ms: number }) {
+  const tone = roundTripTone(ms);
+  return (
+    <span
+      className={`shell-status-rtt${tone === 'fine' ? '' : ` is-${tone}`}`}
+      title="Round trip to the game"
+    >
+      {roundTripText(ms)}
+    </span>
+  );
+}
+
 /** The items a right click opens the vitals menu on: your vitals, your
  *  opponent and your vitals text. */
 const VITALS_ITEMS = '.shell-status-vital, .shell-status-foe, .shell-status-text';
@@ -147,6 +174,7 @@ function useStatusFit(
   items: StatusItems,
   clock: ClockProps,
   connected: boolean,
+  roundTrip: number | null,
 ): StatusLineFit {
   const room = useLineRoom(lineRef);
   const faceVersion = usePanelFaceVersion();
@@ -167,6 +195,11 @@ function useStatusFit(
       : null,
     fighting: items.foe !== null,
     target: items.target === null ? 0 : measure('Target') + VALUE_GAP_PX,
+    roundTrip:
+      roundTrip === null
+        ? 0
+        : Math.max(measure(WIDEST_ROUND_TRIP), measure(roundTripText(roundTrip))),
+    slow: roundTrip !== null && roundTrip >= SLOW_MS,
     ...clockWidths(clock, measure),
   });
 }
@@ -328,7 +361,7 @@ export function StatusVitals({
 /** A label, a name, or a value the line gives way on, still read by a
  *  screen reader. */
 function Hideable({ shown, children }: { shown: boolean; children: string }) {
-  return shown ? <>{children}</> : <span className="shell-sr">{children}</span>;
+  return shown ? <>{children}</> : <VisuallyHidden>{children}</VisuallyHidden>;
 }
 
 function StatusItemsView({ items, fit }: { items: StatusItems; fit: StatusLineFit }) {
@@ -375,7 +408,7 @@ function FoeItem({ combat, name }: { combat: CombatOpponent; name: boolean }) {
       {name ? (
         <span className="shell-status-name">{combat.name}</span>
       ) : (
-        <span className="shell-sr">{combat.name}</span>
+        <VisuallyHidden>{combat.name}</VisuallyHidden>
       )}
       <span className={toneClass(health.hidden ? 'hidden' : 'warn', !name)}>{health.value}</span>
     </span>

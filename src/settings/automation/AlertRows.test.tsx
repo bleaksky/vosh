@@ -4,12 +4,12 @@ import type { TriggerRecord } from '../../ipc/automation';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 
 // The four rows that close a trigger card under Advanced and tune its
-// alert, board 1 of the Alerts review: Sound with its play button,
-// Bounce, Banner shows and the switch. This mounts the card on one
-// trigger, opens Advanced, and drives the rows through the handlers
-// React keeps on each element, since this DOM sends no events. Then the
-// Alert row on that card asks before the first banner (board 3) and
-// wears the warn ring while the system turns banners off.
+// alert: Sound with its play button, Bounce, Banner shows and the
+// switch. This mounts the card on one trigger, opens Advanced, and
+// drives the rows through the handlers React keeps on each element,
+// since this DOM sends no events. Then the Alert row on that card asks
+// before the first banner and wears the warn ring while the system
+// turns banners off.
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
@@ -95,7 +95,7 @@ afterEach(async () => {
   delete doc.documentElement.dataset.platform;
 });
 
-/** The visitor of board 1, with no alert yet. */
+/** A trigger on a visitor walking in, with no alert yet. */
 const VISITOR: TriggerRecord = {
   name: 'visitor',
   patterns: [{ pattern: '^(\\w+) walks in\\.$', enabled: true }],

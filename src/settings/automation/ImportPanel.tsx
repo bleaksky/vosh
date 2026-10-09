@@ -1,5 +1,6 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { importErrorMessage } from '../../automation/automationRecords';
+import { presetTriggerNames } from '../../automation/presets';
 import {
   applyImport,
   detectImportFormat,
@@ -14,8 +15,7 @@ import { Button, CardNote, Disclosure, Row, Section, Select } from '../../ui';
 // frame. Pick a file or paste its contents, pick the format or let
 // Vosh detect it, and Import merges what Vosh can read into your
 // aliases, triggers, macros, and variables. The summary lists what it
-// could not bring over. The shared catalog preview opens the migration
-// wizard, as before.
+// could not bring over. Preview opens the shared catalog preview.
 
 const FORMATS: readonly { value: ImportFormat; label: string; hint: string }[] = [
   { value: '', label: 'Detect automatically', hint: 'Vosh reads the file and picks the format.' },
@@ -44,7 +44,20 @@ export function ImportPanel({ onError }: ImportPanelProps) {
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [wizard, setWizard] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const previewRef = useRef<HTMLButtonElement | null>(null);
+  const wizardShown = useRef(false);
   const pasteId = useId();
+
+  // Focus goes back to Preview once the preview closes. This runs after
+  // the dialog lets go of the focus, and a press in WebKit never
+  // focuses the button, so the dialog cannot hand it back itself.
+  useEffect(() => {
+    if (wizard) wizardShown.current = true;
+    else if (wizardShown.current) {
+      wizardShown.current = false;
+      previewRef.current?.focus({ preventScroll: true });
+    }
+  }, [wizard]);
 
   const pick = async (file: File) => {
     setSummary(null);
@@ -65,7 +78,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
     setBusy(true);
     setSummary(null);
     try {
-      setSummary(await applyImport(format, text, getShownProfile()));
+      setSummary(await applyImport(format, text, presetTriggerNames(), getShownProfile()));
       onError(null);
     } catch (e) {
       onError(importErrorMessage(e, 'import'));
@@ -102,7 +115,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
       >
         <CardNote>
           Vosh adds the aliases, triggers, macros, and variables it can read and replaces any with
-          the same name. The summary lists what it could not bring over.
+          the same name, but never a preset trigger. The summary lists what it could not bring over.
         </CardNote>
         <Row label="File" description={fileName ?? 'Or paste the contents below.'}>
           <Button onClick={() => fileRef.current?.click()} disabled={busy}>
@@ -112,7 +125,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
             ref={fileRef}
             type="file"
             accept=".xml,.mcl,.cfg,.txt,.tin"
-            className="st-visually-hidden"
+            className="visually-hidden"
             tabIndex={-1}
             aria-hidden="true"
             onChange={(e) => {
@@ -156,14 +169,12 @@ export function ImportPanel({ onError }: ImportPanelProps) {
           label="Preview a shared catalog"
           description="See how your profiles would merge into one catalog with a loadout for each. Nothing changes until you apply it."
         >
-          <Button onClick={() => setWizard(true)}>Preview…</Button>
+          <Button ref={previewRef} onClick={() => setWizard(true)}>
+            Preview…
+          </Button>
         </Row>
       </Section>
-      {wizard && (
-        <div className="settings-app" data-interim="">
-          <MigrationWizard onClose={() => setWizard(false)} />
-        </div>
-      )}
+      {wizard && <MigrationWizard onClose={() => setWizard(false)} />}
     </div>
   );
 }
@@ -174,6 +185,7 @@ function ImportResult({ summary }: { summary: ImportSummary }) {
     { label: 'Rejected', items: summary.rejected },
     { label: 'Not supported', items: summary.unsupported.map(([kind, what]) => `${kind} ${what}`) },
     { label: 'Lines Vosh could not read', items: summary.unparsed },
+    { label: 'Left out, a preset uses the name', items: summary.clashes.map((c) => c.name) },
   ].filter((l) => l.items.length > 0);
   return (
     <Section title={total === 1 ? 'Vosh imported 1 item' : `Vosh imported ${total} items`}>

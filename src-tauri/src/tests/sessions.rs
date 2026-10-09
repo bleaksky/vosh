@@ -1027,7 +1027,7 @@ async fn every_window_hears_a_row_follow_a_connect_a_login_a_switch_and_a_discon
     assert_eq!(heard_row(&h, h.first)["profile"], json!("Healer"));
 
     // The row keeps where the session last connected, and the character
-    // it played, which its dim name reads (board 3).
+    // it played, which its dim name reads.
     h.disconnect().await;
     let row = heard_row(&h, h.first);
     assert_eq!(
@@ -2859,7 +2859,7 @@ async fn a_plugin_folder_named_by_hand_shows_on_the_list_and_turns_off() {
     h.finish(grid).await;
 }
 
-/// `wait_full` as the Scripts design writes it, which never returns
+/// `wait_full`, a plugin whose loop never ends, which never returns
 /// while you are hurt.
 const WAIT_FULL: &str = "-- wait_full
 -- Stand up once your hit points are full.

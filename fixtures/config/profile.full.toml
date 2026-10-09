@@ -129,6 +129,9 @@ theme = "custom-dusk"
 follow_system_appearance = true
 light_theme = "kanso-pearl"
 dark_theme = "tokyo-night"
+theme_follow = "system"
+day_theme = "kanso-pearl"
+night_theme = "custom-dusk"
 auto_update = true
 font_family = "JetBrains Mono, monospace"
 font_size = 16
@@ -144,6 +147,10 @@ theme_terminal_colors = false
 bright_bold = true
 blink_text = false
 color_vision = "deuteranopia"
+screen_reader = true
+screen_reader_background = true
+screen_reader_prompt = true
+screen_reader_burst = 16
 terminal_base_ansi = [
     "#000000",
     "#cd3131",
@@ -166,10 +173,28 @@ split_divider_color = "#ff00ff"
 input_echo_color = "#88aaff"
 echo_macros = false
 input_echo_caret = false
+input_echo_mark = "off"
+input_echo_mark_text = "T>"
+input_echo_mark_color = "#c6a46a"
+input_echo_dim = true
+input_line_mark = false
 side_panels_fill_height = true
 paste_line_delay_ms = 250
 spellcheck_prompt = true
+writing_offer = false
+writing_ask_post = false
 input_cursor_style = "underline_thick"
+input_caret_blink = false
+input_caret_color = "#c6a46a"
+input_line_color = "#d8dee9"
+input_line_background = "own"
+input_line_background_color = "#1d1f21"
+input_line_size = 16
+input_type_colors = true
+input_type_alias_color = "#8abeb7"
+input_type_hash_color = "#b294bb"
+input_type_chat_color = "#f0c674"
+input_type_unknown_color = "#cc6666"
 prompt_template_enabled = true
 prompt_template = "%hp/%maxhp hp %mana/%maxmana mn > "
 vitals_density = "line"
@@ -358,3 +383,20 @@ sound = "bell"
 attention = "once"
 background = true
 words = false
+
+[preset_edits.disarm_buff_fade.colors.line]
+value = "#c3a6ff"
+was = "fg:178"
+
+[preset_edits.disarm_buff_fade.triggers."buff.sanctuary".enabled]
+value = false
+was = true
+
+[preset_edits.disarm_buff_fade.triggers."buff.spell_turning".replace]
+value = "{line}Your shield of spell turning collapses.{reset}"
+was = "{mark}##{reset} {line}Your shield of spell turning collapses.{reset}"
+
+[preset_edits.disarm_buff_fade.triggers."disarm.secondary".send]
+value = ""
+was = "get 1.;wield 1."
+seen = "get 1.;dual 1."

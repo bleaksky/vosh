@@ -18,7 +18,7 @@ import { PaneHeader, PaneMeta } from '../PaneHeader';
 import { exitsLabel } from '../paneText';
 import { PaneTextSizeContext } from '../paneTextSize';
 
-// The Map pane (SPEC 9): the server map drawing in a box inset 8 px
+// The Map pane: the server map drawing in a box inset 8 px
 // with radius 8, then a band of dense rows for the room you stand in,
 // a quiet row with its terrain, region and exits, and the people here.
 // The room's name takes the theme color the terminal draws it in for

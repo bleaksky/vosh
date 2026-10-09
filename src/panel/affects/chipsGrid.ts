@@ -2,7 +2,7 @@ import { isTrackedRow, type AffectRow } from './affectsView';
 import { affectsTwoColumnsW } from './affectsGrid';
 import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from '../paneTextSize';
 
-// Where each chip sits in the Grouped chips style (board Affects C).
+// Where each chip sits in the Grouped chips style.
 // Three groups, what to recast first: the tracked affects you miss and
 // the ones running out, then the rest you track, then everything else.
 // Chips pack into lines 20 tall, 4 apart inside a group and 8 apart
@@ -71,7 +71,7 @@ export const GUTTER_GAP = 8;
 export const CHIPS_LEFT = 18;
 export const CHIPS_RIGHT = 12;
 
-/** Where the group names go. `gutter` is the board's 56 px column,
+/** Where the group names go. `gutter` is a 56 px column,
  *  `runin` sets the name at the start of its group's first line in a
  *  pane under 360 px, and `none` draws no names when you track
  *  nothing, so every chip is Other and a name would say nothing. */
@@ -322,8 +322,8 @@ export function chipKind(row: AffectRow): ChipKind {
 }
 
 /** The tone a whole chip takes: a tracked affect running out, yellow
- *  until it is almost gone and red after, at the hours you set, as
- *  board C's Recast group draws it. Elsewhere the tone only colors the
+ *  until it is almost gone and red after, at the hours you set, in the
+ *  Recast group. Elsewhere the tone only colors the
  *  hours. */
 export function chipTone(row: AffectRow): 'warn' | 'danger' | null {
   return row.state === 'expiring' ? row.tone : null;

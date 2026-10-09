@@ -1,4 +1,4 @@
-//! Config golden files (R2 of the refactor plan).
+//! Config golden files.
 //!
 //! Each golden in `fixtures/config` holds the exact bytes Vosh writes for
 //! one config file: a profile file, global.toml, loadouts.toml,
@@ -38,13 +38,14 @@ use crate::app::state::{AppState, SharedState};
 use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts::catalog::{load_global_catalog, save_global_catalog, GlobalCatalog};
+use crate::loadouts::preset_edits::{EditRow, PresetEdit, PresetEdits};
 use crate::loadouts::set::{load_loadout_set, save_loadout_set, Loadout, LoadoutSet};
 use crate::profile::export::{self, VoshExport};
 use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
-use crate::profile::set::{ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
+use crate::profile::set::{GetStarted, ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
 use crate::profile::shared::{GlobalConfig, Scope, ScopeConfig};
 use crate::profile::tests::claim;
 use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig, VitalsConfig};
@@ -81,7 +82,7 @@ const GOLDENS: [&str; 17] = [
 /// Every old input, by its path under `fixtures/config`, with the FNV-1a
 /// digest of its bytes. An old input never changes, so its digest never
 /// does either.
-const OLD_INPUTS: [(&str, u64); 7] = [
+const OLD_INPUTS: [(&str, u64); 11] = [
     (
         "old/profile-bare-tracked-affects.toml",
         0x69a9_7976_173d_2eb4,
@@ -92,6 +93,10 @@ const OLD_INPUTS: [(&str, u64); 7] = [
     ("old/profile-no-prompt.toml", 0xf0ec_4748_02e9_8e84),
     ("old/profile-dock-no-panes.toml", 0xfbb5_fe86_4607_e7bd),
     ("old/catalog-no-presets.toml", 0x14b5_7fe9_05dc_d105),
+    ("old/profile-grouped-preset.toml", 0x331a_f4ec_0d11_5763),
+    ("old/profiles-0.8.1.toml", 0x1d95_4204_e236_f3be),
+    ("old/profile-numpad-0.8.1.toml", 0x6b65_2022_e085_43d7),
+    ("old/catalog-numpad-0.8.1.toml", 0xe4b2_17b0_8396_9e7e),
 ];
 
 fn writing() -> bool {
@@ -303,8 +308,8 @@ fn full_theme() -> CustomTheme {
             ("accent".into(), "#ff9e64".into()),
             ("surface".into(), "#16161e".into()),
         ]),
-        // Decision Q2 of the Themes review keeps the game color fit of an
-        // imported theme with it. Two slots of this theme's real fit.
+        // An imported theme keeps its game color fit with it. Two slots
+        // of this theme's real fit.
         fitted: BTreeMap::from([
             ("brightBlack".into(), "#94989f".into()),
             ("red".into(), "#cb7b74".into()),
@@ -318,6 +323,9 @@ fn full_ui() -> UiConfig {
         follow_system_appearance: true,
         light_theme: "kanso-pearl".into(),
         dark_theme: "tokyo-night".into(),
+        theme_follow: "system".into(),
+        day_theme: "kanso-pearl".into(),
+        night_theme: "custom-dusk".into(),
         auto_update: true,
         font_family: "JetBrains Mono, monospace".into(),
         font_size: 16,
@@ -361,6 +369,10 @@ fn full_ui() -> UiConfig {
         // Written only while off, so on keeps the golden's bytes. The
         // readable_highlights tests in ipc/ui_config.rs cover off.
         readable_highlights: true,
+        screen_reader: true,
+        screen_reader_background: true,
+        screen_reader_prompt: true,
+        screen_reader_burst: 16,
         // Written only while on, so off keeps the golden's bytes. The
         // collapse_repeats tests in ipc/ui_config.rs cover on.
         collapse_repeats: false,
@@ -382,10 +394,28 @@ fn full_ui() -> UiConfig {
         input_echo_color: Some("#88aaff".into()),
         echo_macros: false,
         input_echo_caret: false,
+        input_echo_mark: "off".into(),
+        input_echo_mark_text: "T>".into(),
+        input_echo_mark_color: Some("#c6a46a".into()),
+        input_echo_dim: true,
+        input_line_mark: false,
         side_panels_fill_height: true,
         paste_line_delay_ms: 250,
         spellcheck_prompt: true,
+        writing_offer: false,
+        writing_ask_post: false,
         input_cursor_style: "underline_thick".into(),
+        input_caret_blink: false,
+        input_caret_color: Some("#c6a46a".into()),
+        input_line_color: Some("#d8dee9".into()),
+        input_line_background: "own".into(),
+        input_line_background_color: Some("#1d1f21".into()),
+        input_line_size: 16,
+        input_type_colors: true,
+        input_type_alias_color: Some("#8abeb7".into()),
+        input_type_hash_color: Some("#b294bb".into()),
+        input_type_chat_color: Some("#f0c674".into()),
+        input_type_unknown_color: Some("#cc6666".into()),
         // set_prompt fills both from the [prompt] table.
         prompt_template_enabled: false,
         prompt_template: String::new(),
@@ -405,6 +435,7 @@ fn full_ui() -> UiConfig {
         vitals_colors: BTreeMap::new(),
         vitals_text: String::new(),
         vitals_text_previous: Vec::new(),
+        vitals_hit: false,
         moons_position: "before-time".into(),
         chip_style: "icon_value".into(),
         tick_count: "down_past_zero".into(),
@@ -414,6 +445,27 @@ fn full_ui() -> UiConfig {
         affects_tint: true,
         affects_running_out_hours: 5,
         affects_almost_gone_hours: 2,
+        // Written only off their defaults, so the defaults keep the
+        // golden's bytes. The snoop split tests in profile/ui.rs cover
+        // the others.
+        snoop_share: 0.4,
+        snoop_folded: false,
+        // Written only once you choose, so None keeps the golden's
+        // bytes. profile/ui.rs tests the choice.
+        log_sessions: None,
+        // The default keeps the golden's bytes. profile/ui.rs tests a size.
+        scrollback_lines: 10_000,
+        // Written only once you move, size or pin the writing card, so
+        // the defaults keep the golden's bytes. profile/ui.rs tests them.
+        writing_card_left: None,
+        writing_card_top: None,
+        writing_card_rows: None,
+        writing_card_cols: None,
+        writing_card_pinned: false,
+        snoop_window_left: None,
+        snoop_window_top: None,
+        snoop_window_width: None,
+        snoop_window_height: None,
         chat_colors: BTreeMap::from([
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),
@@ -498,7 +550,7 @@ fn full_triggers() -> Vec<Trigger> {
             preset: Some("sent_tells".into()),
             group: Some("comms".into()),
             target: TriggerTarget::Prompt,
-            // The alert table of Alerts Q6, which 0.8.1 skips.
+            // The alert table, which 0.8.1 skips.
             alert: Some(AlertParts {
                 banner: true,
                 sound: Some("chime".into()),
@@ -524,7 +576,8 @@ fn full_triggers() -> Vec<Trigger> {
             target: TriggerTarget::Line,
             alert: None,
         },
-        // A Room trigger, which goes under `room_triggers` (D14).
+        // A Room trigger, which goes under `room_triggers`, so a
+        // rollback still reads the file.
         Trigger {
             name: "room-items".into(),
             patterns: vec![TriggerPattern::regex("^.+$")],
@@ -569,7 +622,7 @@ fn full_macros() -> Vec<Macro> {
             preset: None,
         },
         // A preset macro on a key no macro of yours uses is on, and one
-        // on a key yours uses is held off (Scripts board 7).
+        // on a key yours uses is held off.
         Macro {
             key: "Numpad8".into(),
             command: "n".into(),
@@ -641,14 +694,15 @@ fn full_profile() -> ProfileConfig {
         },
         prompt: None,
         alerts: full_alerts(),
-        // Reconnect when the link drops, turned off (Alerts Q14).
+        preset_edits: full_preset_edits(),
+        // Reconnect when the link drops, turned off.
         reconnect: OnSwitch(false),
     };
     config.set_prompt(full_prompt());
     config
 }
 
-/// What two alert presets do, the `[alerts]` table of Alerts Q5.
+/// What two alert presets do, the `[alerts]` table.
 fn full_alerts() -> BTreeMap<String, AlertParts> {
     BTreeMap::from([
         (
@@ -670,6 +724,46 @@ fn full_alerts() -> BTreeMap<String, AlertParts> {
             },
         ),
     ])
+}
+
+/// Your edits to Disarms and fading buffs, the `[preset_edits]` table: a
+/// color, a trigger switch, a Replace with, and a Then send a later fix
+/// flagged.
+fn full_preset_edits() -> PresetEdits {
+    let row = |value: toml::Value, was: toml::Value| EditRow {
+        value,
+        was,
+        seen: None,
+    };
+    let trigger = |name: &str, key: &str, edit: EditRow| {
+        (name.to_string(), BTreeMap::from([(key.to_string(), edit)]))
+    };
+    BTreeMap::from([(
+        "disarm_buff_fade".into(),
+        PresetEdit {
+            colors: BTreeMap::from([("line".into(), row("#c3a6ff".into(), "fg:178".into()))]),
+            triggers: BTreeMap::from([
+                trigger("buff.sanctuary", "enabled", row(false.into(), true.into())),
+                trigger(
+                    "disarm.secondary",
+                    "send",
+                    EditRow {
+                        seen: Some("get 1.;dual 1.".into()),
+                        ..row("".into(), "get 1.;wield 1.".into())
+                    },
+                ),
+                trigger(
+                    "buff.spell_turning",
+                    "replace",
+                    row(
+                        "{line}Your shield of spell turning collapses.{reset}".into(),
+                        "{mark}##{reset} {line}Your shield of spell turning collapses.{reset}"
+                            .into(),
+                    ),
+                ),
+            ]),
+        },
+    )])
 }
 
 /// The full profile with a regex capture in place of Aabahran's codes,
@@ -698,6 +792,9 @@ fn full_global() -> GlobalConfig {
         follow_system_appearance: Some(true),
         light_theme: Some("kanso-pearl".into()),
         dark_theme: Some("tokyo-night".into()),
+        theme_follow: Some("system".into()),
+        day_theme: Some("kanso-pearl".into()),
+        night_theme: Some("custom-dusk".into()),
         color_vision: Some("protanopia".into()),
         terminal_line_height: Some("compact".into()),
         panel_font: Some("system".into()),
@@ -725,8 +822,8 @@ fn full_loadouts() -> LoadoutSet {
         active: vec!["warrior".into(), "shared".into()],
         dormant: true,
         loadouts: vec![
-            // The three empty tables a loadout writes today, which D12
-            // with D14 takes out in its own commit.
+            // A loadout with only its name, which writes no empty
+            // tables.
             Loadout::empty("shared"),
             Loadout {
                 name: "warrior".into(),
@@ -746,6 +843,7 @@ fn full_catalog() -> GlobalCatalog {
         macros: full_macros(),
         enabled_presets: Some(vec!["healing_basics".into(), "sent_tells".into()]),
         alerts: full_alerts(),
+        preset_edits: full_preset_edits(),
     }
 }
 
@@ -792,10 +890,16 @@ fn full_index() -> ProfilesIndex {
         notices: vec!["Vosh moved your prompt capture into the Default profile.".into()],
         sessions: Vec::new(),
         selected: None,
+        get_started: Some(GetStarted {
+            at_launch: false,
+            done: vec!["connect".into()],
+        }),
+        keep_logs_days: Some(90),
     }
 }
 
-/// [`full_index`] with three sessions open, the second selected (Q16).
+/// [`full_index`] with three sessions open, the second selected, and no
+/// Get started.
 fn sessions_index() -> ProfilesIndex {
     let world = || Some("play.theforsakenlands.com".to_string());
     ProfilesIndex {
@@ -826,6 +930,7 @@ fn sessions_index() -> ProfilesIndex {
             },
         ],
         selected: Some(SessionId::numbered(3)),
+        get_started: None,
         ..full_index()
     }
 }
@@ -848,7 +953,7 @@ fn a_profile_file_writes_these_bytes() {
 
 /// Export to Downloads writes the full profile's bytes, then the
 /// `[vosh_export]` table with its world and the one character of its two
-/// you ticked (Scripts Q10). A profile reads the export as the profile
+/// you ticked. A profile reads the export as the profile
 /// alone, and the table reads back.
 #[test]
 fn an_export_writes_these_bytes() {
@@ -917,7 +1022,7 @@ fn profiles_toml_writes_these_bytes() {
 }
 
 /// profiles.toml as 0.8.1 reads and saves it, which knows no session
-/// list.
+/// list and no Get started.
 #[derive(serde::Deserialize, serde::Serialize)]
 struct OldIndex {
     active: String,
@@ -937,7 +1042,27 @@ fn an_older_build_reads_the_session_list_and_drops_it_on_its_save() {
     let old: OldIndex = toml::from_str(&sessions).expect("0.8.1 reads it");
     assert_eq!(
         toml::to_string_pretty(&old).unwrap(),
-        toml::to_string_pretty(&full_index()).unwrap()
+        toml::to_string_pretty(&index_without_get_started()).unwrap()
+    );
+}
+
+/// [`full_index`] as 0.8.1 saves it, with no Get started and no Keep
+/// logs for.
+fn index_without_get_started() -> ProfilesIndex {
+    ProfilesIndex {
+        get_started: None,
+        keep_logs_days: None,
+        ..full_index()
+    }
+}
+
+#[test]
+fn an_older_build_reads_get_started_and_drops_it_on_its_save() {
+    let full = toml::to_string_pretty(&full_index()).unwrap();
+    let old: OldIndex = toml::from_str(&full).expect("0.8.1 reads it");
+    assert_eq!(
+        toml::to_string_pretty(&old).unwrap(),
+        toml::to_string_pretty(&index_without_get_started()).unwrap()
     );
 }
 
@@ -1068,6 +1193,101 @@ fn bare_tracked_affects_still_load() {
 }
 
 #[test]
+fn an_index_from_0_8_1_keeps_get_started_shut() {
+    let (dir, path) = place("old/profiles-0.8.1.toml", "profiles.toml");
+    let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+    assert_eq!(set.get_started(), None);
+    set.save_index().unwrap();
+    assert_eq!(read(&path), old_input("old/profiles-0.8.1.toml"));
+}
+
+/// Launch over `dir` as Vosh does, then install Numpad movement, which
+/// the file has on, as the main window does at launch, through
+/// `presets_install` with the macros src/automation/presets.ts holds.
+/// The six macros 0.8.1 saved as yours take their preset back, n keeps
+/// its group, and your rec keeps Numpad3, so the preset d stays off.
+/// `saved` reads the macros back from the file the save wrote, where
+/// no seventh macro and no second rec turn up.
+async fn numpad_comes_home(dir: &Path, saved: impl Fn() -> Vec<Macro>) {
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+    use tauri::Manager;
+
+    let state: SharedState = Arc::new(AppState::default());
+    let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+    app.manage::<SharedState>(state.clone());
+    crate::app::launch::load(&state, dir).await;
+    let preset = |key: &str, command: &str| Macro {
+        key: key.into(),
+        command: command.into(),
+        group: None,
+        enabled: true,
+        preset: Some("numpad_movement".into()),
+    };
+    let library = [
+        ("Numpad8", "n"),
+        ("Numpad6", "e"),
+        ("Numpad2", "s"),
+        ("Numpad4", "w"),
+        ("Numpad9", "u"),
+        ("Numpad3", "d"),
+    ];
+    let library = library.iter().map(|(k, c)| preset(k, c)).collect();
+    crate::ipc::automation::presets_install(
+        app.handle().clone(),
+        app.state(),
+        Vec::new(),
+        library,
+        None,
+    )
+    .await
+    .unwrap();
+    let rec = Macro {
+        preset: None,
+        ..preset("Numpad3", "rec")
+    };
+    let want = vec![
+        rec,
+        Macro {
+            group: Some("travel".into()),
+            ..preset("Numpad8", "n")
+        },
+        preset("Numpad6", "e"),
+        preset("Numpad2", "s"),
+        preset("Numpad4", "w"),
+        preset("Numpad9", "u"),
+        Macro {
+            enabled: false,
+            ..preset("Numpad3", "d")
+        },
+    ];
+    assert_eq!(state.selected_profile().await.macros, want);
+    assert_eq!(saved(), want);
+}
+
+/// A profile file that came back through 0.8.1, which drops the preset
+/// tag, gets its six Numpad movement macros back as the preset's.
+#[tokio::test]
+async fn preset_macros_back_from_a_0_8_1_profile_file_take_their_preset_back() {
+    let (dir, path) = place("old/profile-numpad-0.8.1.toml", "profiles/default.toml");
+    numpad_comes_home(dir.path(), || ProfileConfig::load(&path).unwrap().macros).await;
+}
+
+/// The same in loadout mode, where 0.8.1 wrote the macros to
+/// catalog.toml and the launch install lands there.
+#[tokio::test]
+async fn preset_macros_back_from_a_0_8_1_catalog_take_their_preset_back() {
+    let (dir, _path) = place("old/catalog-numpad-0.8.1.toml", "catalog.toml");
+    let mut file = load_old_profile("old/profile-numpad-0.8.1.toml");
+    file.macros.clear();
+    file.save(&dir.path().join("profiles/default.toml"))
+        .unwrap();
+    numpad_comes_home(dir.path(), || {
+        load_global_catalog(dir.path()).unwrap().macros
+    })
+    .await;
+}
+
+#[test]
 fn an_index_with_character_still_loads() {
     let (dir, _path) = place("old/profiles-character.toml", "profiles.toml");
     let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
@@ -1161,6 +1381,37 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
     );
 }
 
+/// A 0.8.1 profile file, from before the presets took your edits, keeps
+/// the group you gave a preset trigger and reads with no edits.
+#[test]
+fn a_grouped_preset_trigger_with_no_edits_still_loads() {
+    let config = load_old_profile("old/profile-grouped-preset.toml");
+    assert_eq!(config.ui.enabled_presets, ["disarm_buff_fade"]);
+    assert_eq!(config.triggers.len(), 1);
+    let sanctuary = &config.triggers[0];
+    assert_eq!(sanctuary.name, "buff.sanctuary");
+    assert_eq!(sanctuary.preset.as_deref(), Some("disarm_buff_fade"));
+    assert_eq!(sanctuary.group.as_deref(), Some("fights"));
+    let edits = &config.preset_edits;
+    assert!(edits.is_empty(), "{edits:?}");
+}
+
+/// Profile files from before the marks keep `input_echo_caret = true`,
+/// which reads as the › mark, and a save keeps the old switch for them.
+#[test]
+fn an_old_mark_your_commands_switch_reads_as_the_chevron() {
+    for name in [
+        "old/profile-grouped-preset.toml",
+        "old/profile-numpad-0.8.1.toml",
+    ] {
+        let config = load_old_profile(name);
+        assert_eq!(config.ui.input_echo_mark, "chevron", "{name}");
+        let text = config.to_toml().unwrap();
+        assert!(text.contains("input_echo_caret = true"), "{name}: {text}");
+        assert!(!text.contains("input_echo_mark"), "{name}: {text}");
+    }
+}
+
 #[test]
 fn a_catalog_without_enabled_presets_still_loads() {
     let (dir, _path) = place("old/catalog-no-presets.toml", "catalog.toml");
@@ -1177,7 +1428,7 @@ fn a_catalog_without_enabled_presets_still_loads() {
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
-// ---- Rolling back (D14).
+// ---- Rolling back to an older build.
 
 /// A trigger as 0.8.0 and 0.7.2 read it. Their target knows `line` and
 /// `prompt` and nothing else, and a `room` fails the whole file. They
@@ -1310,7 +1561,7 @@ fn every_golden_still_reads_in_0_8_1_and_your_macro_keeps_its_key() {
     assert_eq!(full, 4);
     // The full macros hold what the hold leaves.
     let mut held = full_macros();
-    crate::loadouts::presets::hold_taken_keys(&mut held);
+    crate::loadouts::presets::hold_taken_keys(&mut held, &std::collections::BTreeSet::new());
     assert_eq!(held, full_macros());
 }
 

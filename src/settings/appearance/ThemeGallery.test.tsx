@@ -31,6 +31,17 @@ describe('ThemeGallery', () => {
       { value: 'dusk', name: 'dusk' },
     ]);
   });
+
+  it('shows the High Contrast pair side by side', () => {
+    const html = renderToStaticMarkup(
+      <ThemeGallery themes={galleryThemes(BUILTIN_THEMES, [])} selected="nord" onPick={() => {}} />,
+    );
+    const list = radios(html).map((r) => r.value);
+    const at = list.indexOf('high-contrast');
+    expect(at).toBeGreaterThan(-1);
+    expect(list[at + 1]).toBe('high-contrast-light');
+    expect(radios(html)[at + 1].name).toBe('High Contrast Light');
+  });
 });
 
 describe('the Vision preview', () => {
@@ -128,8 +139,9 @@ describe('the Vision preview', () => {
     }
   });
 
-  // Board 9 of the Themes review draws Triad as a deuteranope and a
-  // protanope see it, from the review's own simulation.
+  // The colors below are Triad as a deuteranope and a protanope see it,
+  // worked out by a separate simulation, so the preview answers to more
+  // than its own math.
   it('draws Triad as board 9 does', () => {
     const triad = findTheme('triad').xterm;
     const board: [string, string, string][] = [

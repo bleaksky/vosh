@@ -136,7 +136,10 @@ impl CollapseRules {
     /// so a line of a round reads the round's own Char.Combat. The `{}`
     /// that ends a fight comes in the middle of the round that ends it,
     /// before all of that round's text, so the session counts that round
-    /// as the fight's until the prompt that ends it.
+    /// as the fight's until the prompt that ends it. A game that sends its
+    /// prompt time packages after the text sends a fight's first round
+    /// before the Char.Combat that names a target, so the session counts
+    /// the round as the fight's from an attack line of yours.
     pub fn takes(self, fighting: bool, plain: &str) -> bool {
         if fighting && !self.fights {
             return false;

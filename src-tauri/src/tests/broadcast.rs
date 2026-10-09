@@ -324,6 +324,88 @@ fn a_group_toggle_tells_the_command_line_when_a_macro_group_turned() {
 }
 
 #[test]
+fn a_plugin_alias_or_a_stopped_alias_tells_every_window_once() {
+    // Coloring as you type reads the aliases that expand now, so a plugin
+    // alias that comes or goes, and an alias Vosh stops, has to reach it.
+    use vosh_script::{Action, Owner, ScriptOutcome};
+    let app = app_with_settings_open();
+    let handle = app.handle();
+    let mut p = Profile::default();
+    p.aliases
+        .set(vosh_automation::alias::Alias::new("greet", "wave"));
+    let mut c = Connection::default();
+    let mut heard = Report::new();
+    let mut want = Report::new();
+    let mut apply = |p: &mut Profile, outcome: ScriptOutcome| {
+        let apply = crate::script::apply_actions(p, &mut c, outcome);
+        broadcast_list_changes(handle, &in_front(handle), apply.lists);
+    };
+    let acts = |actions: Vec<Action>| ScriptOutcome {
+        actions,
+        ..ScriptOutcome::default()
+    };
+
+    let listening = Heard::listen(&app, &[ALIASES_CHANGED]);
+    apply(
+        &mut p,
+        acts(vec![Action::SetPluginAlias {
+            plugin: "combat".into(),
+            name: "kk".into(),
+            expansion: "kick".into(),
+        }]),
+    );
+    listening.finish("mud.alias in a plugin", &mut heard, &mut want);
+
+    let listening = Heard::listen(&app, &[ALIASES_CHANGED]);
+    apply(
+        &mut p,
+        acts(vec![Action::RemovePluginAlias {
+            plugin: "combat".into(),
+            name: "kk".into(),
+        }]),
+    );
+    listening.finish("mud.unalias in a plugin", &mut heard, &mut want);
+
+    // Gone already, so nothing changed.
+    let listening = Heard::listen(&app, &[ALIASES_CHANGED]);
+    apply(
+        &mut p,
+        acts(vec![Action::RemovePluginAlias {
+            plugin: "combat".into(),
+            name: "kk".into(),
+        }]),
+    );
+    listening.finish_unheard("mud.unalias of a gone alias", &mut heard, &mut want);
+
+    let listening = Heard::listen(&app, &[ALIASES_CHANGED]);
+    apply(
+        &mut p,
+        acts(vec![
+            Action::SetPluginAlias {
+                plugin: "combat".into(),
+                name: "kk".into(),
+                expansion: "kick".into(),
+            },
+            Action::DropPlugin("combat".into()),
+        ]),
+    );
+    listening.finish("a plugin that turned off", &mut heard, &mut want);
+
+    let stop = || ScriptOutcome {
+        stopped: vec![Owner::Alias("greet".into())],
+        ..ScriptOutcome::default()
+    };
+    let listening = Heard::listen(&app, &[ALIASES_CHANGED]);
+    apply(&mut p, stop());
+    listening.finish("an alias Vosh stopped", &mut heard, &mut want);
+    let listening = Heard::listen(&app, &[ALIASES_CHANGED]);
+    apply(&mut p, stop());
+    listening.finish_unheard("an alias stopped already", &mut heard, &mut want);
+
+    assert_eq!(heard, want);
+}
+
+#[test]
 fn a_loadout_switch_tells_the_command_line_when_a_macro_group_turned() {
     use crate::loadouts::set::{Loadout, LoadoutSet};
     let app = app_with_settings_open();
@@ -417,7 +499,7 @@ fn a_group_switch_tells_every_window_once() {
     assert_eq!(heard, want);
 }
 
-/// `wait_full` as the Scripts design writes it, which never returns
+/// `wait_full`, a plugin whose loop never ends, which never returns
 /// while you are hurt.
 const WAIT_FULL: &str = "mud.on_gmcp('Char.Vitals', function(data)
   while data.hp < data.maxhp do end

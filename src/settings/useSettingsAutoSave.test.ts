@@ -213,9 +213,9 @@ describe('what a Settings save holds', () => {
   });
 });
 
-// Each save names the profile Settings showed as you made it, board 7
-// of the Sessions review. Tolliver plays Default and Orla plays Build,
-// with Orla's session selected in the main window.
+// Each save names the profile Settings showed as you made it. Tolliver
+// plays Default and Orla plays Build, with Orla's session selected in
+// the main window.
 describe('a Settings save and its profile', () => {
   const copy = normalizeUiConfig(opened);
   const ROWS = [

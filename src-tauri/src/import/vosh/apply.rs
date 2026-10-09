@@ -1,5 +1,5 @@
 //! A Vosh profile export imported under Characters, as a new profile or
-//! over one you have (Scripts Q9, Q10 and Q26). [`super::plan`] works out
+//! over one you have. [`super::plan`] works out
 //! the file first, and the import writes under [`PERSIST_LOCK`], as every
 //! profile write does.
 
@@ -20,7 +20,7 @@ use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::loadouts::catalog::{lay_catalog_over, GlobalCatalog};
 use crate::loadouts::gating::apply_effective_state;
-use crate::loadouts::presets::hold_taken_keys;
+use crate::loadouts::presets::hold_profile_keys;
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::file::ProfileConfig;
 use crate::profile::inactive::{broadcast_profile_changed, edit_inactive_locked, Stored};
@@ -390,6 +390,7 @@ async fn replace_open(
     for player in players {
         let mut c = player.connection.lock();
         hand_to_connection(&mut p, &mut c, &tick_before);
+        crate::input::keep_echo_mark(player.id, crate::input::echo_mark(&p.ui));
         if let Some(dir) = &plugins_dir {
             let apply = follow_profile_plugins(&mut p, &mut c, dir);
             after
@@ -423,7 +424,7 @@ async fn gate_of(state: &SharedState, name: Option<&str>) -> Option<LoadoutSet> 
 /// plays, whose save writes them to catalog.toml. An item `p` has by
 /// then, for a macro one of yours on its key, stays as it is, like each
 /// one the clash list names. A preset macro on the key of a macro that
-/// joined is held off, see [`hold_taken_keys`]. Returns how many joined.
+/// joined is held off, see [`hold_profile_keys`]. Returns how many joined.
 fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
     let mut joined = 0;
     for trigger in join.triggers {
@@ -452,7 +453,7 @@ fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
             joined += 1;
         }
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
     joined
 }
 

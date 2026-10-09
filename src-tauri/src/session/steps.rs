@@ -23,9 +23,12 @@ use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
 use super::connection::Connection;
+use super::connection::RoomChar;
 use super::lines::{Line, LineAccumulator, Partial};
 use super::prompt_view::prompt_view;
+use super::reader::{self, ReaderFeed};
 use super::{highlight_ground, now_ms, room_block};
+use crate::input::target::target_place;
 
 /// What the Line pass decided for one line that is not your prompt.
 struct LinePass {
@@ -147,6 +150,9 @@ pub(super) fn line_step(
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
     c.prompt.note_text();
+    // A line that completes a partial the reader read as it painted reads
+    // only the rest.
+    batch.reader.heard = c.reader_heard.take();
     // Whether a drop redials reads every line since the last prompt.
     c.link.line(&plain);
     // Without Char.Prompt this session, the game's reply to your own
@@ -162,6 +168,9 @@ pub(super) fn line_step(
         .stage
         .offer(&line.bytes, &plain, line.painted, End::Line);
     let mut steps = released_steps(p, c, batch, offered.released, now, log_session_id);
+    // A line the stage holds reads once it lets go, so what the reader
+    // heard of it waits with it.
+    let held = matches!(offered.offer, Offer::Held);
     match offered.offer {
         Offer::Prompt(block, painted) => {
             steps.push(prompt_block(
@@ -185,6 +194,10 @@ pub(super) fn line_step(
             now,
             log_session_id,
         )),
+    }
+    let heard = batch.reader.heard.take();
+    if held {
+        c.reader_heard = heard;
     }
     steps
 }
@@ -227,7 +240,9 @@ pub(super) fn let_go_held(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
-    c.prompt
+    batch.reader.heard = c.reader_heard.take();
+    let steps = c
+        .prompt
         .stage
         .release()
         .into_iter()
@@ -243,7 +258,9 @@ pub(super) fn let_go_held(
                 log_session_id,
             )
         })
-        .collect()
+        .collect();
+    batch.reader.heard = None;
+    steps
 }
 
 /// The lines the stage still holds as the session ends. The end of their
@@ -256,12 +273,15 @@ pub(super) fn end_held(
     let mut log = Vec::new();
     let mut kept = Vec::new();
     for line in c.prompt.stage.release() {
+        let playing = c.log_kinds.in_play(c.link.playing());
+        let kind = c.log_kinds.line(&line.plain, playing);
         if let Some(sid) = log_session_id {
             log.push(vosh_log::LogEntry {
                 session_id: sid,
                 ts_ms: now_ms(),
                 text: line.plain,
                 raw: Some(line.raw.clone()),
+                kind,
             });
         }
         kept.push(line.raw);
@@ -283,17 +303,64 @@ enum Shows {
 /// The scope a complete line that is not your prompt runs in, from the
 /// room look tracker, which reads every such line in the order the game
 /// sent it. [`MatchScope::RoomTarget`] for the person at the place your
-/// target holds in Room.Chars, [`MatchScope::Room`] for any other army,
-/// thing or person the look lists, and [`MatchScope::Line`] for any other
-/// line. The look's Room.Chars packet comes before its text, so the
-/// place is one in this look, the one `tar` marks with `>`.
-fn room_scope(c: &mut Connection, plain: &str, bytes: &[u8]) -> MatchScope {
-    use room_block::RoomLine;
+/// target holds in the Room.Chars of the look, [`MatchScope::Room`] for
+/// any other army, thing or person the look lists, and
+/// [`MatchScope::Line`] for any other line. Where the packets follow the
+/// look, that Room.Chars is the one `ahead` holds, still to come in the
+/// read. With none ahead and a target set, the person's place comes back
+/// too, so the line shows as a row the packet can color again in a later
+/// read (see [`recolor_target`]).
+fn room_scope(
+    c: &mut Connection,
+    plain: &str,
+    bytes: &[u8],
+    ahead: Option<&[RoomChar]>,
+) -> (MatchScope, Option<usize>) {
+    use room_block::{Place, RoomLine};
+    let target = |place: usize, chars: &[RoomChar]| {
+        if target_place(c.target.name.as_deref(), chars) == Some(place) {
+            MatchScope::RoomTarget
+        } else {
+            MatchScope::Room
+        }
+    };
     match c.room_block.line(plain, bytes) {
-        RoomLine::Other => MatchScope::Line,
-        RoomLine::Person(place) if c.target.room_idx == Some(place) => MatchScope::RoomTarget,
-        RoomLine::Army | RoomLine::Thing | RoomLine::Person(_) => MatchScope::Room,
+        RoomLine::Other => (MatchScope::Line, None),
+        RoomLine::Person(Place::Held(place)) => (target(place, &c.room_chars), None),
+        RoomLine::Person(Place::Coming(place)) => match ahead {
+            Some(chars) => (target(place, chars), None),
+            None => (MatchScope::Room, c.target.name.is_some().then_some(place)),
+        },
+        RoomLine::Army | RoomLine::Thing => (MatchScope::Room, None),
     }
+}
+
+/// A Room.Chars that follows a look an earlier read showed, while the
+/// people of that look are still the last thing written. The line of the
+/// person at the place your target holds in it runs the triggers again in
+/// [`MatchScope::RoomTarget`], and when it shows another way, the rows
+/// are written again in place, in the read's batch. Only how the line
+/// shows changes. What the triggers send, run or ring went with the line.
+/// Returns the row for the scrollback ring.
+pub(super) fn recolor_target(
+    p: &Profile,
+    c: &mut Connection,
+    out: &mut vosh_prompt::stage::Output,
+) -> Option<vosh_prompt::stage::Recolored> {
+    let place = c.target.room_idx?;
+    let (raw, plain) = c.prompt.stage.recolorable(out, place)?;
+    let shown = vosh_automation::trigger::process_on_ground(
+        &p.triggers,
+        raw,
+        plain,
+        MatchScope::RoomTarget,
+        highlight_ground::get(),
+        highlight_ground::game(),
+        c.stop_key,
+    )
+    .display
+    .map(String::into_bytes);
+    c.prompt.stage.recolor(out, place, shown)
 }
 
 /// A complete line that is not your prompt. It runs the Line pass and
@@ -313,7 +380,11 @@ fn text_line_step(
     // Every complete line that is not your prompt passes the room look
     // tracker in the order the game sent it, so it knows the lines that
     // list a room's armies, things and people.
-    let scope = room_scope(c, &plain, &bytes);
+    let (scope, late) = room_scope(c, &plain, &bytes, batch.room_ahead.as_deref());
+    // A line takes its kind whether it shows or not, so a channel packet
+    // waiting for a line a trigger hides never lands on a later one.
+    let playing = c.log_kinds.in_play(c.link.playing());
+    let kind = c.log_kinds.line(&plain, playing);
     let LinePass {
         result,
         tick_step,
@@ -338,15 +409,41 @@ fn text_line_step(
     let collapse = p.ui.collapse_repeats;
     c.prompt.stage.set_collapse(collapse);
     // In a fight and Attack lines say whether a line of a fight and an
-    // attack line join a run. The pulse's Char.Combat came before its
-    // text, so the line reads the fight it belongs to. The round that
-    // ends a fight comes after the Char.Combat {} that ended it, and its
-    // lines are still the fight's until the prompt that ends it.
+    // attack line join a run. Aabahran sends the pulse's Char.Combat
+    // before its text, so the line reads the fight it belongs to. The
+    // round that ends a fight comes after the Char.Combat {} that ended
+    // it, and its lines are still the fight's until the prompt that ends
+    // it. A server that sends the tick after the text sends the first
+    // round before the Char.Combat that names your opponent, so an attack
+    // line of yours starts the fight's lines until that prompt.
     let rules = vosh_prompt::stage::CollapseRules {
         fights: p.ui.collapse_fight_lines,
         attacks: p.ui.collapse_attack_lines,
     };
-    let fighting = c.prompt.vars.gmcp().fighting() || c.fight_tail;
+    let in_combat = c.prompt.vars.gmcp().fighting();
+    if !in_combat && vosh_prompt::aabahran::damage::your_attack_line(&plain) {
+        c.fight_head = true;
+    }
+    let fighting = in_combat || c.fight_tail || c.fight_head;
+    // A screen reader reads what shows: the echoes in place of a hidden
+    // line, and the line as its triggers left it, or as the game sent it
+    // when an earlier read painted it. A collapsed run reads the line
+    // without its count.
+    if p.ui.screen_reader {
+        let feed = &mut batch.reader;
+        match shows {
+            Shows::Now(_) => {
+                feed.lines_of(&shown);
+                if let Some(text) = &result.display {
+                    feed.lines_of(text.as_bytes());
+                }
+            }
+            Shows::Painted => {
+                feed.line(&plain);
+                feed.lines_of(&shown);
+            }
+        }
+    }
     let mut repeat = None;
     // Whether the ring keeps the line. While Collapse repeated lines is
     // on, it keeps what the screen shows, so the line end a pinned
@@ -382,6 +479,20 @@ fn text_line_step(
             repeat = Some(crate::logs::KeptRun { repeat: made, gen });
             Some(shows)
         }
+        // A person whose place the packet after the look gives, in a
+        // later read, shows as a row it can color again.
+        Shows::Now(None) if late.is_some() => {
+            let display = result.display.as_ref().map(|text| text.as_bytes().to_vec());
+            c.prompt.stage.recolorable_line(
+                &mut batch.out,
+                &bytes,
+                &plain,
+                late.unwrap_or_default(),
+                shown,
+                display.clone(),
+            );
+            display
+        }
         Shows::Now(painted) => {
             if let Some(text) = &result.display {
                 shown.extend_from_slice(text.as_bytes());
@@ -415,6 +526,7 @@ fn text_line_step(
                 ts_ms: now_ms(),
                 text: plain,
                 raw: Some(bytes),
+                kind,
             });
         }
         if ring {
@@ -453,6 +565,14 @@ fn prompt_block(
     c.room_block.end();
     c.link.prompt();
     c.fight_tail = false;
+    c.fight_head = false;
+    // A screen reader reads your prompt only when you ask, so it never
+    // joins the lines.
+    if p.ui.screen_reader {
+        batch
+            .reader
+            .prompt(block.lines.iter().map(|line| line.plain.as_str()));
+    }
     let disagree = c.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
@@ -501,6 +621,11 @@ fn prompt_block(
 
     let mut before = Vec::new();
     let mut scrollback = Vec::new();
+    // Each line of your prompt that shows is logged as a prompt, or as
+    // login outside play.
+    let prompt_kind =
+        super::log_kinds::LogKinds::prompt_line(c.log_kinds.in_play(c.link.playing()));
+    let log = log_session_id.map(|sid| (sid, &prompt_kind));
     // Pinned, the prompt leaves the text for the band above the command
     // line. It is logged and kept exactly as it is in the text.
     let pinned = c.prompt.show() == vosh_prompt::PromptShow::Pinned;
@@ -533,7 +658,7 @@ fn prompt_block(
                 .draw_view(&mut batch.out, block, painted, &before, view.stage());
         }
         for head in &heads_shown {
-            keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
+            keep_shown(batch, &mut scrollback, head, &head.raw, log);
         }
     } else {
         if result.display.is_none() {
@@ -556,18 +681,13 @@ fn prompt_block(
                 .show_as_sent(&mut batch.out, block, painted, &before, display);
         }
         for head in &heads {
-            keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
+            keep_shown(batch, &mut scrollback, head, &head.raw, log);
         }
         if let Some(text) = &result.display {
-            keep_shown(
-                batch,
-                &mut scrollback,
-                &last,
-                text.as_bytes(),
-                log_session_id,
-            );
+            keep_shown(batch, &mut scrollback, &last, text.as_bytes(), log);
         }
     }
+    end_pulse(c, batch);
     LineStep {
         result,
         apply,
@@ -585,14 +705,15 @@ fn keep_shown(
     scrollback: &mut Vec<Vec<u8>>,
     line: &BlockLine,
     shown: &[u8],
-    log_session_id: Option<i64>,
+    log: Option<(i64, &vosh_log::LineKind)>,
 ) {
-    if let Some(sid) = log_session_id {
+    if let Some((sid, kind)) = log {
         batch.log.push(vosh_log::LogEntry {
             session_id: sid,
             ts_ms: now_ms(),
             text: line.plain.clone(),
             raw: Some(line.raw.clone()),
+            kind: kind.clone(),
         });
     }
     scrollback.push(shown.to_vec());
@@ -648,6 +769,13 @@ fn unread_partial(
             before.extend_from_slice(b"\r\n");
         }
     }
+    // A screen reader reads it as a line, or the echoes in its place.
+    if p.ui.screen_reader {
+        match &result.display {
+            Some(text) => batch.reader.lines_of(text.as_bytes()),
+            None => batch.reader.lines_of(&before),
+        }
+    }
     c.prompt.stage.end_partial(
         &mut batch.out,
         &partial.bytes,
@@ -676,16 +804,34 @@ pub(super) fn marker_step(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
+    batch.reader.heard = c.reader_heard.take();
+    let steps = marker_steps(p, c, accumulator, batch, now, log_session_id);
+    batch.reader.heard = None;
+    steps
+}
+
+/// [`marker_step`], with the start of a partial the reader read already
+/// noted on the read's feed.
+fn marker_steps(
+    p: &mut Profile,
+    c: &mut Connection,
+    accumulator: &mut LineAccumulator,
+    batch: &mut ReadBatch,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> Vec<LineStep> {
     let Some(partial) = accumulator.take_partial() else {
         // A GA after lines the stage held ends them, since the rest of
         // the prompt never came.
         let released = c.prompt.stage.release();
         let steps = released_steps(p, c, batch, released, now, log_session_id);
         c.prompt.record(None, now_ms());
+        end_pulse(c, batch);
         // The marker ends any room look before it, and the round that
         // ended a fight.
         c.room_block.end();
         c.fight_tail = false;
+        c.fight_head = false;
         return steps;
     };
     let plain = vosh_protocol::ansi::plain_text(&partial.bytes);
@@ -723,17 +869,28 @@ pub(super) fn marker_step(
             c.prompt.record(Some((&partial.bytes, &plain)), now_ms());
         }
     }
+    end_pulse(c, batch);
     c.room_block.end();
     c.fight_tail = false;
+    c.fight_head = false;
     steps
+}
+
+/// Your prompt, or a GA or EOR, ended the pulse's text, so a channel
+/// packet still waiting for its line found none, and the rows a later
+/// packet can name start after this.
+fn end_pulse(c: &mut Connection, batch: &mut ReadBatch) {
+    c.log_kinds.prompt();
+    batch.since_prompt = batch.log.len();
 }
 
 /// The end of a read. A partial the capture settles on, alone or after
 /// held lines, is your prompt now, so it draws in this read and never
 /// flashes. Any other partial paints as a region a later read replaces,
-/// with the held lines before it. Held lines with no partial after them
-/// paint the same way. Then the stage catches up with everything the read
-/// wrote.
+/// with the held lines before it. A screen reader reads either only once
+/// it waits, see [`reader_wait_step`]. Held lines with no partial after
+/// them paint the same way. Then the stage catches up with everything the
+/// read wrote.
 pub(super) fn partial_step(
     p: &mut Profile,
     c: &mut Connection,
@@ -748,6 +905,7 @@ pub(super) fn partial_step(
         let plain = vosh_protocol::ansi::plain_text(&bytes);
         match c.prompt.stage.settle(&bytes, &plain) {
             Some((block, region)) => {
+                c.reader_heard = None;
                 let painted = accumulator
                     .take_partial()
                     .and_then(|t| t.painted)
@@ -766,6 +924,7 @@ pub(super) fn partial_step(
             // yet, so it waits a moment for the next read.
             None if accumulator.painted().is_none() && c.prompt.stage.live(&plain) => {
                 batch.hold = true;
+                batch.reader_wait = p.ui.screen_reader;
             }
             None => {
                 let painted =
@@ -773,6 +932,7 @@ pub(super) fn partial_step(
                         .stage
                         .paint_partial(&mut batch.out, &bytes, accumulator.painted());
                 accumulator.set_painted(painted);
+                batch.reader_wait = p.ui.screen_reader;
             }
         }
     } else {
@@ -794,6 +954,27 @@ pub(super) fn hold_step(c: &mut Connection, accumulator: &mut LineAccumulator, o
         accumulator.set_painted(painted);
     }
     c.prompt.stage.finish(out);
+}
+
+/// A partial the end of a read left, painted raw or held, is still there
+/// [`reader::PARTIAL_WAIT`] later and painted by then, so it waits for
+/// you, such as a login question the game sends with no GA. A screen
+/// reader reads it then, into `reader`, and the line that completes it
+/// reads only the rest. A line the reads split ends before that and
+/// reads whole.
+pub(super) fn reader_wait_step(
+    p: &Profile,
+    c: &mut Connection,
+    accumulator: &LineAccumulator,
+    reader: &mut ReaderFeed,
+) {
+    if !p.ui.screen_reader || accumulator.painted().is_none() {
+        return;
+    }
+    if let Some(bytes) = accumulator.partial() {
+        let plain = vosh_protocol::ansi::plain_text(bytes);
+        reader::painted_partial(reader, &mut c.reader_heard, plain);
+    }
 }
 
 /// How long a GMCP packet that changes your prompt waits for text before
@@ -932,6 +1113,9 @@ pub(super) fn send_step(
         at_ms,
     );
     c.prompt.stage.close();
+    // The partial goes with the send, and so does what the reader read of
+    // it.
+    c.reader_heard = None;
     // A quit of yours, or a Y that takes a character, says how the link
     // may end.
     c.link.sent(sent, Instant::now());

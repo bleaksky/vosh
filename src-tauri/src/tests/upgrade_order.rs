@@ -1,4 +1,4 @@
-//! The order launch runs its upgrades in (R2 of the refactor plan).
+//! The order launch runs its upgrades in.
 //!
 //! The setup steps in app/launch.rs run `load`. It finishes a shared
 //! catalog wizard run that stopped and reads the profile set. Then it
@@ -189,7 +189,7 @@ async fn launch_runs_the_upgrades_in_order() {
     );
     // The launch notices come in the same order.
     assert_eq!(
-        state.take_launch_notices(),
+        state.take_launch_messages(),
         [WIZARD_FINISHED_NOTICE, MOVED_INTO_DEFAULT]
     );
 
@@ -257,7 +257,7 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     let state = launch(&app_data).await;
     assert!(state.relaunch_pending.load(Ordering::Acquire));
     assert!(!state.loadout_mode.load(Ordering::Acquire));
-    assert_eq!(state.take_launch_notices(), [WIZARD_UNFINISHED_NOTICE]);
+    assert_eq!(state.take_launch_messages(), [WIZARD_UNFINISHED_NOTICE]);
     // The prompt upgrade and the rollout wait for the run, and the
     // profiles still load.
     let leftover = &migrations(&app_data);
@@ -271,7 +271,7 @@ async fn an_unfinished_wizard_run_holds_the_upgrades_after_it() {
     assert!(state.loadout_mode.load(Ordering::Acquire));
     assert!(!state.relaunch_pending.load(Ordering::Acquire));
     assert_eq!(
-        state.take_launch_notices(),
+        state.take_launch_messages(),
         [WIZARD_FINISHED_NOTICE, MOVED_INTO_DEFAULT]
     );
     assert_eq!(
@@ -300,6 +300,6 @@ async fn a_launch_leaves_an_older_mudclient_folder_alone() {
     assert!(!app_data.join("catalog.toml").exists(), "no wizard run");
     assert!(!state.loadout_mode.load(Ordering::Acquire));
     assert!(!state.relaunch_pending.load(Ordering::Acquire));
-    let leftover = &state.take_launch_notices();
+    let leftover = &state.take_launch_messages();
     assert!(leftover.is_empty(), "{leftover:?}");
 }

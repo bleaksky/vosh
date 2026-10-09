@@ -15,7 +15,7 @@
   overflow: hidden;
   /* Containing block for the floating find toolbar overlay (Cmd+F). */
   position: relative;
-  /* Text starts 16 in and 6 under the band (SPEC 1), and the bottom
+  /* Text starts 16 in and 6 under the band, and the bottom
      keeps a 6 px buffer above the input band so the last row never
      reads as touching it. The padding lives here and never on the host
      or .xterm. The sizer inside fills the box within the padding and JS
@@ -111,28 +111,6 @@
   flex: 0 0 2px;
 }
 
-/* Scroll-depth indicator in the top-right of the history pane.
-   Absolutely positioned so it overlays the xterm without affecting
-   the row count FitAddon calculates. The right offset has to clear
-   the xterm viewport scrollbar gutter — overlay scrollbars on macOS
-   take 0px when idle but Windows / Linux scrollbars eat ~10-17px
-   permanently. 24px keeps the indicator clean of the gutter on
-   every platform without measurable visual cost. */
-.scrollback-indicator {
-  position: absolute;
-  top: 4px;
-  right: 24px;
-  font-size: 0.78em;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  color: var(--secondary);
-  background: rgba(0, 0, 0, 0.45);
-  padding: 2px 8px;
-  border-radius: 3px;
-  pointer-events: none;
-  user-select: none;
-  z-index: 5;
-}
-
 /* The sizer is the flex item that takes the pane's space, and only
    its rect matters. paneSizer.ts writes that rect in whole pixels onto
    the host, and FitAddon counts rows from the host's size. The host is
@@ -165,18 +143,18 @@
   overflow: hidden;
 }
 
-/* Underlay (macOS). The native surface sits BELOW the webview and paints
-   the terminal background across the whole window, so every ancestor of
-   the terminal pane goes transparent and the grid shows through. The
-   list names each wrapper between the One Window shell root and the
-   sizer (AppShell, then MainWindow's terminal slot), and html, body, and #root
-   are transparent already. A wrapper added there with a background of
-   its own turns the terminal into a flat colored hole. The title band
-   and the status line carry no fill, so the same ground shows under
-   them. The input band and the panel paint their own surfaces over it.
-   The xterm copy stays mounted for sizing but is never shown, and the
-   DOM owns the cursor over the pane, taking the shape the native
-   surface asks for through --terminal-cursor. */
+/* Underlay (macOS). The native surface sits BELOW the webview and
+   paints the terminal background across the whole window, so every
+   ancestor of the terminal pane goes transparent and the grid shows
+   through. The list names each wrapper between the shell root and the
+   sizer (AppShell, then MainWindow's terminal slot), and html, body,
+   and #root are transparent already. A wrapper added there with a
+   background of its own turns the terminal into a flat colored hole.
+   The title band and the status line carry no fill, so the same ground
+   shows under them. The input band and the panel paint their own
+   surfaces over it. The xterm copy stays mounted for sizing but is
+   never shown, and the DOM owns the cursor over the pane, taking the
+   shape the native surface asks for through --terminal-cursor. */
 html[data-underlay] .shell,
 html[data-underlay] .shell-slot-term,
 html[data-underlay] .terminal-area,

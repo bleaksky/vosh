@@ -14,7 +14,7 @@ import {
   PANEL_FONT_SYSTEM,
   PANEL_FONT_TERMINAL,
 } from '../panel/panelFont';
-import { normalizePanelSize, PANEL_SIZE_TERMINAL } from '../panel/panelSize';
+import { renderFontStack } from '../lib/fontLoader';
 import type { CustomTheme } from '../ipc/theme';
 import type { SystemFontEntry } from '../ipc/uiConfig';
 import type { ThemePrefs } from './theme';
@@ -43,12 +43,6 @@ export const BUNDLED_FONTS: readonly Choice[] = [
   { label: 'JetBrains Mono', value: '"JetBrainsMono Bundled", Menlo, monospace' },
 ];
 
-/** Fonts Vosh once shipped, which saved font lists still name. The
- *  Font select names them but no longer offers them. */
-const RETIRED_FONTS: readonly Choice[] = [
-  { label: 'Berkeley Mono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
-];
-
 /** The first family in a CSS font list, without its quotes. */
 export function primaryFontFamily(stack: string): string {
   const first = stack.split(',')[0] ?? '';
@@ -72,10 +66,16 @@ export function systemFontStack(family: string): string {
   return `"${family}", Menlo, monospace`;
 }
 
+// The first family of a font list as the page draws it, so a list saved
+// with a retired name reads as the font it draws in.
+function drawnFamily(stack: string): string {
+  return primaryFontFamily(renderFontStack(stack));
+}
+
 /** The name the Font select shows for a font list. */
 export function fontLabel(stack: string): string {
-  const family = primaryFontFamily(stack).replace(/\s+Bundled$/i, '');
-  const bundled = [...BUNDLED_FONTS, ...RETIRED_FONTS].find(
+  const family = drawnFamily(stack).replace(/\s+Bundled$/i, '');
+  const bundled = BUNDLED_FONTS.find(
     (f) => fontKey(primaryFontFamily(f.value)) === fontKey(family),
   );
   if (bundled) return bundled.label;
@@ -101,7 +101,7 @@ export function fontChoices(current: string, installed: readonly SystemFontEntry
     choices.push({ label: family, value: systemFontStack(family) });
   }
   if (current.trim() === '') return choices;
-  const key = fontKey(primaryFontFamily(current));
+  const key = fontKey(drawnFamily(current));
   const index = choices.findIndex((c) => fontKey(primaryFontFamily(c.value)) === key);
   if (index >= 0) {
     choices[index] = { ...choices[index], value: current };
@@ -128,10 +128,10 @@ export function panelFontChoices(current: string, installed: readonly SystemFont
 
 // ── Size ─────────────────────────────────────────────────────────────
 
-/** The sizes the approved board offers, in points. */
+/** The sizes the Size select offers, in points. */
 export const TEXT_SIZES: readonly number[] = [11, 12, 13, 14, 15, 16, 18];
 
-/** What the Size select offers: the board's sizes plus your current
+/** What the Size select offers: those sizes plus your current
  *  size when it is not one of them, smallest first. */
 export function sizeChoices(current: number): Choice[] {
   const sizes = new Set<number>(TEXT_SIZES);
@@ -139,28 +139,27 @@ export function sizeChoices(current: number): Choice[] {
   return [...sizes].sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n} pt` }));
 }
 
-/** What the Panel text Size select offers: the terminal size, then the
- *  sizes Size offers, your size among them. */
-export function panelSizeChoices(current: number): Choice[] {
-  const size = normalizePanelSize(current);
-  return [
-    { value: String(PANEL_SIZE_TERMINAL), label: 'Same as terminal' },
-    ...sizeChoices(size === PANEL_SIZE_TERMINAL ? Number.NaN : size),
-  ];
+/** What a Size select that can follow the terminal offers: Same as
+ *  terminal, then the sizes Size offers, your size among them. Panel
+ *  text and the command line both save 0 to follow the terminal. */
+export function sizeChoicesWithTerminal(current: number): Choice[] {
+  return [{ value: '0', label: 'Same as terminal' }, ...sizeChoices(current)];
 }
 
 // ── Light and dark themes ────────────────────────────────────────────
 
 /** What the Light theme or Dark theme select offers: every theme of
- *  that appearance in gallery order. The current pick stays listed
- *  first when it is not one of them, so the select shows it. */
+ *  that appearance in gallery order. Null offers every theme, light or
+ *  dark, as the Day theme and Night theme selects do. The current pick
+ *  stays listed first when it is not one of them, so the select shows
+ *  it. */
 export function pairChoices(
   themes: readonly AppTheme[],
-  appearance: Appearance,
+  appearance: Appearance | null,
   current: string,
 ): Choice[] {
   const choices = themes
-    .filter((t) => themeTokens(t).appearance === appearance)
+    .filter((t) => appearance === null || themeTokens(t).appearance === appearance)
     .map((t) => ({ value: t.id, label: t.label }));
   if (current !== '' && !choices.some((c) => c.value === current)) {
     const found = themes.find((t) => t.id === current);
@@ -172,7 +171,7 @@ export function pairChoices(
 /** The theme an arrow key moves to in the gallery. `step` 1 is the
  *  next theme in gallery order and -1 the one before, wrapping at both
  *  ends. With `appearance` set only themes of that appearance count.
- *  While follow system appearance is on the page passes the OS
+ *  While Switch themes follows the system the page passes the OS
  *  appearance, so each step shows the theme it lands on and fills only
  *  the slot the OS uses now, never the other one. Returns `from` when
  *  no other theme qualifies. */
@@ -234,11 +233,11 @@ export function colorVisionNote(vision: ColorVision, themeTerminalColors = true)
   const game = themeTerminalColors
     ? vision === 'tritanopia'
       ? 'In the game text blues turn purple and magentas turn pink.'
-      : 'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room.'
+      : 'In the game text greens turn blue, reds lean toward orange, and blues toward violet, as far as your theme leaves room.'
     : "Game text keeps your base palette while the theme's colors are off for MUD text.";
   const window =
     vision === 'tritanopia'
-      ? 'The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.'
+      ? 'The window keeps danger, warn, and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.'
       : 'In the window success turns blue and danger leans toward orange.';
   return `${game} ${window}`;
 }
@@ -299,7 +298,8 @@ export function keepFit(
 /** The fields after you delete a custom theme. Any pick that named it
  *  falls back to the stock theme for its place: Obsidian Ember for the
  *  manual pick and the dark theme, DEFAULT_LIGHT_THEME_ID for the light
- *  theme, which shows Rubric. */
+ *  theme, which shows Rubric. A day or night theme that named it goes
+ *  empty, so that slot shows the manual pick. */
 export function removeCustomTheme<T extends ThemeFields>(ui: T, id: string): T {
   return {
     ...ui,
@@ -307,6 +307,8 @@ export function removeCustomTheme<T extends ThemeFields>(ui: T, id: string): T {
     theme: ui.theme === id ? DEFAULT_THEME_ID : ui.theme,
     light_theme: ui.light_theme === id ? DEFAULT_LIGHT_THEME_ID : ui.light_theme,
     dark_theme: ui.dark_theme === id ? DEFAULT_THEME_ID : ui.dark_theme,
+    day_theme: ui.day_theme === id ? '' : ui.day_theme,
+    night_theme: ui.night_theme === id ? '' : ui.night_theme,
   };
 }
 

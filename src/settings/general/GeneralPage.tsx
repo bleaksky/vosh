@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { listLogSessions } from '../../ipc/logs';
 import {
   profileGetScope,
   profileSetScope,
@@ -11,8 +10,6 @@ import { checkForUpdate, installUpdateAndRelaunch } from '../../ipc/updater';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
-import { savedLogsText } from './logView';
-import { settingsSubpage } from '../../lib/settingsNav';
 import { KNOWN_WORLDS } from '../../lib/knownWorlds';
 import { useSessions } from '../../stores/session/sessionsStore';
 import { parseTarget, useSessionTarget } from '../../stores/session/useConnection';
@@ -30,38 +27,15 @@ import {
   Toggle,
 } from '../../ui';
 import { ReconnectRow } from './ReconnectRow';
-import { SessionLogs } from './SessionLogs';
 import { OTHER, worldChoice, worldValue } from './worldChoice';
 
-// General (the approved SettingsGeneral board): where Connect dials,
-// updates, the settings every character shares, and the saved session
-// logs. Search logs… opens the log view inside General at
-// general:logs (SessionLogs.tsx). Windows and Linux add an Advanced
-// disclosure at the end with the GPU rendering switch, which drives
-// the xterm renderer macOS does not show.
+// General: where Connect dials, updates and the settings every
+// character shares. Session logs and Scrollback live on the Logs tab
+// (LogsPage.tsx). Windows and Linux add an Advanced disclosure at the
+// end with the GPU rendering switch, which drives the xterm renderer
+// macOS does not show.
 
-export function GeneralPage(props: SettingsPageProps) {
-  if (settingsSubpage(props.target) !== null) return <SessionLogs {...props} />;
-  return <GeneralSections {...props} />;
-}
-
-/** What to call this computer in a sentence: Mac, PC, or computer. */
-function computerName(): string {
-  const platform =
-    typeof document !== 'undefined' ? document.documentElement.dataset.platform : undefined;
-  if (platform === 'macos' || (!platform && isMacPlatform())) return 'Mac';
-  if (platform === 'windows') return 'PC';
-  return 'computer';
-}
-
-function GeneralSections({
-  target,
-  navSeq,
-  config,
-  setConfig,
-  onError,
-  navigate,
-}: SettingsPageProps) {
+export function GeneralPage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
   const mac = isMacPlatform();
   return (
@@ -73,17 +47,6 @@ function GeneralSections({
         disabled={config === null}
       />
       <ScopeSection onError={onError} />
-      <Section
-        id="session-logs"
-        title="Session logs"
-        help={{ topic: 'characters-and-data.search-logs', subject: 'session logs' }}
-      >
-        <Row label="Saved logs" description={<SavedLogsCount onError={onError} />}>
-          <Button onClick={() => navigate({ group: 'general', section: 'logs' })}>
-            Search logs…
-          </Button>
-        </Row>
-      </Section>
       {!mac && <AdvancedSection target={target} navSeq={navSeq} />}
     </>
   );
@@ -93,11 +56,11 @@ function GeneralSections({
 
 /** Where Connect and Cmd+R dial the selected session, the same target
  *  the session popover's Edit connection… edits, which each session
- *  keeps for itself (board 7). The World select picks a known world or
- *  Other…, which clears host and port for you to type. Host and port
- *  save when you leave them or press Enter, and go back to the target
- *  when they do not make one. Reconnect when the link drops belongs to
- *  the profile Settings shows, not the session. */
+ *  keeps for itself. The World select picks a known world or Other…,
+ *  which clears host and port for you to type. Host and port save when
+ *  you leave them or press Enter, and go back to the target when they
+ *  do not make one. Reconnect when the link drops belongs to the
+ *  profile Settings shows, not the session. */
 function ConnectionSection({ onError }: { onError: (message: string | null) => void }) {
   const [target, storeTarget] = useSessionTarget();
   const sessions = useSessions().length;
@@ -382,32 +345,6 @@ function ScopeSection({ onError }: { onError: (message: string | null) => void }
       </Card>
     </Section>
   );
-}
-
-// ── Session logs ───────────────────────────────────────────────────
-
-/** How many logs and lines Vosh saved, leaving out connections to
- *  this machine the way the log view does. A log is one connection,
- *  which the store calls a session (Q21). */
-function SavedLogsCount({ onError }: { onError: (message: string | null) => void }) {
-  const [counts, setCounts] = useState<{ logs: number; lines: number } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    listLogSessions(0, { hideLocal: true })
-      .then((rows) => {
-        if (cancelled) return;
-        setCounts({
-          logs: rows.length,
-          lines: rows.reduce((sum, row) => sum + row.line_count, 0),
-        });
-      })
-      .catch((e) => onError(String(e)));
-    return () => {
-      cancelled = true;
-    };
-  }, [onError]);
-  if (!counts) return 'Counting your saved logs…';
-  return savedLogsText(counts.logs, counts.lines, computerName());
 }
 
 // ── Advanced (Windows and Linux) ───────────────────────────────────

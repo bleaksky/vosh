@@ -66,7 +66,7 @@ const plugin = (patch: Partial<PluginRow> & Pick<PluginRow, 'name'>): PluginRow 
   ...patch,
 });
 
-// Board 4's three plugins.
+// Three sample plugins.
 const BOARD: PluginRow[] = [
   plugin({
     name: 'vitals_alert',
@@ -121,9 +121,7 @@ describe('the Plugins section', () => {
     expect(html).toContain('data-st-anchor="plugins"');
     expect(html).toMatch(/<h2[^>]*>Plugins<\/h2>/);
     expect(html).toMatch(/<button[^>]*>Install…<\/button><input type="file" accept=".zip"/);
-    expect(html).toMatch(
-      /class="st-button st-button-secondary st-button-iconed">.*New plugin<\/button>/,
-    );
+    expect(html).toMatch(/class="btn has-icon">.*New plugin<\/button>/);
     expect(html).toContain('aria-label="Help on Lua scripts"');
   });
 
@@ -214,8 +212,8 @@ describe('the On switch', () => {
     vi.unstubAllGlobals();
   });
 
-  /** Mount the board's list, flip the switch of `name`, and say what
-   *  the section handed back. */
+  /** Mount the list, flip the switch of `name`, and say what the
+   *  section handed back. */
   async function flip(name: string, on: boolean, plugins: PluginRow[] = BOARD) {
     calls.invoked.length = 0;
     const shown: PluginRow[][] = [];
@@ -312,7 +310,7 @@ describe('a press on the list', () => {
     vi.unstubAllGlobals();
   });
 
-  /** Mount board 4's list, press the button `pick` finds, and say what
+  /** Mount the list, press the button `pick` finds, and say what
    *  the list asked for. */
   async function pressOn(pick: (el: FakeElement) => boolean) {
     calls.invoked.length = 0;
@@ -399,7 +397,7 @@ describe('the more menu and Install', () => {
   /** Let every answer and file read settle. */
   const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
-  /** Board 4's list, mounted, with what it handed back. */
+  /** The list, mounted, with what it handed back. */
   async function mount() {
     calls.invoked.length = 0;
     const shown: PluginRow[][] = [];
@@ -428,7 +426,7 @@ describe('the more menu and Install', () => {
       await settle();
     };
     // The more button of `name` as a press hands it, placed where the
-    // board draws vitals_alert's.
+    // row of vitals_alert has it.
     const openMenu = (name: string) => {
       const more = findAll(container, (el) => el.getAttribute('aria-label') === `${name} options`);
       return press(more[0], {

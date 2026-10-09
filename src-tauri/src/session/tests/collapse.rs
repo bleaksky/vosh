@@ -14,7 +14,7 @@
 use super::*;
 use crate::output::{base64_encode, OutputPayload};
 use vosh_prompt::stage::Repeat;
-use vosh_prompt::testkit::{Build, Mud, Options};
+use vosh_prompt::testkit::{Build, Mud, Options, TickOrder};
 use vosh_prompt::PromptShow;
 
 const DODGE: &str = "You dodge Quenby's attack.";
@@ -1055,10 +1055,12 @@ fn in_a_fight_and_attack_lines_decide_which_lines_collapse() {
         lines(&[&hits, &dodges, attacks, battle, tank, &hits, &dodges, battle, tank,])
     );
     // In a fight showing every line: nothing collapses while Char.Combat
-    // names a target, and the hits show on their own out of a fight too,
+    // names a target, or after a hit of yours until the prompt, since a
+    // server that sends its tick after the text sends a fight's first
+    // round before Char.Combat names anyone. The hits show on their own
     // whatever Attack lines says.
     let whole = lines(&[
-        &hit, &hit, &dodges, attacks, battle, tank, &hit, &hit, DODGE, DODGE, battle, tank,
+        &hit, &hit, DODGE, DODGE, attacks, battle, tank, &hit, &hit, DODGE, DODGE, battle, tank,
     ]);
     assert_eq!(rounds(false, false), whole);
     assert_eq!(rounds(false, true), whole);
@@ -1099,6 +1101,75 @@ fn the_round_that_ends_a_fight_is_a_line_of_the_fight() {
         let want = [&[attacks, battle, tank][..], round, &[DEAD, &dodges]].concat();
         assert_eq!(ring, rows(&want), "In a fight on Collapse: {fights}");
     }
+}
+
+/// The ring after a guard starts a fight on you with a round in which
+/// you hit twice and dodge twice, from a game that sends its prompt tick
+/// in `order`, then a round of two dodges once the prompt ended the
+/// first one, then the fight ends and two dodges come out of it.
+fn first_round(order: TickOrder, fights: bool) -> Vec<String> {
+    let (mut p, c) = collapsing(PromptShow::Pinned);
+    p.ui.collapse_fight_lines = fights;
+    let mut session = Session::new((p, c));
+    let mut mud = Mud::playing(Options {
+        compact: true,
+        order,
+        ..Options::new(Build::New)
+    });
+    let round = [DISMEMBERS, DISMEMBERS, DODGE, DODGE].join("\n\r");
+    let mut reads = vec![session.read(&mud.login())];
+    reads.push(session.read(&mud.fight_starts_later(&round)));
+    reads.push(session.read(&mud.pulse_later(&[DODGE, DODGE].join("\n\r"))));
+    reads.push(session.read(&mud.fight_ends_later(DEAD)));
+    reads.push(session.read(&mud.pulse_later(&[DODGE, DODGE].join("\n\r"))));
+    ring_of(&reads)[LOGIN.len()..].to_vec()
+}
+
+#[test]
+fn the_first_round_of_a_fight_is_the_fights_whichever_way_the_tick_comes() {
+    let hit = vosh_protocol::ansi::plain_text(DISMEMBERS.as_bytes());
+    let battle = "A Blackwatch guard has quite a few wounds. ";
+    let tank = "Tester: [===|===|===|---]";
+    let dodges = times(2, DODGE);
+    for order in [TickOrder::First, TickOrder::Middle] {
+        // In a fight showing every line: the first round shows whole,
+        // though a game that sends the tick after the text names the
+        // guard in Char.Combat only after it.
+        assert_eq!(
+            first_round(order, false),
+            rows(&[
+                &hit, &hit, DODGE, DODGE, battle, tank, DODGE, DODGE, battle, tank, DEAD, &dodges
+            ]),
+            "{order:?}"
+        );
+        // In a fight on: the dodges of each round collapse.
+        assert_eq!(
+            first_round(order, true),
+            rows(&[&hit, &hit, &dodges, battle, tank, &dodges, battle, tank, DEAD, &dodges]),
+            "{order:?}"
+        );
+    }
+}
+
+#[test]
+fn a_hit_you_watch_starts_no_fight() {
+    let (mut p, c) = collapsing(PromptShow::Pinned);
+    p.ui.collapse_fight_lines = false;
+    let mut session = Session::new((p, c));
+    let mut mud = Mud::playing(Options {
+        compact: true,
+        order: TickOrder::Middle,
+        ..Options::new(Build::New)
+    });
+    let watched = "Orla's slash \x1b[0;33mDISMEMBERS\x1b[0;0m a Blackwatch guard!";
+    let round = [watched, DODGE, DODGE].join("\n\r");
+    let reads = vec![
+        session.read(&mud.login()),
+        session.read(&mud.pulse_later(&round)),
+    ];
+    let ring = ring_of(&reads)[LOGIN.len()..].to_vec();
+    let hit = vosh_protocol::ansi::plain_text(watched.as_bytes());
+    assert_eq!(ring, rows(&[&hit, &times(2, DODGE)]));
 }
 
 #[test]

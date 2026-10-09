@@ -12,7 +12,7 @@ import { readPanelGameFace, usePanelFaceVersion } from './panelFace';
 import { usePaneText } from './paneTextSize';
 import { textCols, vitalsTextLines, type PieceCell, type TextLine } from './vitalsTextFit';
 
-// The Text style (Vitals Styles Q7 to Q9): your vitals text, which the
+// The Text style: your vitals text, which the
 // session renders with your prompt's codes and pushes while this footer
 // watches it, at the footer's width in terminal cells. It draws in the
 // game face at your panel size, in the colors your pinned prompt takes

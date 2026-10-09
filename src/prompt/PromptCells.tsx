@@ -2,14 +2,15 @@ import type { CSSProperties } from 'react';
 import { bandRuns, decorationLine, type BandEnv } from '../terminal/bandCells';
 import { contrast, parseHex } from '../theme/color';
 import { sampleCut } from './cardRules';
+import { VisuallyHidden } from '../ui';
 import type { Cell } from '../terminal/sgrCells';
 
 // One row of terminal text inside the prompt card: a prompt line in the
-// candidate box, or a preset's sample in the start list. Every character
-// sits on its own cell, `cellW` apart, in the colors the renderer in use
-// draws, so a mark under a value lines up with it whatever font draws a
-// fallback glyph. The card sets this text in the terminal's face at 13 px
-// on 17.5 px rows, as the boards do (src/lib/useCellWidth.ts).
+// candidate box, or a preset's sample in the start list. Every
+// character sits on its own cell, `cellW` apart, in the colors the
+// renderer in use draws, so a mark under a value lines up with it
+// whatever font draws a fallback glyph. The card sets this text in the
+// terminal's face at 13 px on 17.5 px rows (src/lib/useCellWidth.ts).
 
 /** A span of cells to mark: the selection token, or the warn ring of a
  *  run Vosh cannot read. */
@@ -24,22 +25,21 @@ interface CellLineProps {
   env: BandEnv;
   cellW: number;
   /** The most cells a row shows whole. A row past it ends on an
-   *  ellipsis two cells short of it, where the boards' sample column cuts
-   *  a line that does not fit: the ellipsis needs its cell and a hair
-   *  more. */
+   *  ellipsis two cells short of it, where a sample column cuts a line
+   *  that does not fit: the ellipsis needs its cell and a hair more. */
   limit?: number;
-  /** A column the row is cut to as the boards' samples are, in px: whole
-   *  when it fits, else ending on an ellipsis, and as wide as the column
-   *  (see sampleCut). It takes the place of `limit`. */
+  /** A column the row is cut to, in px: whole when it fits, else ending
+   *  on an ellipsis, and as wide as the column (see sampleCut). It
+   *  takes the place of `limit`. */
   column?: number;
   marks?: readonly CellMark[];
   className?: string;
   style?: CSSProperties;
 }
 
-/** The ratio under which a color reads too dim on the selection token, so
- *  a marked value takes the selection text, as the two 60s the game draws
- *  in 256 color 240 do on P3. */
+/** The ratio under which a color reads too dim on the selection token,
+ *  so a marked value takes the selection text, as the two 60s the game
+ *  draws in 256 color 240 do. */
 const MARKED_MIN_CONTRAST = 3;
 
 function inMark(marks: readonly CellMark[], col: number): CellMark | null {
@@ -109,7 +109,7 @@ export function CellLine({
       className={['pc-cells', className].filter(Boolean).join(' ')}
       style={{ width: cut ? cut.width : shown * cellW, ...style }}
     >
-      <span className="st-visually-hidden">{text}</span>
+      <VisuallyHidden>{text}</VisuallyHidden>
       {marks.map((mark) => (
         <span
           key={`${mark.from}-${mark.to}`}

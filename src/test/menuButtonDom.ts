@@ -5,7 +5,7 @@ import { FakeDocument, FakeElement, FakeNode, findAll } from './fakeDom';
 // Mounts a menu button of the prompt card (MenuButton) with React DOM on
 // the stand in DOM (fakeDom.ts), with the card's own menu. The stand in
 // learns here the few calls the menu makes beyond what React DOM needs:
-// the button's box and the menu's height to place it, contains for a
+// the button's box and the menu's size to place it, contains for a
 // press outside, isConnected for handing focus back, and the selector
 // the menu finds its items with. The DOM sends no events, so a test
 // calls React's handlers, and a press stands in for Enter and Space,
@@ -13,8 +13,8 @@ import { FakeDocument, FakeElement, FakeNode, findAll } from './fakeDom';
 
 type Handler = (e?: unknown) => void;
 
-const ITEMS =
-  '[role="menuitem"]:not(:disabled),[role="menuitemradio"]:not(:disabled),[role="menuitemcheckbox"]:not(:disabled)';
+// The selector MenuSurface finds its rows with.
+const ITEMS = '[role^="menuitem"]:not([aria-disabled="true"]):not(:disabled)';
 
 const ITEM_ROLES = ['menuitem', 'menuitemradio', 'menuitemcheckbox'];
 
@@ -28,10 +28,13 @@ export const BUTTON = { left: 200, top: 700, right: 290, bottom: 728 };
 /** A menu's height: 30 a row and 6 above and below. */
 export const menuHeight = (rows: number) => rows * 30 + 12;
 
+/** A menu's width, the one menu's narrowest, which its short rows take. */
+export const MENU_WIDTH = 232;
+
 /** How many check marks an item of the menu draws, 1 for the current
  *  choice and 0 for the rest. */
 export function checkMarks(item: FakeElement): number {
-  return findAll(item, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'pane-menu-check')
+  return findAll(item, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'menu-check')
     .length;
 }
 
@@ -99,6 +102,10 @@ export function menuButtonDom() {
       get(this: FakeElement) {
         return menuHeight(findAll(this, isItem).length);
       },
+    });
+    Object.defineProperty(FakeElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get: () => MENU_WIDTH,
     });
   };
 
@@ -174,7 +181,8 @@ export function menuButtonDom() {
     });
     const [button] = findAll(container, (el) => el.nodeName === 'BUTTON' && which(el));
     if (!button) throw new Error('no button');
-    const menu = () => findAll(container, (el) => el.getAttribute('role') === 'menu')[0] ?? null;
+    // The menu renders into the body, apart from the button.
+    const menu = () => findAll(doc.body, (el) => el.getAttribute('role') === 'menu')[0] ?? null;
     const items = () => {
       const shown = menu();
       if (!shown) throw new Error('the menu is shut');

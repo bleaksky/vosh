@@ -1,8 +1,10 @@
 //! What the shared catalog wizard does for its two commands. The preview
 //! plans the move from the profile files and writes nothing. The apply
 //! step saves the journal, then writes catalog.toml, loadouts.toml, and
-//! each profile file without its aliases, triggers, and macros.
+//! each profile file without its aliases, triggers, macros and preset
+//! edits.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use tauri::AppHandle;
@@ -351,11 +353,19 @@ pub(crate) async fn apply_migration(
             ItemPayload::Alias { item } => catalog.aliases.push(item.clone()),
             ItemPayload::Trigger { item } => catalog.triggers.push(item.clone()),
             ItemPayload::Macro { item } => catalog.macros.push(item.clone()),
+            ItemPayload::Preset { item } => {
+                catalog
+                    .preset_edits
+                    .insert(conflict.name.clone(), item.clone());
+            }
         }
     }
     // A preset macro comes over on, and is held off while a macro of yours
-    // you kept on its key keeps the key, as after every macro change.
-    hold_taken_keys(&mut catalog.macros);
+    // you kept on its key keeps the key, as after every macro change. The
+    // file stores the hold with no group left out, and each character
+    // lays the groups it keeps off over it at launch, so a character
+    // whose only key was the preset's keeps it, see `hold_profile_keys`.
+    hold_taken_keys(&mut catalog.macros, &BTreeSet::new());
 
     // Every loadout starts off. An active loadout imposes its groups on
     // every profile, at launch and at every switch, so the loadout of the

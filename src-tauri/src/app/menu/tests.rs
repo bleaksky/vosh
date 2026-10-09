@@ -23,8 +23,10 @@ fn every_accelerator_parses() {
             mods.contains(muda::accelerator::Modifiers::SUPER),
             "{id}: {accel} needs Cmd"
         );
+        // Ctrl belongs to your macros, save beside Cmd for the sessions
+        // toggle, where a macro of yours on the key still wins.
         assert!(
-            !mods.contains(muda::accelerator::Modifiers::CONTROL),
+            id == "sessions-sidebar" || !mods.contains(muda::accelerator::Modifiers::CONTROL),
             "{id}: {accel} takes Ctrl, which belongs to your macros"
         );
     }
@@ -34,6 +36,10 @@ fn every_accelerator_parses() {
 fn the_board_shortcuts_are_all_there() {
     let expect = [
         ("settings", "Cmd+,"),
+        ("settings-automation:timers", "Cmd+Alt+1"),
+        ("settings-automation:aliases", "Cmd+Alt+2"),
+        ("settings-automation:triggers", "Cmd+Alt+3"),
+        ("settings-automation:macros", "Cmd+Alt+4"),
         ("connect", "Cmd+R"),
         ("session-new", "Cmd+T"),
         ("session-close", "Cmd+W"),
@@ -44,7 +50,9 @@ fn the_board_shortcuts_are_all_there() {
         ("find", "Cmd+F"),
         ("palette", "Cmd+K"),
         ("panel", "Cmd+Shift+L"),
+        ("sessions-sidebar", "Ctrl+Cmd+S"),
         ("split", "Cmd+\\"),
+        ("snoop", "Cmd+J"),
         ("help", "Cmd+/"),
     ];
     for (id, accel) in expect {
@@ -60,6 +68,48 @@ fn specs_map_mod_to_cmd() {
     assert_eq!(spec_to_accelerator("Mod++"), "Cmd++");
     assert_eq!(spec_to_accelerator("Mod+Shift+]"), "Cmd+Shift+]");
     assert_eq!(spec_to_accelerator("Mod+Shift+["), "Cmd+Shift+[");
+}
+
+#[test]
+fn show_sessions_binds_ctrl_cmd_s() {
+    // The key AppKit gives a standard Show Sidebar row. The shortcut
+    // file names one key for macOS and one for the rest.
+    use muda::accelerator::{Accelerator, Code, Modifiers};
+    assert_eq!(spec_to_accelerator("Ctrl+Mod+S"), "Ctrl+Cmd+S");
+    let parsed = Accelerator::from_str(accelerator("sessions-sidebar").unwrap()).unwrap();
+    assert_eq!(
+        parsed,
+        Accelerator::new(Some(Modifiers::CONTROL | Modifiers::SUPER), Code::KeyS)
+    );
+}
+
+#[test]
+fn the_settings_keys_bind_cmd_option_and_the_digit_keys() {
+    // Cmd Shift 3 and 4 are the macOS screenshot keys, which never
+    // reach Vosh, so the Settings keys take Option. Option changes
+    // what a digit types, and the menu binds the physical digit key.
+    use muda::accelerator::{Accelerator, Code, Modifiers};
+    for (id, code) in [
+        ("settings-automation:timers", Code::Digit1),
+        ("settings-automation:aliases", Code::Digit2),
+        ("settings-automation:triggers", Code::Digit3),
+        ("settings-automation:macros", Code::Digit4),
+    ] {
+        let parsed = Accelerator::from_str(accelerator(id).unwrap()).unwrap();
+        assert_eq!(
+            parsed,
+            Accelerator::new(Some(Modifiers::SUPER | Modifiers::ALT), code),
+            "{id}"
+        );
+    }
+}
+
+#[test]
+fn every_spec_in_the_file_reaches_the_menu() {
+    // A spec the table cannot read would drop every accelerator at once.
+    let specs: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(SHORTCUTS_JSON).unwrap();
+    assert_eq!(accelerators().len(), specs.len());
 }
 
 #[test]
@@ -146,6 +196,8 @@ fn routes_follow_the_board() {
     // Help opens its own window from wherever you are, so the main
     // window never has to be in front for it.
     assert_eq!(route("help"), Route::OpenHelp);
+    // Get started opens in the main window, so it comes forward first.
+    assert_eq!(route("get-started"), Route::Main { raise: true });
     assert_eq!(route("close-window"), Route::CloseFront);
     // Close session closes Settings or Help in front, as Close window
     // does, and never a game behind them.
@@ -156,10 +208,23 @@ fn routes_follow_the_board() {
     assert_eq!(route("connect"), Route::Main { raise: true });
     assert_eq!(route("panel"), Route::Main { raise: true });
     assert_eq!(route("theme-nord"), Route::Main { raise: false });
+    // A Settings page opens in Settings, so a press from Settings or
+    // Help leaves Settings in front.
+    for id in [
+        "settings-automation:timers",
+        "settings-automation:aliases",
+        "settings-automation:triggers",
+        "settings-automation:macros",
+    ] {
+        assert_eq!(route(id), Route::Main { raise: false }, "{id}");
+    }
     // A step or the sidebar from Settings brings the main window up.
     assert_eq!(route("session-next"), Route::Main { raise: true });
     assert_eq!(route("session-previous"), Route::Main { raise: true });
     assert_eq!(route("sessions-sidebar"), Route::Main { raise: true });
+    // Go to snoop runs in the main window as Split terminal does, which
+    // brings the snoop window forward when the snoops sit there.
+    assert_eq!(route("snoop"), route("split"));
 }
 
 #[test]
@@ -182,6 +247,7 @@ fn check_rows_are_the_toggles_and_themes() {
         "theme",
         "session-next",
         "session-previous",
+        "snoop",
     ] {
         assert!(!is_check_id(id), "{id}");
     }
@@ -238,6 +304,7 @@ fn menu_state() -> MenuState {
         theme: "nord".to_string(),
         sessions: 1,
         sessions_shown: false,
+        snoops: 0,
     }
 }
 
@@ -247,6 +314,32 @@ fn staff_queues_waits_for_the_offer() {
     assert!(!staff_listed(&state));
     state.panes[0].offered = true;
     assert!(staff_listed(&state));
+}
+
+#[test]
+fn go_to_snoop_shows_while_a_snoop_is_open() {
+    let mut state = menu_state();
+    assert!(!snoop_listed(&state));
+    state.snoops = 1;
+    assert!(snoop_listed(&state));
+}
+
+#[test]
+fn a_page_without_snoops_reads_none() {
+    // A snapshot from a page before snoops still reads, with no snoop.
+    let json = r#"{
+        "connected": false,
+        "worldName": null,
+        "panelOpen": true,
+        "splitOpen": false,
+        "panes": [],
+        "themes": [],
+        "theme": "nord",
+        "sessions": 1,
+        "sessionsShown": false
+    }"#;
+    let state: MenuState = serde_json::from_str(json).unwrap();
+    assert_eq!(state.snoops, 0);
 }
 
 #[test]
@@ -272,7 +365,8 @@ fn state_reads_camel_case() {
         "themes": [{ "id": "nord", "label": "Nord", "custom": false }],
         "theme": "nord",
         "sessions": 2,
-        "sessionsShown": true
+        "sessionsShown": true,
+        "snoops": 3
     }"#;
     let state: MenuState = serde_json::from_str(json).unwrap();
     assert!(state.connected);
@@ -283,4 +377,5 @@ fn state_reads_camel_case() {
     assert_eq!(state.themes[0].label, "Nord");
     assert_eq!(state.sessions, 2);
     assert!(state.sessions_shown);
+    assert_eq!(state.snoops, 3);
 }

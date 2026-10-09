@@ -1,7 +1,6 @@
-//! The macOS menu bar (the approved `MenuBar` board). Rust owns the menu,
-//! so it is there before the page loads and survives a page reload, and
-//! Settings, Help, Copy, Close session and Close window work whichever
-//! window is in front.
+//! The macOS menu bar. Rust owns the menu, so it is there before the page
+//! loads and survives a page reload, and Settings, Help, Copy, Close
+//! session and Close window work whichever window is in front.
 //!
 //! Vosh commands reach the main window as `vosh://app-menu` with the
 //! palette entry id as the payload, and shell/useAppCommands.ts runs them
@@ -41,6 +40,10 @@ pub(crate) struct MenuState {
     pub(crate) sessions: usize,
     /// The sessions sidebar shows in the main window.
     pub(crate) sessions_shown: bool,
+    /// How many snoop tabs the selected session has, live or ended. View
+    /// lists Go to snoop while there is one.
+    #[serde(default)]
+    pub(crate) snoops: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -81,9 +84,8 @@ enum SessionRow {
     Separator,
 }
 
-/// The Session menu after Connect to, in the order board 4 of the
-/// Sessions review draws it. Disconnect follows on its own while a
-/// session is connected.
+/// The Session menu after Connect to, in the order it shows them.
+/// Disconnect follows on its own while a session is connected.
 #[cfg(target_os = "macos")]
 const SESSION_ROWS: [SessionRow; 10] = [
     SessionRow::Item("session-edit", "Edit connection…"),
@@ -100,7 +102,7 @@ const SESSION_ROWS: [SessionRow; 10] = [
 
 /// Whether the rows that move between sessions take a click: Next
 /// session, Previous session and Show sessions. One session has nowhere
-/// to step and no sidebar, so they show dimmed (Sessions Q12).
+/// to step and no sidebar, so they show dimmed.
 #[cfg(target_os = "macos")]
 fn between_sessions(state: &MenuState) -> bool {
     state.sessions >= 2
@@ -124,7 +126,8 @@ const PANE_ROWS: [(&str, &str); 5] = [
 ];
 
 /// A palette spec like `Mod+Shift+L` as a menu accelerator. Mod is Cmd,
-/// because Ctrl belongs to your macros on macOS.
+/// because Ctrl belongs to your macros on macOS. A spec that names Ctrl
+/// beside Mod, such as `Ctrl+Mod+S`, keeps it.
 #[cfg(target_os = "macos")]
 fn spec_to_accelerator(spec: &str) -> String {
     if spec == "Mod++" {
@@ -142,18 +145,43 @@ fn spec_to_accelerator(spec: &str) -> String {
         .join("+")
 }
 
+/// A shortcut spec in appShortcuts.json: one for every platform, or
+/// one for macOS and one for Windows and Linux. The menu bar is macOS
+/// only, so it reads the macOS one.
+#[cfg(target_os = "macos")]
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ShortcutSpec {
+    Every(String),
+    PerPlatform {
+        mac: String,
+        #[allow(dead_code)]
+        other: String,
+    },
+}
+
+#[cfg(target_os = "macos")]
+impl ShortcutSpec {
+    fn mac(&self) -> &str {
+        match self {
+            ShortcutSpec::Every(spec) => spec,
+            ShortcutSpec::PerPlatform { mac, .. } => mac,
+        }
+    }
+}
+
 /// Every command id with a shortcut, and its accelerator.
 #[cfg(target_os = "macos")]
 fn accelerators() -> &'static std::collections::BTreeMap<String, String> {
     static TABLE: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
         std::sync::OnceLock::new();
     TABLE.get_or_init(|| {
-        let specs: std::collections::BTreeMap<String, String> =
+        let specs: std::collections::BTreeMap<String, ShortcutSpec> =
             serde_json::from_str(SHORTCUTS_JSON).unwrap_or_default();
         specs
             .into_iter()
             .map(|(id, spec)| {
-                let accel = spec_to_accelerator(&spec);
+                let accel = spec_to_accelerator(spec.mac());
                 (id, accel)
             })
             .collect()
@@ -176,12 +204,13 @@ enum Route {
     /// Close what is in front. Settings and Help close. In the main
     /// window the command runs, Close window or Close session, and asks
     /// first while a session it ends is connected. So Close session never
-    /// closes a game from Settings (Sessions Q11).
+    /// closes a game from Settings.
     CloseFront,
     /// Copy in the window in front.
     Copy,
     /// Find in the window in front: settings search in Settings, help
-    /// search in Help, the find bar in the main window.
+    /// search in Help, the tab in front in a snoop window, the find bar
+    /// in the main window.
     Find,
     /// Run in the main window, raising it first unless `raise` is off.
     Main { raise: bool },
@@ -193,7 +222,7 @@ enum Route {
 
 /// Whether Quit hands the main window the question before it quits, by
 /// how many sessions are connected. Two or more ask, so one keeps the
-/// Quit it had before sessions (Sessions Q13).
+/// Quit it had before sessions.
 #[cfg(target_os = "macos")]
 const fn quit_asks(connected: usize) -> bool {
     connected >= 2
@@ -212,9 +241,12 @@ fn route(id: &str) -> Route {
         "close-window" | "session-close" => Route::CloseFront,
         "copy" => Route::Copy,
         "find" => Route::Find,
-        // A theme repaints every window, so picking one from Settings
-        // leaves Settings in front.
-        _ if id.starts_with("theme-") => Route::Main { raise: false },
+        // A theme repaints every window, and a Settings page opens in
+        // Settings, so picking either from Settings leaves Settings in
+        // front.
+        _ if id.starts_with("theme-") || id.starts_with("settings-") => {
+            Route::Main { raise: false }
+        }
         _ => Route::Main { raise: true },
     }
 }
@@ -242,6 +274,12 @@ fn connect_label(world: Option<&str>) -> String {
 #[cfg(target_os = "macos")]
 fn staff_listed(state: &MenuState) -> bool {
     state.panes.iter().any(|p| p.pane == "imm" && p.offered)
+}
+
+/// Whether View lists Go to snoop, after Split terminal.
+#[cfg(target_os = "macos")]
+fn snoop_listed(state: &MenuState) -> bool {
+    state.snoops > 0
 }
 
 /// A row in Choose theme.

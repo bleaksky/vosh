@@ -79,7 +79,7 @@ const BOARD_BOX = { width: 494, height: 191 };
 function cellsOf(html: string): string[] {
   const out: string[] = [];
   const cell =
-    /<li class="pane-affect pane-affect-(\w+)[^"]*"[^>]*>(?:<span class="pane-affect-mark is-(\w+)"[^>]*><\/span>)?<span class="pane-affect-hours([^"]*)"[^>]*>([^<]*)<\/span><span class="pane-affect-name">([^<]*)<span class="pane-sr">([^<]*)<\/span>/g;
+    /<li class="pane-affect pane-affect-(\w+)[^"]*"[^>]*>(?:<span class="pane-affect-mark is-(\w+)"[^>]*><\/span>)?<span class="pane-affect-hours([^"]*)"[^>]*>([^<]*)<\/span><span class="pane-affect-name">([^<]*)<span class="visually-hidden">([^<]*)<\/span>/g;
   for (const m of html.matchAll(cell)) {
     const tone = m[3].trim().replace('is-', '');
     out.push([m[2] ?? '.', `${m[4]}${tone ? `(${tone})` : ''}`, m[5], m[6]].join(' ').trim());

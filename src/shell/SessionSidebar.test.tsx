@@ -8,8 +8,7 @@ import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import type { SessionLine } from './sessionLine';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 
-// The sessions sidebar of boards 2 and 3 of the Sessions review, with
-// the two line rows of the Sessions Sidebar review. Each row reads its
+// The sessions sidebar, with its two line rows. Each row reads its
 // session as sessionLabel names it, the selected one marked current, a
 // port that is not the world port in quiet meta, and a row with neither
 // a name nor a character named by its world with the port kept apart.
@@ -19,6 +18,13 @@ import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 /** What the row store says of each session, by id. A session it names
  *  nothing for reads quiet. */
 const states = vi.hoisted(() => new Map<number, Partial<SessionRowState>>());
+
+/** How many snoops run in each session, by id, faked. */
+const snoops = vi.hoisted(() => new Map<number, number>());
+
+vi.mock('../stores/session/snoopStore', () => ({
+  useLiveSnoops: (session: number) => snoops.get(session) ?? 0,
+}));
 
 /** Whether you hold ⌘, faked. */
 const mod = vi.hoisted(() => ({ held: false }));
@@ -88,7 +94,6 @@ function draw(rows: SessionRow[], selected: number): string {
       onSelect={() => undefined}
       onNewSession={() => undefined}
       onClose={() => undefined}
-      onHide={() => undefined}
       onCaret={() => undefined}
       onRename={() => undefined}
       onEditConnection={() => undefined}
@@ -102,9 +107,14 @@ function draw(rows: SessionRow[], selected: number): string {
 const buttons = (html: string) =>
   html.match(/<button[^>]*class="shell-sessions-row[^"]*"[^]*?<\/button>/g) ?? [];
 
+/** The words in a piece of markup, hidden ones too, as a screen reader
+ *  gathers them. */
+const words = (html: string) => html.replace(/<[^>]*>/g, '');
+
 afterEach(() => {
   states.clear();
   lines.clear();
+  snoops.clear();
   mod.held = false;
   vi.unstubAllGlobals();
 });
@@ -116,20 +126,25 @@ describe('the sessions sidebar', () => {
     row(3, { port: 1825 }),
   ];
 
-  it('holds New session and Hide sessions over SESSIONS and its count', () => {
+  it('holds New session over SESSIONS and its count, and no Hide sessions of its own', () => {
     const html = draw(rows, 1);
     expect(html).toContain('<aside class="shell-sessions st-controls" aria-label="Sessions">');
     expect(html).toContain('<div class="shell-sessions-top" data-tauri-drag-region="true">');
-    expect(html).toContain('aria-label="New session"');
-    expect(html).toContain('aria-label="Hide sessions"');
+    expect(html).toMatch(/aria-label="New session" aria-keyshortcuts="(Meta|Control)\+T"/);
+    expect(html).not.toContain('Hide sessions');
     expect(html).toContain(
-      '<h2 class="shell-sessions-head">Sessions<span class="shell-sessions-total">3</span></h2>',
+      '<h2 class="shell-sessions-head">Sessions<span class="visually-hidden">, </span><span class="shell-sessions-total">3</span></h2>',
     );
   });
 
   it('reads Sessions 5 with five open, as board 01 draws it', () => {
     const five = [...rows, row(4, { name: 'Errands' }), row(5, { port: 1825, connected: false })];
-    expect(draw(five, 1)).toContain('Sessions<span class="shell-sessions-total">5</span></h2>');
+    expect(draw(five, 1)).toContain('<span class="shell-sessions-total">5</span></h2>');
+  });
+
+  it('reads the heading as Sessions, 3, the comma hidden so it draws as before', () => {
+    const head = draw(rows, 1).match(/<h2[^>]*>(.*?)<\/h2>/)?.[1] ?? '';
+    expect(words(head)).toBe('Sessions, 3');
   });
 
   it('lists every session in order, the selected one current', () => {
@@ -188,16 +203,22 @@ describe('the sessions sidebar', () => {
     lines.set(3, { who: 'Orla', text: 'The Bank of Aabahran', health: null, low: false });
     const [tolliver, orla, build] = buttons(draw(rows, 1));
     expect(tolliver).toMatch(
-      /<span class="shell-sessions-line">Thickening Woods<\/span><span class="shell-sessions-health">100%<\/span><\/button>$/,
+      /<span class="shell-sessions-line">Thickening Woods<\/span><span class="shell-sessions-health"><span class="visually-hidden">Health <\/span>100%<\/span><\/button>$/,
     );
     expect(orla).toContain(
-      '<span class="shell-sessions-line">Fighting a Blackwatch guard</span><span class="shell-sessions-health is-low">18%</span>',
+      '<span class="shell-sessions-line">Fighting a Blackwatch guard</span><span class="shell-sessions-health is-low"><span class="visually-hidden">Health </span>18%</span>',
     );
     // With no health the line takes the right column too, and a session
     // you named starts it with its character.
     expect(build).toMatch(
       /<span class="shell-sessions-line is-wide"><span class="shell-sessions-who">Orla<\/span> · The Bank of Aabahran<\/span><\/button>$/,
     );
+  });
+
+  it('says Health before the figure, so a row never reads a bare percent', () => {
+    lines.set(1, { who: null, text: 'Thickening Woods', health: 94, low: false });
+    const tolliver = buttons(draw(rows, 1))[0] ?? '';
+    expect(words(tolliver)).toContain('Thickening WoodsHealth 94%');
   });
 
   it('counts what waits on a row behind in the pill, and brightens it for new lines', () => {
@@ -214,6 +235,22 @@ describe('the sessions sidebar', () => {
     );
     expect(build).toContain('class="shell-sessions-row is-new"');
     expect(build).not.toContain('shell-sessions-count');
+  });
+
+  it('shows the eye and the count of live snoops before the waiting count, as Snoop board 05 draws it', () => {
+    snoops.set(1, 2);
+    snoops.set(2, 1);
+    states.set(2, { waiting: ['preset:alert_tells'] });
+    const [tolliver, orla, build] = buttons(draw(rows, 1));
+    const eye = (words: string) =>
+      `<span class="shell-sessions-snoops" role="img" aria-label="${words}"><svg width="12" height="12"`;
+    expect(tolliver).toContain(eye('2 snoops'));
+    expect(tolliver).toContain('</svg><span>2</span></span></span>');
+    expect(orla).toContain(eye('1 snoop'));
+    expect(orla).toContain(
+      '</svg><span>1</span></span><span class="shell-sessions-count" role="img" aria-label="1 waiting">1</span></span>',
+    );
+    expect(build).not.toContain('shell-sessions-snoops');
   });
 
   it('stops the count at 9+, and says the whole of it', () => {
@@ -237,14 +274,12 @@ describe('the sessions sidebar', () => {
     const [live, login, dialing, failed, off] = buttons(draw(marked, 1));
     const mark = (kind: string, words: string) =>
       `"><span class="shell-sessions-mark is-${kind}" role="img" aria-label="${words}">`;
-    expect(live).toContain(mark('live', 'Playing') + '<span class="shell-sessions-dot"></span>');
+    expect(live).toContain(mark('live', 'Playing') + '<span class="dot is-success"></span>');
     expect(login).toContain(mark('hand', 'Logging in') + '<svg');
     expect(dialing).toContain(mark('spinner', 'Connecting') + '<svg');
     expect(failed).toContain(mark('triangle', 'Connect again') + '<svg');
     expect(off).toContain('class="shell-sessions-row is-off"');
-    expect(off).toContain(
-      mark('off', 'Not connected') + '<span class="shell-sessions-dot"></span>',
-    );
+    expect(off).toContain(mark('off', 'Not connected') + '<span class="dot is-off"></span>');
     expect(off).toContain('<span class="shell-sessions-port">1825</span>');
   });
 
@@ -263,7 +298,7 @@ describe('the sessions sidebar', () => {
     const numbered = buttons(draw(many, 1));
     numbered.slice(0, 9).forEach((button, i) => {
       expect(button).toContain(
-        `<span class="shell-sessions-end"><span class="shell-sessions-key">⌘${i + 1}</span></span>`,
+        `<span class="shell-sessions-end"><span class="shell-sessions-key" aria-hidden="true">⌘${i + 1}</span></span>`,
       );
     });
     // Orla's count gives way to her key, and her port stays.
@@ -271,13 +306,22 @@ describe('the sessions sidebar', () => {
     expect(numbered[1]).toContain('<span class="shell-sessions-port">1825</span>');
     // The tenth row has no key.
     expect(numbered[9]).toContain('<span class="shell-sessions-end"></span>');
+    // Held or not, the first nine rows name their keys for a screen
+    // reader, and the tenth names none.
+    for (const drawn of [quiet, numbered]) {
+      drawn.slice(0, 9).forEach((button, i) => {
+        expect(button).toContain(`aria-keyshortcuts="Meta+${i + 1}"`);
+      });
+      expect(drawn[9]).not.toContain('aria-keyshortcuts');
+    }
   });
 
   it('names the key with Ctrl on Windows and Linux', () => {
     vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' });
     mod.held = true;
     const [tolliver] = buttons(draw(rows, 1));
-    expect(tolliver).toContain('<span class="shell-sessions-key">Ctrl+1</span>');
+    expect(tolliver).toContain('<span class="shell-sessions-key" aria-hidden="true">Ctrl+1</span>');
+    expect(tolliver).toContain('aria-keyshortcuts="Control+1"');
   });
 });
 
@@ -339,6 +383,9 @@ describe('renaming and moving a session in its row', () => {
     el.select = () => undefined;
     // The list scrolls, and a dragged row asks for frames.
     el.scrollTop = 0;
+    // The row menu measures itself as it opens, 232 wide by the recipe.
+    el.offsetWidth = 232;
+    el.offsetHeight = 0;
     vi.stubGlobal('requestAnimationFrame', () => 0);
     el.contains = function (this: FakeNode, other: FakeNode | null): boolean {
       for (let n = other; n; n = n.parentNode) if (n === this) return true;
@@ -359,7 +406,7 @@ describe('renaming and moving a session in its row', () => {
     for (const cleanup of cleanups.splice(0)) await cleanup();
   });
 
-  async function mount(shown = rows, selected = 1) {
+  async function mount(shown = rows, selected = 1, takeFocus = false) {
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     const root = createRoot(container as unknown as HTMLElement);
@@ -379,8 +426,8 @@ describe('renaming and moving a session in its row', () => {
           ref: handle,
           rows: shown,
           selected,
+          takeFocus,
           onNewSession: () => undefined,
-          onHide: () => undefined,
           ...calls,
         }),
       );
@@ -526,6 +573,86 @@ describe('renaming and moving a session in its row', () => {
     expect(m.field()).toBeNull();
   });
 
+  describe('Up and Down', () => {
+    const three = [...rows, row(3, { character: 'Maren' })];
+    const rowsOf = (m: Awaited<ReturnType<typeof mount>>) =>
+      findAll(m.container, hasClass('shell-sessions-row'));
+    /** Press `key` on whichever row has the keyboard, and say whether
+     *  the row kept the key from the page. */
+    const key = async (
+      m: Awaited<ReturnType<typeof mount>>,
+      key: string,
+      mods: Partial<Record<'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey', boolean>> = {},
+    ) => {
+      let prevented = false;
+      await m.run(() =>
+        on(doc.activeElement!).onKeyDown({
+          key,
+          ...mods,
+          nativeEvent: { isComposing: false },
+          preventDefault: () => (prevented = true),
+          stopPropagation() {},
+        }),
+      );
+      return prevented;
+    };
+
+    it('move the keyboard between rows and select nothing, as board 4 says', async () => {
+      const m = await mount(three);
+      await m.run(() => rowsOf(m)[0].focus());
+      expect(await key(m, 'ArrowDown')).toBe(true);
+      expect(doc.activeElement).toBe(rowsOf(m)[1]);
+      await key(m, 'ArrowDown');
+      expect(doc.activeElement).toBe(rowsOf(m)[2]);
+      await key(m, 'ArrowUp');
+      expect(doc.activeElement).toBe(rowsOf(m)[1]);
+      expect(m.calls.onSelect).not.toHaveBeenCalled();
+      expect(m.calls.onCaret).not.toHaveBeenCalled();
+    });
+
+    it('stop at either end', async () => {
+      const m = await mount(three);
+      await m.run(() => rowsOf(m)[0].focus());
+      await key(m, 'ArrowUp');
+      expect(doc.activeElement).toBe(rowsOf(m)[0]);
+      await m.run(() => rowsOf(m)[2].focus());
+      await key(m, 'ArrowDown');
+      expect(doc.activeElement).toBe(rowsOf(m)[2]);
+    });
+
+    it('leave Return and F2 to rename the row they reached', async () => {
+      for (const finish of ['Enter', 'F2']) {
+        const m = await mount(three);
+        await m.run(() => rowsOf(m)[0].focus());
+        await key(m, 'ArrowDown');
+        await key(m, 'ArrowDown');
+        await key(m, finish);
+        expect(m.calls.onSelect).toHaveBeenCalledWith(3);
+        expect(m.field()?.value).toBe('Maren');
+        await m.escape();
+        for (const cleanup of cleanups.splice(0)) await cleanup();
+      }
+    });
+
+    it('stay put when the next row is being renamed', async () => {
+      const m = await mount(three);
+      await m.rename(2);
+      await m.run(() => rowsOf(m)[0].focus());
+      await key(m, 'ArrowDown');
+      expect(doc.activeElement).toBe(rowsOf(m)[0]);
+    });
+
+    it('leave modified arrows alone', async () => {
+      for (const mod of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'] as const) {
+        const m = await mount(three);
+        await m.run(() => rowsOf(m)[0].focus());
+        expect(await key(m, 'ArrowDown', { [mod]: true })).toBe(false);
+        expect(doc.activeElement).toBe(rowsOf(m)[0]);
+        for (const cleanup of cleanups.splice(0)) await cleanup();
+      }
+    });
+  });
+
   it('says how to finish on line two while the field is open, and keeps the mark', async () => {
     const m = await mount();
     await m.rename(2);
@@ -563,7 +690,7 @@ describe('renaming and moving a session in its row', () => {
     await m.run(() => second.focus());
     await open();
     expect(rename().textContent).toBe('Rename session…F2');
-    expect(findAll(rename(), hasClass('shell-menu-kbd'))[0]?.textContent).toBe('F2');
+    expect(findAll(rename(), hasClass('menu-keys'))[0]?.textContent).toBe('F2');
   });
 
   it('opens the row menu at the pointer on a right click, as board 9 draws it', async () => {
@@ -581,6 +708,7 @@ describe('renaming and moving a session in its row', () => {
     expect(prevented).toBe(true);
     const menu = only(doc.body, 'the row menu', (el) => el.getAttribute('role') === 'menu');
     expect(menu.getAttribute('aria-label')).toBe('Session options');
+    expect([menu.style.left, menu.style.top]).toEqual(['146px', '120px']);
     const items = findAll(menu, (el) => el.getAttribute('role') === 'menuitem');
     expect(items.map((el) => el.textContent)).toEqual([
       'Rename session…',
@@ -588,7 +716,7 @@ describe('renaming and moving a session in its row', () => {
       'Disconnect',
       'Close session',
     ]);
-    expect(findAll(menu, hasClass('shell-menu-sep'))).toHaveLength(1);
+    expect(findAll(menu, hasClass('menu-sep'))).toHaveLength(1);
 
     // Rename session… closes the menu, brings the row to the front and
     // turns its name into a field.
@@ -688,6 +816,28 @@ describe('renaming and moving a session in its row', () => {
     expect(m.calls.onSelect).not.toHaveBeenCalled();
     expect(findAll(m.container, hasClass('shell-sessions-drop'))).toHaveLength(0);
     expect(findAll(m.container, hasClass('is-lifted'))).toHaveLength(0);
+  });
+
+  it('has New session alone at its top, since the toggle hides it', async () => {
+    const m = await mount();
+    const top = only(m.container, 'the top', hasClass('shell-sessions-actions'));
+    const labels = findAll(top, (el) => el.nodeName === 'BUTTON').map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).toEqual(['New session']);
+  });
+
+  it('takes the keyboard on the selected row as it slides in over the terminal', async () => {
+    doc.activeElement = null;
+    const m = await mount(rows, 2, true);
+    const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
+    expect(doc.activeElement).toBe(second);
+  });
+
+  it('leaves the keyboard where it was in its column', async () => {
+    doc.activeElement = null;
+    await mount(rows, 2);
+    expect(doc.activeElement).toBeNull();
   });
 
   it('keeps a press that never moves a click, and a row let go in its place where it was', async () => {

@@ -10,20 +10,24 @@ import {
   type ReactNode,
 } from 'react';
 import { promptRenderMany, type PromptRendered } from '../../ipc/promptDesign';
+import { type UiConfig, type UiFields } from '../../ipc/uiConfig';
 import {
   shownStyle,
   VITALS_STYLES,
   vitalsOptionsOf,
-  type UiConfig,
-  type UiFields,
   type VitalsOptions,
   type VitalsStyle,
-} from '../../ipc/uiConfig';
+} from '../../ipc/uiConfigVitals';
 import { drawnVitalsText } from '../../ipc/vitals';
 import { isMacPlatform } from '../../lib/shortcuts';
 import { panelWidthFloor } from '../../panel/paneLayout';
 import { panelWidthOf, usePanelLayout } from '../../panel/panelLayoutStore';
-import { readPanelFace, textWidth, usePanelFaceVersion } from '../../panel/panelFace';
+import {
+  readPanelFace,
+  readPanelGameFace,
+  textWidth,
+  usePanelFaceVersion,
+} from '../../panel/panelFace';
 import { panelFontFamily } from '../../panel/panelFont';
 import { resolvePanelSize } from '../../panel/panelSize';
 import { PaneTextSizeContext } from '../../panel/paneTextSize';
@@ -34,27 +38,27 @@ import { textRows, type TextLine } from '../../panel/vitalsTextFit';
 import {
   shownRows,
   vitalInks,
+  vitalsFlame,
   vitalsOn,
   vitalsStylePick,
   VITALS_STYLE_LABELS,
   type VitalInks,
 } from '../../panel/vitalsView';
 import type { MeasureText } from '../../panel/vitalsLedgerFit';
-import type { Vitals } from '../../stores/gmcp/vitalsStore';
+import type { VitalSample, Vitals } from '../../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../../terminal/bandCells';
 import { playPalette, themeTokens } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
 import { arrowPick, galleryCaption, tileFit, type GalleryVitals } from './vitalsStyles';
 import { measurable, useGalleryVitals, usePanelText } from './usePanelVitals';
 
-// The Style gallery under Settings, Layout, Vitals (board 2 of the
-// Vitals Styles review, Q17). Six tiles, two a row, as the theme
-// gallery lays its tiles. Each tile draws the real footer of its style
-// at your panel's width, in your panel font and size, with your
-// Customize vitals choices, and scales it to the tile, down to three
-// quarters. A panel too wide for that draws at the widest width that
-// allows. The tiles leave your opponent out and keep their height, so
-// the gallery never jumps in a fight.
+// The Style gallery under Settings, Layout, Vitals. Six tiles, two a
+// row, as the theme gallery lays its tiles. Each tile draws the real
+// footer of its style at your panel's width, in your panel font and
+// size, with your Customize vitals choices, and scales it to the tile,
+// down to three quarters. A panel too wide for that draws at the widest
+// width that allows. The tiles leave your opponent out and keep their
+// height, so the gallery never jumps in a fight.
 //
 // The numbers are your own, from the snapshot Settings asks for as it
 // opens, or the prompt catalog's samples, 1020, 800 and 930, while no
@@ -138,33 +142,39 @@ export function VitalsGallery({
   const family = panelFontFamily(config.panel_font);
   const faceVersion = usePanelFaceVersion();
   const data = useGalleryVitals();
-  const inks = useMemo(
-    () =>
-      vitalInks(
-        config.vitals_colors,
-        playPalette(theme, config.fit_game_colors, config.color_vision),
-        themeTokens(theme),
-      ),
-    [config.vitals_colors, config.fit_game_colors, config.color_vision, theme],
+  const palette = useMemo(
+    () => playPalette(theme, config.fit_game_colors, config.color_vision),
+    [config.fit_game_colors, config.color_vision, theme],
   );
+  const inks = useMemo(
+    () => vitalInks(config.vitals_colors, palette, themeTokens(theme)),
+    [config.vitals_colors, palette, theme],
+  );
+  const flame = useMemo(() => vitalsFlame(palette, themeTokens(theme)), [palette, theme]);
   const { cols, env } = usePanelText(config, width);
   const text = useGalleryText(drawnVitalsText(config), data, cols);
   const face = family === null ? readPanelFace() : measurable(family);
   const measure: MeasureText = (t, px, weight) =>
     textWidth(t, `${weight} ${px}px ${face}`, faceVersion);
+  const gameFace = family === null ? readPanelGameFace() : measurable(family);
+  const measureGame: MeasureText = (t, px, weight) =>
+    textWidth(t, `${weight} ${px}px ${gameFace}`, faceVersion);
   return (
     <VitalsTiles
       config={config}
       vitals={data.vitals}
+      history={data.history}
       text={text}
       env={env}
       inks={inks}
+      flame={flame}
       panel={panel}
       width={width}
       scale={scale}
       size={size}
       family={family}
       measure={measure}
+      measureGame={measureGame}
       tileRef={tileRef}
       onPick={onPick}
     />
@@ -174,10 +184,14 @@ export function VitalsGallery({
 export interface VitalsTilesProps {
   config: UiConfig;
   vitals: Vitals;
+  /** Your last Char.Vitals, oldest first, which the Traces tile draws. */
+  history: readonly VitalSample[];
   /** Your vitals text rendered for the Text tile, or null before it is. */
   text: PromptRendered | null;
   env: BandEnv;
   inks: VitalInks;
+  /** The color the Candles flame burns in. */
+  flame: string;
   /** Your panel's width, and the width and scale each tile draws at. */
   panel: number;
   width: number;
@@ -187,6 +201,8 @@ export interface VitalsTilesProps {
   size: number;
   family: string | null;
   measure: MeasureText;
+  /** Measures in the game face, which Blocks draws in. */
+  measureGame: MeasureText;
   /** Lands on the first tile, which the gallery measures. */
   tileRef?: ((el: HTMLSpanElement | null) => void) | undefined;
   onPick: (fields: UiFields) => void;
@@ -196,15 +212,18 @@ export interface VitalsTilesProps {
 export function VitalsTiles({
   config,
   vitals,
+  history,
   text,
   env,
   inks,
+  flame,
   panel,
   width,
   scale,
   size,
   family,
   measure,
+  measureGame,
   tileRef,
   onPick,
 }: VitalsTilesProps) {
@@ -242,7 +261,7 @@ export function VitalsTiles({
   return (
     <>
       <fieldset className="st-gallery" data-st-anchor="style">
-        <legend className="st-visually-hidden">Style</legend>
+        <legend className="visually-hidden">Style</legend>
         <div className="st-vitals-grid" onKeyDown={onKeyDown}>
           {VITALS_STYLES.map((style) => (
             <label key={style} className="st-vitals-pick">
@@ -271,11 +290,14 @@ export function VitalsTiles({
                       <StyleTile
                         style={style}
                         vitals={vitals}
+                        history={history}
                         options={{ ...options, style }}
                         inks={inks}
+                        flame={flame}
                         width={width}
                         size={size}
                         measure={measure}
+                        measureGame={measureGame}
                       />
                     )}
                   </PaneTextSizeContext.Provider>
@@ -300,21 +322,37 @@ export function VitalsTiles({
 function StyleTile({
   style,
   vitals,
+  history,
   options,
   inks,
+  flame,
   width,
   size,
   measure,
+  measureGame,
 }: {
   style: Exclude<VitalsStyle, 'text'>;
   vitals: Vitals;
+  history: readonly VitalSample[];
   options: VitalsOptions;
   inks: VitalInks;
+  flame: string;
   width: number;
   size: number;
   measure: MeasureText;
+  measureGame: MeasureText;
 }): ReactNode {
   const rows = shownRows(vitals, vitalsOn(options.order, options.off), options);
-  const fit = vitalsFitOf(style, width, size, rows, null, options.values, measure);
-  return <VitalsBlock vitals={vitals} combat={null} fit={fit} options={options} inks={inks} />;
+  const fit = vitalsFitOf(style, width, size, rows, null, options.values, measure, measureGame);
+  return (
+    <VitalsBlock
+      vitals={vitals}
+      history={history}
+      combat={null}
+      fit={fit}
+      options={options}
+      inks={inks}
+      flame={flame}
+    />
+  );
 }

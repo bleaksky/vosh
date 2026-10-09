@@ -1,11 +1,11 @@
 // The game's own lines on the terminal screen, for the prompt card's
-// marks while the profile reads no prompt yet. With no capture Vosh draws
-// nothing and opens no row, so the card finds the line the game sent in
-// what the renderer shows: as the last text on screen while it reads your
-// codes (P2, P3, P3b, only row 38 on the boards), or every row of the
-// same shape while you point at the line on another game (B2 and P15,
-// rows 16 and 38). Rows are the screen's rows from its top, with trailing
-// blanks gone. Marks count cells, as the renderers place them.
+// marks while the profile reads no prompt yet. With no capture Vosh
+// draws nothing and opens no row, so the card finds the line the game
+// sent in what the renderer shows: as the last text on screen while it
+// reads your codes, or every row of the same shape while you point at
+// the line on another game. Rows are the screen's rows from its top,
+// with trailing blanks gone. Marks count cells, as the renderers place
+// them.
 
 import { textCells } from '../terminal/sgrCells';
 import type { RawMark } from './promptPieces';

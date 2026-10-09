@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { HELP_TOPICS, parseHelpBody } from './helpContent';
 import { classifyInline, inlinePieces, keyGlyph, keyParts } from './helpInline';
 
-// Help draws a backticked span three ways (G5): a label you see in
+// Help draws a backticked span three ways: a label you see in
 // Vosh in SF 600, a key as keycaps, and MUD text or a code as a mono
 // chip.
 
@@ -116,7 +116,9 @@ describe('a backticked span in help', () => {
             ? [block.text]
             : block.kind === 'list'
               ? block.items
-              : [...block.head, ...block.rows.flat()];
+              : block.kind === 'table'
+                ? [...block.head, ...block.rows.flat()]
+                : [block.label];
         for (const line of lines) {
           expect(line.split('`').length % 2, `${topic.number} ${line}`).toBe(1);
           for (const piece of inlinePieces(line)) {

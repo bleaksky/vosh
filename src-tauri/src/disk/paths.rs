@@ -77,6 +77,12 @@ pub(crate) fn affect_full_path(app_data: &Path) -> PathBuf {
     app_data.join("affect_full.toml")
 }
 
+/// Your drafts and posts for the writing card, per character, see
+/// [`crate::writing`].
+pub(crate) fn writing_path(app_data: &Path) -> PathBuf {
+    app_data.join("writing.toml")
+}
+
 /// The folder `#script load` reads Lua files from.
 pub(crate) fn scripts_dir(app_data: &Path) -> PathBuf {
     app_data.join("scripts")

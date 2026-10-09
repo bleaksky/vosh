@@ -26,6 +26,32 @@ describe('macroClashNote', () => {
     );
   });
 
+  it('says which Settings page a Settings key opens', () => {
+    expect(macroClashNote('Alt+Meta+1', true)).toBe(
+      '⌥⌘1 also opens Timers in Settings. In sessions on this profile it runs this macro.',
+    );
+    expect(macroClashNote('Alt+Meta+£', true)).toBe(
+      '⌥⌘3 also opens Triggers in Settings. In sessions on this profile it runs this macro.',
+    );
+    expect(macroClashNote('Ctrl+Shift+@', false)).toBe(
+      'Ctrl+Shift+2 also opens Aliases in Settings. In sessions on this profile it runs this macro.',
+    );
+    expect(macroClashNote('Ctrl+Shift+4', false)).toBe(
+      'Ctrl+Shift+4 also opens Macros in Settings. In sessions on this profile it runs this macro.',
+    );
+    // Cmd Shift with a digit is the screenshot key on macOS, not Vosh's.
+    expect(macroClashNote('Shift+Meta+3', true)).toBeNull();
+  });
+
+  it('says the sessions toggle key shows or hides your sessions', () => {
+    expect(macroClashNote('Ctrl+Meta+S', true)).toBe(
+      '⌃⌘S also shows or hides your sessions. In sessions on this profile it runs this macro.',
+    );
+    expect(macroClashNote('Ctrl+Shift+S', false)).toBe(
+      'Ctrl+Shift+S also shows or hides your sessions. In sessions on this profile it runs this macro.',
+    );
+  });
+
   it('names the keys with Ctrl on Windows and Linux', () => {
     expect(macroClashNote('Ctrl+2', false)).toBe(
       'Ctrl+2 also goes to your second session. In sessions on this profile it runs this macro.',

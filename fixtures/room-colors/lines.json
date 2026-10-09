@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written and synthetic, never captured. Lines the Aabahran server prints, built from its own format strings and area files, with the ANSI codes it sends. trigger names the Room, time and weather colors trigger that colors the line, and match is the text its color covers. A line with no trigger is a near miss that no trigger of the preset may touch. Tolliver and Maren are invented names. README.md has the details. Read by src/lib/presets.test.ts, src-tauri/src/session_room_tests.rs and crates/automation/src/trigger/engine.rs.",
+  "notes": "Hand written and synthetic, never captured. Lines the Aabahran server prints, built from its own format strings and area files, with the ANSI codes it sends. trigger names the Room, time, and weather colors trigger that colors the line, and match is the text its color covers. A line with no trigger is a near miss that no trigger of the preset may touch. Tolliver and Maren are invented names. README.md has the details. Read by src/automation/presets.test.ts, src-tauri/src/session/tests/room.rs and crates/automation/src/trigger/engine.rs.",
   "lines": [
     {
       "line": "[Exits: north east south west]",

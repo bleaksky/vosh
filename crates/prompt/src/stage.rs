@@ -1,5 +1,4 @@
-//! The stage: what Vosh writes to the terminal around your prompt
-//! (section 4 of the build spec).
+//! The stage: what Vosh writes to the terminal around your prompt.
 //!
 //! Everything a socket read writes goes out as one [`Output`], so a prompt
 //! that arrives in one read never flashes. The stage decides the bytes
@@ -14,13 +13,14 @@
 //! after it, and only then erases from its start and writes the new bytes.
 //! The stage never counts rows, since the two renderers wrap at different
 //! widths and your typed echo reaches the webview before the backend
-//! knows of it (D22).
+//! knows of it.
 //!
 //! The open row is the drawn prompt while it is the last thing on screen.
 //! Only it is ever repainted. Any other output, a send, a local write, a
 //! window size change and a disconnect close it.
 //!
-//! A prompt may span lines (D7). The stage holds a line that starts one
+//! A prompt may span lines, as the tank line above your vitals does in
+//! a fight. The stage holds a line that starts one
 //! until the rest arrives, within the read, and paints held lines as a
 //! region at the end of a read, so the prompt that finishes them replaces
 //! it. A line that does not finish them releases them to the Line pass,
@@ -59,6 +59,14 @@
 //! [`CollapseRules`] says which lines the session offers it: the lines of
 //! a fight unless you show every one, and attack lines only when you
 //! collapse them too.
+//!
+//! The people of a room look whose Room.Chars has not come yet go out
+//! through [`Stage::recolorable_line`] as one region, since the session
+//! cannot tell yet which of them is your target. When the packet comes in
+//! a later read while they are still the last thing written,
+//! [`Stage::recolor`] writes the region again with your target's row in
+//! its color. Anything written after them, your echo and output from
+//! elsewhere included, leaves them as they show.
 
 mod blocks;
 mod drawing;
@@ -66,6 +74,7 @@ mod marks;
 mod output;
 mod pinning;
 mod reading;
+mod recolor;
 mod repeats;
 mod ring;
 
@@ -73,6 +82,7 @@ pub use blocks::{Block, BlockLine, End, View};
 pub use marks::{lift_end, lift_start, mark, MARK_OSC};
 pub use output::{close_pin_row, shows_lines, Above, Output, Replace};
 pub use reading::{Offer, Released};
+pub use recolor::Recolored;
 pub use repeats::{collapsible, counted, CollapseRules, Repeat};
 pub use ring::Candidate;
 
@@ -90,6 +100,7 @@ use crate::render::{SgrState, Span};
 use blocks::OpenLift;
 use pinning::{PinnedShown, Swallow};
 use reading::{HeldRegion, Hides};
+use recolor::Recolor;
 use repeats::Run;
 use ring::Seen;
 
@@ -180,6 +191,9 @@ pub struct Stage {
     /// The colors the text carries into the next line, as the lines the
     /// stage wrote left them, while Collapse repeated lines is on.
     carry: SgrState,
+    /// The rows a later read can color again, while they are the last
+    /// thing written (see [`Stage::recolorable_line`]).
+    recolor: Option<Recolor>,
 }
 
 impl Stage {
@@ -208,7 +222,7 @@ impl Stage {
     }
 
     /// Take the fields your design reads, which decide the lines above
-    /// the last one it hides (D7). The last prompt read follows at once,
+    /// the last one it hides. The last prompt read follows at once,
     /// so a repaint after an edit shows a line above the last one as sent
     /// exactly when the new design leaves it alone.
     pub(crate) fn set_reads(&mut self, reads: &BTreeSet<FieldRef>) {
@@ -361,6 +375,9 @@ impl Stage {
         if self.run.as_ref().is_some_and(|run| run.output <= after) {
             self.run = None;
         }
+        if self.recolor.as_ref().is_some_and(|r| r.output <= after) {
+            self.recolor = None;
+        }
     }
 
     /// True when the stage finished output newer than `after` with
@@ -383,6 +400,7 @@ impl Stage {
     /// `out` goes out next when it has anything to write.
     fn note_sent(&mut self, out: &Output) {
         self.settle_run(out);
+        self.settle_recolor(out);
         if !out.is_empty() {
             self.sent = self.sent.max(out.id.0);
         }
@@ -431,7 +449,7 @@ impl Stage {
     }
 
     /// Note Line triggers that matched a line Vosh read as your prompt,
-    /// which they no longer see (D6).
+    /// which they no longer see.
     pub fn line_triggers_matched<'a>(&mut self, names: impl IntoIterator<Item = &'a str>) {
         self.line_triggers
             .extend(names.into_iter().map(str::to_string));

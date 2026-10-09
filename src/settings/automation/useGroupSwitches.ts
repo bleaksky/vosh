@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { automationSaveError } from '../../automation/automationRecords';
-import { switchesByName, withSwitch } from '../../automation/groupSwitches';
+import { groupSwitchesLoadError, switchesByName, withSwitch } from '../../automation/groupSwitches';
 import {
   listGroupSwitches,
   setGroupEnabled,
@@ -27,7 +27,8 @@ const NONE: ReadonlyMap<string, GroupSwitch> = new Map();
  *  for a list with none. They load again each time `loaded` changes, the
  *  list the editor last loaded or saved, and whenever a group turns or
  *  the loadouts change anywhere. A switch acts at once and never waits
- *  for Save, since a group's state lives apart from its items. */
+ *  for Save, since a group's state lives apart from its items. A load
+ *  that fails says so through `onError`. */
 export function useGroupSwitches(
   list: GroupList | null,
   loaded: unknown,
@@ -44,8 +45,12 @@ export function useGroupSwitches(
       .then((next) => {
         if (seq.current === mine) setByName(switchesByName(next));
       })
-      .catch(() => {});
-  }, [list]);
+      .catch(() => {
+        // Keep the switches it had. A load that works never clears the
+        // message, since that would hide a save error.
+        if (seq.current === mine) onError(groupSwitchesLoadError);
+      });
+  }, [list, onError]);
 
   useEffect(() => {
     reload();

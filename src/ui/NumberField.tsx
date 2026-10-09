@@ -19,7 +19,7 @@ export interface NumberFieldProps extends Omit<
   /** The unit as a screen reader should say it, like `milliseconds`.
    *  The field is described by it. The unit itself when left out. */
   unitName?: string;
-  /** Width in px. 88 by default, the boards' number field. */
+  /** Width in px. 88 by default. */
   width?: number;
   /** Up and Down step by this much, Shift with them by ten times it. */
   step?: number;

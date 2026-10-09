@@ -1,3 +1,5 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import aliasesExport from '../../../fixtures/ipc/aliases_export.json?raw';
@@ -7,11 +9,14 @@ import {
   chooseTheme,
   initialSelection,
   paletteSections,
+  readRecent,
   themeEntries,
   themesInGalleryOrder,
   type PaletteDeps,
 } from './palette';
-import { resolveSettingsTarget } from '../../lib/settingsNav';
+import { CommandPalette } from './CommandPalette';
+import { appShortcut } from '../../lib/appMenu';
+import { formatSettingsTarget, resolveSettingsTarget } from '../../lib/settingsNav';
 import type { SessionRow } from '../../ipc/session';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -62,8 +67,7 @@ function sessionRow(id: number, character: string | null, port: number): Session
   };
 }
 
-/** Tolliver and Orla on the build port, Tolliver in front, as board 4
- *  draws them. */
+/** Tolliver and Orla on the build port, Tolliver in front. */
 function sessions() {
   return {
     rows: [sessionRow(1, 'Tolliver', 1848), sessionRow(2, 'Orla', 1825)],
@@ -105,6 +109,22 @@ describe('paletteSections', () => {
         .map((r) => r.id);
     expect(ids(['map', 'affects', 'group', 'chat'])).not.toContain('pane-imm');
     expect(ids(['map', 'imm'])).toEqual(['pane-map', 'pane-imm']);
+  });
+
+  it('finds Get started in View once you type, beside Open help', () => {
+    const openGetStarted = vi.fn();
+    const entries = buildPaletteEntries(deps({ openGetStarted }));
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('get-started');
+    const view = paletteSections(entries, 'get started', []).find((s) => s.label === 'View');
+    expect(view?.rows.map((r) => r.id)).toContain('get-started');
+    for (const word of ['walkthrough', 'welcome', 'suggestions', 'presets']) {
+      expect(flat(paletteSections(entries, word, [])).map((r) => r.id)).toContain('get-started');
+    }
+    const ids = entries.map((r) => r.id);
+    expect(ids.indexOf('get-started')).toBe(ids.indexOf('help') + 1);
+    void entries.find((r) => r.id === 'get-started')?.run();
+    expect(openGetStarted).toHaveBeenCalled();
+    expect(buildPaletteEntries(deps()).some((r) => r.id === 'get-started')).toBe(false);
   });
 
   it('picks where your prompt shows only while the profile reads one', async () => {
@@ -190,13 +210,17 @@ describe('paletteSections', () => {
     const sections = paletteSections(buildPaletteEntries(deps()), '', [
       'disconnect',
       'find',
-      'settings-themes',
+      'settings-appearance:theme',
       'gone',
       'profile-save',
       'help',
     ]);
     expect(sections[0].label).toBe('Recent');
-    expect(sections[0].rows.map((r) => r.id)).toEqual(['find', 'settings-themes', 'profile-save']);
+    expect(sections[0].rows.map((r) => r.id)).toEqual([
+      'find',
+      'settings-appearance:theme',
+      'profile-save',
+    ]);
   });
 
   it('lists New session… with its key once you type, leading the Session rows', () => {
@@ -247,7 +271,7 @@ describe('paletteSections', () => {
       ['Previous session', 'Mod+Shift+['],
       ['Rename session…', undefined],
       ['Close session', 'Mod+W'],
-      ['Hide sessions', undefined],
+      ['Hide sessions', appShortcut('sessions-sidebar')],
       ['Disconnect', undefined],
     ]);
     expect(goTo.rows.map((r) => [r.title, r.meta, r.keys, r.checked])).toEqual([
@@ -269,6 +293,9 @@ describe('paletteSections', () => {
     expect(two.toggleShown).toHaveBeenCalled();
     const hidden = buildPaletteEntries(deps({ sessions: { ...two, shown: false } }));
     expect(hidden.find((e) => e.id === 'sessions-sidebar')?.title).toBe('Show sessions');
+    // The keycap reads the platform key, Ctrl Cmd S on macOS.
+    expect(appShortcut('sessions-sidebar', true)).toBe('Ctrl+Mod+S');
+    expect(appShortcut('sessions-sidebar', false)).toBe('Mod+Shift+S');
   });
 
   it('finds a session by its name or its world', () => {
@@ -333,13 +360,112 @@ describe('paletteSections', () => {
     expect(goTo[1].meta).toBeUndefined();
   });
 
+  it('finds Read your prompt with its key while the screen reader is on', () => {
+    const readPrompt = vi.fn();
+    const entries = buildPaletteEntries(deps({ readPrompt }));
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('read-prompt');
+    for (const word of ['read your prompt', 'screen reader', 'voiceover']) {
+      const view = paletteSections(entries, word, []).find((s) => s.label === 'View');
+      expect(
+        view?.rows.map((r) => r.id),
+        word,
+      ).toContain('read-prompt');
+    }
+    const row = entries.find((r) => r.id === 'read-prompt');
+    expect(row?.title).toBe('Read your prompt');
+    expect(row?.keys).toBe('Mod+Shift+P');
+    void row?.run();
+    expect(readPrompt).toHaveBeenCalled();
+    expect(buildPaletteEntries(deps()).some((r) => r.id === 'read-prompt')).toBe(false);
+    expect(
+      buildPaletteEntries(deps({ readPrompt: undefined })).some((r) => r.id === 'read-prompt'),
+    ).toBe(false);
+  });
+
   it('hides search only rows until you type, then ranks matches by section', () => {
     const entries = buildPaletteEntries(deps());
     expect(flat(paletteSections(entries, '', [])).some((r) => r.searchOnly)).toBe(false);
     const sections = paletteSections(entries, 'settings', ['find']);
     expect(sections.map((s) => s.label)).toEqual(['View']);
     expect(sections[0].rows[0].id).toBe('settings');
-    expect(sections[0].rows.map((r) => r.id)).toContain('settings-themes');
+    expect(sections[0].rows.map((r) => r.id)).toContain('settings-appearance:theme');
+  });
+});
+
+describe('snoop rows (SN8)', () => {
+  const tab = (name: string, live: boolean) => ({
+    name,
+    live,
+    ended_at: live ? null : 1_800_000_000_000,
+    last_output_at: null,
+  });
+  const snoops = (tabs: ReturnType<typeof tab>[]) => ({
+    tabs,
+    goTo: vi.fn(),
+    next: vi.fn(),
+    stop: vi.fn(),
+    openWindow: vi.fn(),
+    closeEnded: vi.fn(),
+  });
+  const titles = (over: Partial<PaletteDeps>) =>
+    flat(paletteSections(buildPaletteEntries(deps(over)), 'snoop', [])).map((r) => r.title);
+
+  it('lists the SN8 rows, word for word, while a snoop is open', () => {
+    const all = snoops([tab('Tolliver', true), tab('Maren', true), tab('Orla', false)]);
+    expect(titles({ snoops: all })).toEqual([
+      'Go to snoop',
+      'Next snoop',
+      'Stop snooping Tolliver',
+      'Stop snooping Maren',
+      'Stop every snoop',
+      'Open snoop in a window',
+      'Close ended snoops',
+    ]);
+  });
+
+  it('offers none with no snoop open, the way staff queues waits', () => {
+    expect(titles({})).toEqual([]);
+    expect(titles({ snoops: snoops([]) })).toEqual([]);
+  });
+
+  it('offers each row only where it acts', () => {
+    expect(titles({ snoops: snoops([tab('Tolliver', true)]) })).toEqual([
+      'Go to snoop',
+      'Stop snooping Tolliver',
+      'Stop every snoop',
+      'Open snoop in a window',
+    ]);
+    expect(titles({ snoops: snoops([tab('Orla', false)]) })).toEqual([
+      'Go to snoop',
+      'Open snoop in a window',
+      'Close ended snoops',
+    ]);
+  });
+
+  it('keeps them out of the palette until you type, with the key on Go to snoop', () => {
+    const one = snoops([tab('Tolliver', true)]);
+    const home = flat(paletteSections(buildPaletteEntries(deps({ snoops: one })), '', []));
+    expect(home.some((r) => r.id.startsWith('snoop'))).toBe(false);
+    const go = buildPaletteEntries(deps({ snoops: one })).find((r) => r.id === 'snoop');
+    expect(go?.keys).toBe('Mod+J');
+    expect(go?.section).toBe('session');
+  });
+
+  it('runs each row on its own call', async () => {
+    const all = snoops([tab('Tolliver', true), tab('Maren', true), tab('Orla', false)]);
+    const rows = buildPaletteEntries(deps({ snoops: all }));
+    const run = (id: string) => rows.find((r) => r.id === id)?.run();
+    await run('snoop');
+    await run('snoop-next');
+    await run('snoop-stop-Maren');
+    await run('snoop-stop-all');
+    await run('snoop-window');
+    await run('snoop-close-ended');
+    expect(all.goTo).toHaveBeenCalledTimes(1);
+    expect(all.next).toHaveBeenCalledTimes(1);
+    expect(all.stop.mock.calls).toEqual([['Maren'], []]);
+    expect(all.openWindow).toHaveBeenCalledTimes(1);
+    expect(all.closeEnded).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -347,41 +473,96 @@ describe('settings rows', () => {
   const settingsRows = (over: Partial<PaletteDeps> = {}) =>
     buildPaletteEntries(deps(over)).filter((r) => r.id.startsWith('settings-'));
 
-  it('keeps the old ids so Recent rows survive, except vitals', () => {
-    const ids = settingsRows().map((r) => r.id);
-    for (const id of [
-      'themes',
-      'typography',
-      'tick',
-      'panels',
-      'general',
-      'profiles',
-      'triggers',
-      'aliases',
-      'macros',
-      'timers',
-      'import',
-      'logs',
-    ]) {
-      expect(ids).toContain(`settings-${id}`);
+  it('names each row by the link it opens', () => {
+    const rows = settingsRows();
+    for (const row of rows) {
+      const link = row.id.slice('settings-'.length);
+      expect(formatSettingsTarget(resolveSettingsTarget(link))).toBe(link);
     }
-    expect(ids).not.toContain('settings-vitals');
-    // A Recent row for the removed vitals entry drops out quietly.
+    // A Recent row for an entry the palette no longer has drops out
+    // quietly.
     const recent = paletteSections(buildPaletteEntries(deps()), '', [
-      'settings-vitals',
-      'settings-themes',
+      'settings-gone',
+      'settings-appearance:theme',
     ]);
-    expect(recent[0].rows.map((r) => r.id)).toEqual(['settings-themes']);
+    expect(recent[0].rows.map((r) => r.id)).toEqual(['settings-appearance:theme']);
+  });
+
+  it('renames the old tab ids in Recent once', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    });
+    try {
+      store.set(
+        'vosh.palette.recent',
+        JSON.stringify([
+          'settings-themes',
+          'find',
+          'settings-tick',
+          'settings-automation:triggers',
+          'settings-automation:triggers',
+          'settings-logs',
+          'settings-general',
+        ]),
+      );
+      const renamed = [
+        'settings-appearance:theme',
+        'find',
+        'settings-automation:timers#tick',
+        'settings-automation:triggers',
+        'settings-logs:search',
+        'settings-general',
+      ];
+      expect(readRecent()).toEqual(renamed);
+      expect(JSON.parse(store.get('vosh.palette.recent') ?? '')).toEqual(renamed);
+      const ids = new Set(buildPaletteEntries(deps()).map((r) => r.id));
+      for (const id of renamed) expect(ids.has(id)).toBe(true);
+      // The rename runs once, so a later list stays as written.
+      store.set('vosh.palette.recent', JSON.stringify(['settings-themes']));
+      expect(readRecent()).toEqual(['settings-themes']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('names the places the rows open now', () => {
     const title = (id: string) => settingsRows().find((r) => r.id === `settings-${id}`)?.title;
-    expect(title('themes')).toBe('Open theme settings');
-    expect(title('typography')).toBe('Open terminal text settings');
-    expect(title('panels')).toBe('Open panel layout settings');
-    expect(title('profiles')).toBe('Open character settings');
+    expect(title('appearance:theme')).toBe('Open theme settings');
+    expect(title('appearance:text')).toBe('Open terminal text settings');
+    expect(title('characters#layout')).toBe('Open panel layout settings');
+    expect(title('characters')).toBe('Open character settings');
     expect(title('input')).toBe('Open input settings');
-    expect(title('import')).toBe('Import from another client…');
+    expect(title('automation#import')).toBe('Import from another client…');
+    expect(title('accessibility')).toBe('Open accessibility settings');
+    expect(title('vitals')).toBe('Open vitals settings');
+    expect(title('prompt')).toBe('Open prompt settings');
+    expect(title('logs:search')).toBe('Search logs');
+    expect(title('logs:session-logs')).toBe('Open log settings');
+  });
+
+  it('shows the Settings keys on the four Automation rows only', () => {
+    const keyed = settingsRows()
+      .filter((r) => r.keys)
+      .map((r) => [r.id, r.keys]);
+    expect(keyed).toEqual([
+      ['settings-automation:triggers', appShortcut('settings-automation:triggers')],
+      ['settings-automation:aliases', appShortcut('settings-automation:aliases')],
+      ['settings-automation:macros', appShortcut('settings-automation:macros')],
+      ['settings-automation:timers', appShortcut('settings-automation:timers')],
+    ]);
+    // Cmd+Option on macOS, since Cmd Shift 3 and 4 take screenshots
+    // there, and Ctrl+Shift on Windows and Linux.
+    expect(appShortcut('settings-automation:timers', true)).toBe('Mod+Alt+1');
+    expect(appShortcut('settings-automation:aliases', true)).toBe('Mod+Alt+2');
+    expect(appShortcut('settings-automation:triggers', true)).toBe('Mod+Alt+3');
+    expect(appShortcut('settings-automation:macros', true)).toBe('Mod+Alt+4');
+    expect(appShortcut('settings-automation:timers', false)).toBe('Mod+Shift+1');
+    expect(appShortcut('settings-automation:aliases', false)).toBe('Mod+Shift+2');
+    expect(appShortcut('settings-automation:triggers', false)).toBe('Mod+Shift+3');
+    expect(appShortcut('settings-automation:macros', false)).toBe('Mod+Shift+4');
   });
 
   it('opens each row on a place the resolver knows', () => {
@@ -394,6 +575,9 @@ describe('settings rows', () => {
       'automation',
       'characters',
       'general',
+      'accessibility',
+      'vitals',
+      'prompt',
       'input',
       'characters',
       'automation',
@@ -401,13 +585,15 @@ describe('settings rows', () => {
       'automation',
       'automation',
       'automation',
-      'general',
+      'logs',
+      'logs',
     ]);
     expect(resolveSettingsTarget(opened[0])).toEqual({ group: 'appearance', section: 'theme' });
-    expect(resolveSettingsTarget(opened[opened.length - 1])).toEqual({
-      group: 'general',
-      section: 'logs',
-    });
+    // Search logs opens the search, and Open log settings the tab.
+    expect(opened.slice(-2).map(resolveSettingsTarget)).toEqual([
+      { group: 'logs', section: 'search' },
+      { group: 'logs', section: 'session-logs' },
+    ]);
   });
 });
 
@@ -490,7 +676,7 @@ describe('theme order', () => {
     setCustomThemes([]);
   });
 
-  it('lists the themes in the gallery order, your own themes last', async () => {
+  it('lists the themes in the gallery order, the high contrast pair then your own themes last', async () => {
     const { customToAppTheme, setCustomThemes } = await import('../../theme/themes');
     setCustomThemes([
       customToAppTheme({
@@ -511,7 +697,7 @@ describe('theme order', () => {
       'rose-pine',
       'tokyo-night',
     ]);
-    const rest = ordered.slice(7, -1).map((t) => t.theme.label);
+    const rest = ordered.slice(7, -3).map((t) => t.theme.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     // The menu bar's Choose theme lists the same order.
     expect(rest).toEqual([
@@ -521,7 +707,6 @@ describe('theme order', () => {
       'Everforest Dark',
       'Green Screen',
       'Harbor Dark',
-      'High Contrast',
       'Iceberg Dark',
       'Kanso Zen',
       'Melange Dark',
@@ -534,6 +719,11 @@ describe('theme order', () => {
       'Solarized Light',
       'Srcery',
       'Tango Dark',
+    ]);
+    expect(ordered.slice(-3).map((t) => t.theme.id)).toEqual([
+      'high-contrast',
+      'high-contrast-light',
+      'mine',
     ]);
     expect(ordered.at(-1)).toMatchObject({ theme: { id: 'mine' }, custom: true });
     expect(ordered.filter((t) => t.custom)).toHaveLength(1);
@@ -564,6 +754,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: false,
       light_theme: 'rubric',
       dark_theme: 'obsidian-ember',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     vi.unstubAllGlobals();
   });
@@ -575,6 +768,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: false,
       light_theme: 'rubric',
       dark_theme: 'nord',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     await chooseTheme('gruvbox');
     expect(getCurrentThemeId()).toBe('gruvbox');
@@ -583,6 +779,8 @@ describe('chooseTheme', () => {
       theme: 'gruvbox',
       lightTheme: 'rubric',
       darkTheme: 'nord',
+      dayTheme: '',
+      nightTheme: '',
     });
   });
 
@@ -593,6 +791,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: true,
       light_theme: 'rubric',
       dark_theme: 'tokyo-night',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     await chooseTheme('rose-pine');
     expect(getCurrentThemeId()).toBe('rose-pine');
@@ -617,6 +818,8 @@ describe('chooseTheme', () => {
       theme: 'nord',
       lightTheme: 'paper',
       darkTheme: 'rose-pine',
+      dayTheme: '',
+      nightTheme: '',
     });
   });
 });
@@ -645,5 +848,57 @@ describe('the theme on screen', () => {
     const palette = await import('./palette');
     const checked = palette.themeEntries().filter((e) => e.checked);
     expect(checked.map((e) => e.id)).toEqual(['theme-rubric']);
+  });
+});
+
+describe('the writing card’s rows', () => {
+  it('offers a row for each kind, named for what you do, found as you type', () => {
+    const opened: string[] = [];
+    const rows = buildPaletteEntries(
+      deps({
+        writing: {
+          kinds: ['note', 'journal', 'application', 'idea', 'bug', 'typo'],
+          beast: false,
+          open: (kind) => opened.push(kind),
+        },
+      }),
+    );
+    const writing = rows.filter((row) => row.id.startsWith('write-'));
+    expect(writing.map((row) => row.title)).toEqual([
+      'Write a note…',
+      'Write a journal entry…',
+      'Write an application…',
+      'Write an idea…',
+      'Report a bug…',
+      'Report a typo…',
+      'Edit your description…',
+      'Edit your history…',
+      'Edit your personality…',
+      'Edit your purpose…',
+    ]);
+    expect(writing.every((row) => row.section === 'input' && row.searchOnly)).toBe(true);
+    writing.find((row) => row.title === 'Report a bug…')?.run();
+    expect(opened).toEqual(['bug']);
+  });
+
+  it('adds the beast for a werebeast', () => {
+    const rows = buildPaletteEntries(
+      deps({ writing: { kinds: ['note'], beast: true, open: () => {} } }),
+    );
+    expect(rows.some((row) => row.title === 'Edit your beast description…')).toBe(true);
+  });
+});
+
+describe('the palette keys', () => {
+  it('draws each shortcut through Keycap, a glyph in its square', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: 'MacIntel' });
+    try {
+      const html = renderToStaticMarkup(
+        createElement(CommandPalette, { deps: deps(), onClose: () => {} }),
+      );
+      expect(html).toContain('<kbd class="keys" aria-hidden="true"><kbd class="keycap is-glyph">');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

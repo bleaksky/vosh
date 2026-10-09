@@ -1,4 +1,4 @@
-//! `prompt_state_get` and `session://prompt-state` (section 6): the
+//! `prompt_state_get` and `session://prompt-state`: the
 //! catalog with each field's live state and source, the status, whether
 //! the server is the new build, and the open row with its spans.
 
@@ -10,7 +10,7 @@ use crate::render::Span;
 use crate::values::format::{Resolved, Value};
 use crate::values::{self, ClientValues, Entry, Group, Kind, Source, Values, Vars, CATALOG};
 
-/// A field's state now (D4).
+/// A field's state now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum State {
@@ -79,7 +79,7 @@ pub struct PromptState {
     pub catalog: Vec<FieldState>,
     pub status: StatusReport,
     pub new_build: bool,
-    /// The Forsaken Lands rules hold (D17): the host is The Forsaken
+    /// The Forsaken Lands rules hold: the host is The Forsaken
     /// Lands or the capture reads its codes.
     pub forsaken: bool,
     pub open_row: Option<OpenRowState>,
@@ -203,7 +203,7 @@ fn field_state(
         max,
         // A package older builds send too feeds a new build field only
         // on the new build: your tank in Char.Combat, Exits from
-        // Room.Info (D26).
+        // Room.Info.
         sent: e.package.map_or(true, |p| {
             vars.gmcp().has(p) && (!e.new_build || vars.new_build())
         }),

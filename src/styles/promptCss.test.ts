@@ -1,14 +1,17 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { MenuButton } from '../prompt/MenuButton';
 import controlsCss from './controls.css?raw';
 import overlaysCss from './overlays.css?raw';
 import promptCss from './prompt.css?raw';
 import settingsCss from './settings.css?raw';
 import tokensCss from './tokens.css?raw';
 
-// prompt.css draws the prompt card, the bands and the pinned dock on One
-// Window tokens only (section 8 of the prompt build spec): every color
-// comes from a token, never a literal, so each theme and appearance gives
-// the prompt its own colors.
+// prompt.css draws the prompt card, the bands and the pinned dock on
+// the shared tokens only: every color comes from a token, never a
+// literal, so each theme and appearance gives the prompt its own
+// colors.
 
 const bare = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -72,9 +75,20 @@ describe('the foot under your design', () => {
     expect(end).toContain('flex: none;');
   });
 
-  it('sets the menu buttons at the foot in the 12/500 face of a segmented control', () => {
-    const button = rule('.pc-menu-button');
-    expect(button).toContain('font-size: 12px;');
+  it('keeps only the chevron padding on the small menu buttons at the foot', () => {
+    // The small button sets 24 tall at 12/500, so the rule names no face.
+    const html = renderToStaticMarkup(
+      createElement(MenuButton, {
+        name: 'Preview',
+        choices: [{ value: 'now', label: 'Now' }],
+        value: 'now',
+        place: 'below-end',
+        onChange: () => {},
+      }),
+    );
+    expect(html).toMatch(/<button[^>]*class="btn is-small pc-menu-button"/);
+    const button = rule('.btn.pc-menu-button');
+    expect(button).not.toContain('font-size');
     expect(button).toContain('padding: 0 6px 0 10px;');
     expect(rule(".pc-menu-button[aria-disabled='true']")).toContain('opacity: 0.45;');
     // Preview: reads in the secondary tone, the preview in the text color.

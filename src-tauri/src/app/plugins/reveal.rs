@@ -1,6 +1,6 @@
 //! Show a plugin's folder in the system's file manager, through a small
-//! command of Vosh's own rather than an opener plugin (Q27 of the Scripts
-//! review). The page labels it Show in Finder on macOS, Show in Explorer
+//! command of Vosh's own rather than an opener plugin. The page labels it
+//! Show in Finder on macOS, Show in Explorer
 //! on Windows and Show the folder on Linux.
 
 use std::path::Path;

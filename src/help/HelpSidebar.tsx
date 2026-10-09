@@ -7,18 +7,18 @@ import {
 } from 'react';
 import { HELP_SECTIONS, type HelpTopic } from './helpContent';
 import { helpSearchKey, sectionTopics } from './helpNav';
-import { shortcutKeys } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutKeys } from '../lib/shortcuts';
 import { scrollWithin } from '../lib/scrollWithin';
 import { Keycap, SearchIcon, VisuallyHidden } from '../ui';
 import { sectionIcon } from './sectionIcons';
 
-// The Help sidebar (the approved Help boards), the Settings sidebar 280
-// wide: the drag strip under the traffic lights, the search pill at
-// (12, 44) with its keycaps, and the nine sections as Settings rows
-// from y 84. The section you are in opens under itself with its topics
-// at the label's x, and the topic you read carries the selected row
-// fill. While the search holds words its results replace the nav, best
-// first, and the article shows the one you are on.
+// The Help sidebar, the Settings sidebar 280 wide: the drag strip under
+// the traffic lights, the search pill at (12, 44) with its keycaps, and
+// the nine sections as Settings rows from y 84. The section you are in
+// opens under itself with its topics at the label's x, and the topic
+// you read carries the selected row fill. While the search holds words
+// its results replace the nav, best first, and the article shows the
+// one you are on.
 
 interface Props {
   /** The topic the article shows. */
@@ -88,13 +88,13 @@ export function HelpSidebar({
   };
 
   return (
-    <aside className="st-sidebar">
+    <aside className="st-sidebar" aria-label="Sidebar">
       <div className="st-drag" data-tauri-drag-region="" />
       <div className="st-search">
         <span className="st-search-icon" aria-hidden="true">
           <SearchIcon />
         </span>
-        <label htmlFor={inputId} className="st-visually-hidden">
+        <label htmlFor={inputId} className="visually-hidden">
           Search help
         </label>
         <input
@@ -109,13 +109,14 @@ export function HelpSidebar({
           aria-expanded={searching}
           aria-controls={listId}
           aria-autocomplete="list"
+          aria-keyshortcuts={ariaKeyshortcuts('Mod+F', mac)}
           aria-activedescendant={searching && results.length > 0 ? optionId(active) : undefined}
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           onKeyDown={onKeyDown}
         />
         {!searching && (
-          <span className="st-search-keys" aria-hidden="true">
+          <span className="keys st-search-keys" aria-hidden="true">
             {shortcutKeys('Mod+F', mac).map((key) => (
               <Keycap key={key}>{key}</Keycap>
             ))}

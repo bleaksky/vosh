@@ -6,8 +6,8 @@ import type { SelectOption } from '../../ui';
 // the selected session. Each known world dials its own port. A target
 // that is not a known world on its own port shows as the saved choice,
 // the way its row reads it, so the build port reads The Forsaken Lands
-// 1825 and picking The Forsaken Lands sets 1848 (board 7 of the Sessions
-// review). Other… clears host and port for you to type.
+// 1825 and picking The Forsaken Lands sets 1848. Other… clears host and
+// port for you to type.
 
 /** Other…, which clears host and port. */
 export const OTHER = 'other';

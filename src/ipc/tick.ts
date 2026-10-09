@@ -2,7 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { TICK, TICK_CONFIG_CHANGED } from './events';
+import { DAYLIGHT_CHANGED, TICK, TICK_CONFIG_CHANGED } from './events';
 import { sessionOf } from './session';
 
 /** The tick timer as the session loop reports it on session://tick,
@@ -65,4 +65,29 @@ export async function subscribeTickConfigChanged(
   cb: (cfg: TickConfig) => void,
 ): Promise<UnlistenFn> {
   return listen<TickConfig>(TICK_CONFIG_CHANGED, (event) => cb(event.payload));
+}
+
+/** Whether the sun is up in a session's game, as its latest World.Time
+ *  said, `Daylight` in src-tauri/src/tick.rs. */
+export type Daylight = 'day' | 'night';
+
+function asDaylight(value: unknown): Daylight | null {
+  return value === 'day' || value === 'night' ? value : null;
+}
+
+/** The day or night in the game of `session`, or the selected one, as
+ *  its latest World.Time said, through a drop too. Null before the
+ *  first. */
+export async function daylightGet(session?: number): Promise<Daylight | null> {
+  return asDaylight(await invoke<unknown>('daylight_get', { session }));
+}
+
+/** Hear the game of a session turn to day or night, with that session. */
+export async function subscribeDaylightChanged(
+  cb: (phase: Daylight, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<{ phase?: unknown; session?: number }>(DAYLIGHT_CHANGED, (event) => {
+    const phase = asDaylight(event.payload.phase);
+    if (phase) cb(phase, sessionOf(event.payload));
+  });
 }

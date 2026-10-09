@@ -1,4 +1,4 @@
-//! The walker, the one speedwalk of a connection (Q14). It sends one step
+//! The walker, the one speedwalk of a connection. It sends one step
 //! at a time and keeps one step in flight. Each step waits for the
 //! Room.Info of the room it reaches, which the game sends with the look
 //! after a move, before the next step leaves. When the Map.Tiles that came
@@ -16,17 +16,20 @@
 //!
 //! The walker only decides. Each event returns a [`WalkOut`] with the
 //! step to send, the lines to print and what the walk held to run once
-//! you arrive, and the session does the IO.
+//! you arrive, and the session does the IO. [`Walker::progress`] says
+//! where the walk stands, which the session tells the page when it
+//! changes.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::time::Duration;
 
+use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
 use vosh_automation::alias::ExpandStep;
 
-use crate::input::walk::{Dir, WalkCommand, WalkPlan};
+use crate::input::walk::{steps_text, Dir, WalkCommand, WalkPlan};
 use crate::script::ApplyResult;
 use crate::sessions::Session;
 
@@ -159,12 +162,34 @@ enum Landing {
 }
 
 /// Why a walk stopped, as its line says.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Why {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Why {
     /// Anything that needs no more words.
     Plain,
     LostSight,
     LostTrack,
+}
+
+/// Where the walk stands, as the page hears it on
+/// [`crate::app::events::WALK`].
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub(crate) enum WalkProgress {
+    /// No walk, since the last one arrived or none ran.
+    #[default]
+    Idle,
+    /// A walk under way, or one waiting for the step in flight to land.
+    /// `left` is the steps still to go as a `#walk` string, and `route`
+    /// is true for a click on the map.
+    Walking {
+        done: usize,
+        total: usize,
+        left: String,
+        route: bool,
+    },
+    /// The last walk stopped early, after `done` of its `total` steps.
+    Stopped { done: usize, total: usize, why: Why },
 }
 
 /// The walker. See the module notes.
@@ -173,6 +198,8 @@ pub(crate) struct Walker {
     walk: Option<Walk>,
     flight: Option<Flight>,
     next: Option<Next>,
+    /// How the last walk stopped, until the next one starts.
+    stopped: Option<(usize, usize, Why)>,
     /// The room the last Room.Info named, while Vosh knows where you are.
     room: Option<i64>,
     /// The exits the tiles that came with that Room.Info list from the
@@ -194,6 +221,23 @@ impl Walker {
         self.flight.map(|f| f.sent_at + BACKSTOP)
     }
 
+    /// Where the walk stands: the walk under way, else the one waiting
+    /// to take over, else how the last one stopped.
+    pub(crate) fn progress(&self) -> WalkProgress {
+        let walking = |plan: &WalkPlan, done: usize| WalkProgress::Walking {
+            done,
+            total: plan.steps.len(),
+            left: steps_text(&plan.steps[done..]),
+            route: plan.route.is_some(),
+        };
+        match (&self.walk, &self.next, self.stopped) {
+            (Some(walk), _, _) => walking(&walk.plan, walk.done),
+            (None, Some(next), _) => walking(&next.plan, 0),
+            (None, None, Some((done, total, why))) => WalkProgress::Stopped { done, total, why },
+            (None, None, None) => WalkProgress::Idle,
+        }
+    }
+
     /// Run a `#walk` line, or Esc.
     pub(crate) fn command(&mut self, command: WalkCommand, now: Instant) -> WalkOut {
         let mut out = WalkOut::default();
@@ -201,6 +245,7 @@ impl Walker {
             WalkCommand::Start { plan, rest } => {
                 if self.flight.is_some() {
                     self.next = Some(Next { plan, rest });
+                    self.stopped = None;
                 } else {
                     self.start(plan, rest, now, &mut out);
                 }
@@ -356,6 +401,7 @@ impl Walker {
             done: 0,
             rest,
         });
+        self.stopped = None;
         self.send_next(now, out);
     }
 
@@ -391,15 +437,18 @@ impl Walker {
                 walk.done += 1;
             }
             match landing {
-                Landing::Arrived if walk.done == walk.total() => out.release = walk.rest,
+                Landing::Arrived if walk.done == walk.total() => {
+                    self.stopped = None;
+                    out.release = walk.rest;
+                }
                 Landing::Arrived if self.next.is_none() => {
                     self.walk = Some(walk);
                     self.send_next(now, out);
                     return;
                 }
-                Landing::Unseen => out.lines.push(stopped_line(&walk, Why::LostSight)),
+                Landing::Unseen => self.halt(&walk, Why::LostSight, out),
                 Landing::Arrived | Landing::Elsewhere | Landing::Failed => {
-                    out.lines.push(stopped_line(&walk, Why::Plain));
+                    self.halt(&walk, Why::Plain, out);
                 }
             }
         }
@@ -413,7 +462,7 @@ impl Walker {
     fn stop(&mut self, why: Why, out: &mut WalkOut) -> bool {
         let next = self.next.take();
         if let Some(walk) = self.walk.take() {
-            out.lines.push(stopped_line(&walk, why));
+            self.halt(&walk, why, out);
             return true;
         }
         if let Some(next) = next {
@@ -422,10 +471,16 @@ impl Walker {
                 done: 0,
                 rest: next.rest,
             };
-            out.lines.push(stopped_line(&waiting, why));
+            self.halt(&waiting, why, out);
             return true;
         }
         false
+    }
+
+    /// `walk` stopped early for `why`. Say so, and keep how it stopped.
+    fn halt(&mut self, walk: &Walk, why: Why, out: &mut WalkOut) {
+        out.lines.push(stopped_line(walk, why));
+        self.stopped = Some((walk.done, walk.total(), why));
     }
 }
 

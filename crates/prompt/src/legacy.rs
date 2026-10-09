@@ -1,6 +1,6 @@
-//! Your 0.7 vitals template in today's codes, by the code map on board 5
-//! of the Vitals Styles review (Q13). Text starts from it when your 0.7
-//! vitals had a template on. Nothing reads the 0.7 template after that.
+//! Your 0.7 vitals template in today's codes, by a code map, so a code
+//! 0.7 printed as typed stays as typed. Text starts from it when your
+//! 0.7 vitals had a template on. Nothing reads the 0.7 template after that.
 
 /// Rewrite a 0.7 vitals template in today's codes. `bar_width` is the
 /// 0.7 bar width the `%bar_` codes drew at.

@@ -2,16 +2,20 @@ import type { ReactNode } from 'react';
 import type { SessionRow } from '../ipc/session';
 import { sessionLabel } from '../lib/sessionLabel';
 import { MARK_WORDS, type RowMark } from '../stores/session/sessionRowStore';
+import { useLiveSnoops } from '../stores/session/snoopStore';
 import { HandIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
+import { VisuallyHidden } from '../ui/VisuallyHidden';
+import { EyeIcon } from './icons';
 import { useSessionLine, type SessionLine } from './sessionLine';
 
 // The two lines of a session's row, which the sessions sidebar and the
-// session popover's list both draw (S1 and S7 of the Sessions Sidebar
-// review). Line one holds the status mark, the session as sessionLabel
-// names it with the port in quiet meta, and a right column its caller
-// fills. Line two says what the session is doing, with your health at
-// its right. The caller's grid places each part, so the parts sit as
-// siblings in it.
+// session popover's list both draw, so the two never drift apart. Line
+// one holds the status mark, the session as sessionLabel names it with
+// the port in quiet meta, and a right column with the eye and the count
+// of the session's live snoops before what its caller puts there. Line
+// two says what the session is doing, with your health at its right.
+// The caller's grid places each part, so the parts sit as siblings in
+// it.
 
 interface Props {
   row: SessionRow;
@@ -28,6 +32,7 @@ export function SessionRowBody({ row, rows, mark, end, onNameDoubleClick }: Prop
   const label = sessionLabel(row, rows);
   const line = useSessionLine(row);
   const port = label.split?.port ?? label.meta;
+  const snoops = useLiveSnoops(row.id);
   return (
     <>
       <SessionMark mark={mark} />
@@ -35,7 +40,10 @@ export function SessionRowBody({ row, rows, mark, end, onNameDoubleClick }: Prop
         <span className="shell-sessions-name-text">{label.split?.world ?? label.name}</span>
         {port && <span className="shell-sessions-port">{port}</span>}
       </span>
-      <span className="shell-sessions-end">{end}</span>
+      <span className="shell-sessions-end">
+        {snoops > 0 && <SnoopCount count={snoops} />}
+        {end}
+      </span>
       <SecondLine line={line} />
     </>
   );
@@ -52,7 +60,7 @@ export function SessionMark({ mark }: { mark: RowMark }) {
       ) : mark === 'triangle' ? (
         <TriangleIcon />
       ) : (
-        <span className="shell-sessions-dot" />
+        <span className={mark === 'live' ? 'dot is-success' : 'dot is-off'} />
       )}
     </span>
   );
@@ -63,6 +71,20 @@ export function WaitingCount({ count }: { count: number }) {
   return (
     <span className="shell-sessions-count" role="img" aria-label={`${count} waiting`}>
       {count > 9 ? '9+' : count}
+    </span>
+  );
+}
+
+/** How many snoops run in the session, the eye and the figure. */
+function SnoopCount({ count }: { count: number }) {
+  return (
+    <span
+      className="shell-sessions-snoops"
+      role="img"
+      aria-label={count === 1 ? '1 snoop' : `${count} snoops`}
+    >
+      <EyeIcon size={12} />
+      <span>{count}</span>
     </span>
   );
 }
@@ -79,6 +101,7 @@ function SecondLine({ line }: { line: SessionLine }) {
       </span>
       {health !== null && (
         <span className={low ? 'shell-sessions-health is-low' : 'shell-sessions-health'}>
+          <VisuallyHidden>Health </VisuallyHidden>
           {health}%
         </span>
       )}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   THEME_PAINT_KEY,
+  bootPaintPhase,
   parseThemePaint,
   pickPaintSide,
   prepaintTheme,
@@ -24,7 +25,22 @@ const dark: ThemePaintSide = {
 };
 
 const following: ThemePaint = { v: 1, follow: true, light, dark };
+const hcLight: ThemePaintSide = {
+  id: 'high-contrast-light',
+  appearance: 'light',
+  vars: { '--bg': '#ffffff', '--text': '#000000', '--xterm-bg': '#ffffff' },
+};
+const hcDark: ThemePaintSide = {
+  id: 'high-contrast',
+  appearance: 'dark',
+  vars: { '--bg': '#0a0a0a', '--text': '#ffffff', '--xterm-bg': '#0a0a0a' },
+};
+/** Following the system with the pair Increase contrast shows. */
+const contrasted: ThemePaint = { ...following, more: { light: hcLight, dark: hcDark } };
 const manual: ThemePaint = { v: 1, follow: false, manual: light };
+/** By night after a drop, Tokyo Night for the night and Rubric for the
+ *  day. */
+const game: ThemePaint = { v: 1, follow: 'game', day: light, night: dark, phase: 'night' };
 
 function memoryStorage(initial: Record<string, string> = {}): PaintStorage & {
   data: Record<string, string>;
@@ -110,9 +126,34 @@ describe('pickPaintSide', () => {
     expect(pickPaintSide(following, false)).toBe(light);
   });
 
+  it('picks the contrast pair under Increase contrast when the paint holds it', () => {
+    const yes = () => true;
+    expect(pickPaintSide(contrasted, true, yes)).toBe(hcDark);
+    expect(pickPaintSide(contrasted, false, yes)).toBe(hcLight);
+    expect(pickPaintSide(contrasted, true, () => false)).toBe(dark);
+    expect(pickPaintSide(contrasted, false)).toBe(light);
+  });
+
+  it('asks about contrast only when the paint holds the pair', () => {
+    let asked = 0;
+    const ask = () => {
+      asked += 1;
+      return true;
+    };
+    expect(pickPaintSide(following, true, ask)).toBe(dark);
+    expect(pickPaintSide(manual, true, ask)).toBe(light);
+    expect(pickPaintSide(game, true, ask)).toBe(dark);
+    expect(asked).toBe(0);
+  });
+
   it('keeps the manual pick whatever the OS shows', () => {
     expect(pickPaintSide(manual, true)).toBe(light);
     expect(pickPaintSide(manual, false)).toBe(light);
+  });
+
+  it('picks the side of the daylight last shown while the theme follows the game', () => {
+    expect(pickPaintSide(game, false)).toBe(dark);
+    expect(pickPaintSide({ ...game, phase: 'day' }, true)).toBe(light);
   });
 });
 
@@ -136,12 +177,20 @@ describe('parseThemePaint', () => {
       JSON.stringify({ v: 1, follow: false, manual: { ...light, vars: { '--bg': 3 } } }),
       JSON.stringify({ v: 1, follow: false, manual: { ...light, vars: { color: 'red' } } }),
       JSON.stringify({ v: 1, follow: false, manual: { ...light, vars: {} } }),
+      JSON.stringify({ ...game, phase: 'dusk' }),
+      JSON.stringify({ ...game, phase: undefined }),
+      JSON.stringify({ v: 1, follow: 'game', day: light, phase: 'day' }),
+      JSON.stringify({ ...following, more: null }),
+      JSON.stringify({ ...following, more: { light: hcLight } }),
+      JSON.stringify({ ...following, more: { light: hcLight, dark: { ...hcDark, vars: {} } } }),
     ];
     for (const raw of bad) expect(parseThemePaint(raw), String(raw)).toBeNull();
   });
 
   it('reads a well formed paint', () => {
     expect(parseThemePaint(JSON.stringify(following))).toEqual(following);
+    expect(parseThemePaint(JSON.stringify(contrasted))).toEqual(contrasted);
+    expect(parseThemePaint(JSON.stringify(game))).toEqual(game);
   });
 });
 
@@ -165,6 +214,42 @@ describe('prepaintTheme', () => {
     prepaintTheme({ storage: () => storage, systemDark: () => true, root: () => root });
     expect(root.attrs['data-appearance']).toBe('dark');
     expect(root.vars['--bg']).toBe('#1a1b26');
+  });
+
+  it('paints the contrast pair under Increase contrast', () => {
+    const root = fakeRoot();
+    const storage = memoryStorage({ [THEME_PAINT_KEY]: JSON.stringify(contrasted) });
+    const env = { storage: () => storage, root: () => root, moreContrast: () => true };
+    prepaintTheme({ ...env, systemDark: () => true });
+    expect(root.attrs['data-theme']).toBe('high-contrast');
+    expect(root.vars['--bg']).toBe('#0a0a0a');
+    prepaintTheme({ ...env, systemDark: () => false });
+    expect(root.attrs['data-theme']).toBe('high-contrast-light');
+    expect(root.vars['--bg']).toBe('#ffffff');
+  });
+
+  it('still paints an old cache without the contrast pair', () => {
+    const root = fakeRoot();
+    const storage = memoryStorage({ [THEME_PAINT_KEY]: JSON.stringify(following) });
+    const side = prepaintTheme({
+      storage: () => storage,
+      systemDark: () => true,
+      moreContrast: () => true,
+      root: () => root,
+    });
+    expect(side).toEqual(dark);
+  });
+
+  it('paints the daylight last shown and keeps it for the theme to hold', () => {
+    const root = fakeRoot();
+    const storage = memoryStorage({ [THEME_PAINT_KEY]: JSON.stringify(game) });
+    prepaintTheme({ storage: () => storage, systemDark: () => false, root: () => root });
+    expect(root.attrs['data-theme']).toBe('tokyo-night');
+    expect(bootPaintPhase()).toBe('night');
+    // A cache without the game leaves no daylight.
+    storage.setItem(THEME_PAINT_KEY, JSON.stringify(following));
+    prepaintTheme({ storage: () => storage, systemDark: () => false, root: () => root });
+    expect(bootPaintPhase()).toBeNull();
   });
 
   it('leaves the stylesheet defaults alone without a good cache', () => {

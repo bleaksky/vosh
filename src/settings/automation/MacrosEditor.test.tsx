@@ -4,13 +4,13 @@ import type { Macro } from '../../ipc/automation';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 import keptKeys from '../../../fixtures/macros/kept-keys.json';
 
-// The Macros list of Scripts board 7: the six macros Numpad movement
-// adds under From presets, the warn ring on your macro that keeps
-// Numpad3, and the card of each side of that clash. This mounts the
-// editor over a fake macros_list and drives it through the handlers
-// React keeps on each element, since this DOM sends no events.
+// The Macros list: the six macros Numpad movement adds under From
+// presets, the warn ring on your macro that keeps Numpad3, and the card
+// of each side of that clash. This mounts the editor over a fake
+// macros_list and drives it through the handlers React keeps on each
+// element, since this DOM sends no events.
 
-/** The store as board 7 has it, the first case Rust holds to
+/** The store with a clash, the first case Rust holds to
  *  hold_taken_keys. Your rec keeps Numpad3, so the preset's d on it is
  *  held off. */
 const B7: Macro[] = keptKeys.cases[0].macros;

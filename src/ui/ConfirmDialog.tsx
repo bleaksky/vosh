@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { trapDialogFocus } from './dialogFocus';
 import { cx } from './cx';
 import { useEscape } from '../lib/escapeStack';
+import { Button } from './Button';
 
 interface Props {
   title: string;
@@ -19,11 +20,15 @@ interface Props {
   confirmDisabled?: boolean;
   /** Fields between the body and the buttons, like New plugin's Name. */
   children?: ReactNode;
+  /** Where the card sits, from the window's right and bottom, for a
+   *  confirm over the foot of the card that asks, like the writing
+   *  card's Post…. It sits in the window's middle without one. */
+  at?: { right: number; bottom: number };
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-// A confirm on the floating recipe (SPEC 3): a 320 wide card, radius
+// A confirm on the floating recipe: a 320 wide card, radius
 // 16, the title at 15/20 semibold, quiet body copy, any fields, and
 // right-aligned Cancel, or the label you name, and the confirm button, danger by default. No
 // scrim. A clear layer behind the card still catches a press outside
@@ -45,6 +50,7 @@ export function ConfirmDialog({
   tone = 'danger',
   confirmDisabled = false,
   children,
+  at,
   onConfirm,
   onCancel,
 }: Props) {
@@ -80,7 +86,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="ov-confirm-layer"
+      className={cx('ov-confirm-layer', at && 'is-placed')}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -89,6 +95,7 @@ export function ConfirmDialog({
       <div
         ref={cardRef}
         className="ov-confirm"
+        style={at ? { position: 'fixed', right: at.right, bottom: at.bottom } : undefined}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
@@ -103,17 +110,12 @@ export function ConfirmDialog({
         </p>
         {children}
         <div className="ov-confirm-actions">
-          <button ref={cancelRef} type="button" className="ov-button" onClick={onCancel}>
+          <Button ref={cancelRef} onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
-            className={cx('ov-button', tone === 'primary' ? 'is-primary' : 'is-danger')}
-            disabled={confirmDisabled}
-            onClick={onConfirm}
-          >
+          </Button>
+          <Button variant={tone} disabled={confirmDisabled} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

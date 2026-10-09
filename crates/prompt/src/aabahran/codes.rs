@@ -1,11 +1,11 @@
 //! Every value code `bust_a_prompt` knows (`comm.c:1815-1940`), the field
 //! it fills and the pattern Vosh reads it with.
 //!
-//! The patterns follow E section 6.4 with the fixes in section 3 of the
-//! build spec. `%x` may be negative, `%s` is one word of letters and
-//! apostrophes, `%p` and `%P` carry their brackets, `%K %k %E` fill the
-//! percents, and `%G` is one of the eight region names. The group names
-//! are the catalog's, so a capture feeds the resolver as it is.
+//! The patterns follow what the game prints. `%x` may be negative, `%s` is
+//! one word of letters and apostrophes, `%p` and `%P` carry their brackets,
+//! `%K %k %E` fill the percents, and `%G` is one of the eight region names.
+//! The group names are the catalog's, so a capture feeds the resolver as
+//! it is.
 //!
 //! The breaks `%c` and `%C`, the color codes `%l` and `%L`, and `%%` are
 //! not values, and the lexer reads them itself.

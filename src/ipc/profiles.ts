@@ -72,7 +72,7 @@ export async function profileResolveMatch(
 /** The profile a new session on `host` and `port` starts on before
  *  anyone logs in, one pinned to that host and port, then one that
  *  claims the host on any port, or null to keep the profile in front. A
- *  claim that names characters counts too (Sessions Q2). */
+ *  claim that names characters counts too. */
 export async function profileBeforeLogin(host: string, port: number): Promise<string | null> {
   return invoke('profile_resolve_match', { host, port, character: null, anyCharacter: true });
 }

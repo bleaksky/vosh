@@ -18,10 +18,17 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-/** Press the More styles item `label` among what MoreStyleItems returns,
- *  through its button's click handler, since nothing here renders it. */
-function pressItem(tree: ReactNode, label: string) {
-  type Props = { role?: string; onClick?: () => void; children?: ReactNode };
+type ItemProps = {
+  role?: string;
+  onClick?: () => void;
+  onPointerMove?: (e: { currentTarget: unknown }) => void;
+  children?: ReactNode;
+};
+
+/** The props of the More styles item `label` among what MoreStyleItems
+ *  returns, since nothing here renders it. */
+function findItem(tree: ReactNode, label: string): ItemProps {
+  type Props = ItemProps;
   const items: Props[] = [];
   const walk = (node: ReactNode) => {
     if (Array.isArray(node)) node.forEach(walk);
@@ -40,7 +47,14 @@ function pressItem(tree: ReactNode, label: string) {
     return '';
   };
   const item = items.find((props) => text(props.children) === label);
-  if (!item?.onClick) throw new Error(`no item ${label}`);
+  if (!item) throw new Error(`no item ${label}`);
+  return item;
+}
+
+/** Press the More styles item `label` through its click handler. */
+function pressItem(tree: ReactNode, label: string) {
+  const item = findItem(tree, label);
+  if (!item.onClick) throw new Error(`item ${label} takes no click`);
   item.onClick();
 }
 
@@ -80,7 +94,7 @@ const form = (format: PromptForm['format'], segment: string, label = segment): P
   show_as: true,
 });
 
-// P5: the hp value of his template, italic from the %s_italic before it.
+// The hp value of his template, italic from the %s_italic before it.
 const HP: PromptPiece = {
   piece: 3,
   kind: 'value',
@@ -156,7 +170,7 @@ describe('a picked part', () => {
     expect(html).not.toContain('Width');
     expect(html).toContain('Insert value…');
     expect(html).toContain('>Remove<');
-    // The theme swatches in board order, in the theme's colors.
+    // The theme swatches in their order, in the theme's colors.
     const swatches = [
       ...row(html, 'Color').matchAll(/aria-label="(Theme [a-z]+)"[^>]*background:([^"]*)"/g),
     ].map((m) => [m[1], m[2]]);
@@ -241,7 +255,7 @@ describe('a picked part', () => {
   it('gives every part that takes a color a Background, under Color (styles board)', () => {
     const html = draw(HP);
     const ground = row(html, 'Background');
-    // The hint stays right under Color, as P5 draws it.
+    // The hint stays right under Color.
     expect(html.indexOf(THEME_HINT)).toBeGreaterThan(html.indexOf('aria-label="Color"'));
     expect(html.indexOf('aria-label="Background"')).toBeGreaterThan(html.indexOf(THEME_HINT));
     expect(ground).toMatch(/aria-label="Terminal background"[^>]*aria-pressed="true"/);
@@ -370,6 +384,33 @@ describe('a picked part', () => {
     // A rule sets the underline kinds apart from the styles.
     expect(html.indexOf('role="separator"')).toBeGreaterThan(html.indexOf('>Blink<'));
     expect(html.indexOf('role="separator"')).toBeLessThan(html.indexOf('>Double underline<'));
+  });
+
+  // The pointer and the arrow keys share one highlight, so the row
+  // under the pointer takes the focus.
+  it('gives the row under the pointer the focus', () => {
+    const doc: { activeElement: unknown } = { activeElement: null };
+    vi.stubGlobal('document', doc);
+    try {
+      const piece = {
+        strike: false,
+        dim: false,
+        inverse: false,
+        blink: false,
+        underline_style: null,
+      };
+      const row = {
+        focus() {
+          doc.activeElement = row;
+        },
+      };
+      findItem(MoreStyleItems({ piece, onToggle: () => undefined }), 'Dim').onPointerMove?.({
+        currentTarget: row,
+      });
+      expect(doc.activeElement).toBe(row);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('turns the underline on in a kind you pick, and off with the kind that is on', () => {

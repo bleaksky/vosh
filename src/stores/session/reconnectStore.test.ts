@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Drives the reconnect store through a fake Tauri event bus with
 // Tolliver's session (1) selected and Orla's (2) behind it, to hold it
-// to what the reconnect notice of the Alerts review reads. Each test
-// loads fresh store modules.
+// to what the reconnect notice reads. Each test loads fresh store
+// modules.
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Set<Handler>>();

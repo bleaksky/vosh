@@ -10,6 +10,7 @@ import {
   northOnScreen,
   project,
   roofAt,
+  roomAt,
   sceneOf,
   square,
   stairsOf,
@@ -201,5 +202,61 @@ describe('floorNumbers', () => {
   it('writes a floor above with a plus and one below with a minus sign', () => {
     expect(floorLabel(1)).toBe('+1');
     expect(floorLabel(-2)).toBe('−2');
+  });
+});
+
+describe('roomAt', () => {
+  const scene = sceneOf(VAL_MIRAN, 'all');
+  const ours = scene.rooms.filter((r) => r.z === 0);
+  const turns = [
+    { turn: 0, tilt: DEFAULT_MAP_3D_VIEW.tilt },
+    { turn: 45, tilt: 60 },
+    { turn: 200, tilt: 25 },
+    { turn: 300, tilt: 86 },
+  ];
+
+  it('finds the room of your floor under the middle of each roof at any turn and tilt', () => {
+    for (const t of turns) {
+      const cam = cameraFor(420, 380, scene, view({ ...t, floors: 'all' }), 1.5);
+      for (const r of ours) {
+        const p = project(cam, r.x, r.y, roofAt(0));
+        expect(roomAt(cam, scene, p.x, p.y), `turn ${t.turn} at ${r.x},${r.y}`).toBe(r);
+      }
+    }
+  });
+
+  it('gives null on bare ground and between two roofs', () => {
+    for (const t of turns) {
+      const cam = cameraFor(420, 380, scene, view({ ...t, floors: 'all' }), 1.5);
+      const corner = project(cam, -3, -3, roofAt(0));
+      expect(roomAt(cam, scene, corner.x, corner.y)).toBeNull();
+      const a = ours.find((r) => scene.at(r.x + 1, r.y, 0))!;
+      const gap = project(cam, a.x + 0.5, a.y, roofAt(0));
+      expect(roomAt(cam, scene, gap.x, gap.y), `turn ${t.turn}`).toBeNull();
+    }
+  });
+
+  it('gives null over a room of another floor with none of yours under it', () => {
+    const cam = cameraFor(420, 380, scene, view({ floors: 'all' }), 1.5);
+    const others = scene.rooms.filter((r) => r.z !== 0);
+    const lone = others.filter((r) => {
+      const p = project(cam, r.x, r.y, roofAt(r.z));
+      return ours.every((o) => {
+        const q = square(cam, o.x, o.y, roofAt(0), TILE / 2 + 0.1);
+        const xs = q.map((v) => v.x);
+        const ys = q.map((v) => v.y);
+        const inBox =
+          p.x >= Math.min(...xs) &&
+          p.x <= Math.max(...xs) &&
+          p.y >= Math.min(...ys) &&
+          p.y <= Math.max(...ys);
+        return !inBox;
+      });
+    });
+    expect(lone.length).toBeGreaterThan(0);
+    for (const r of lone) {
+      const p = project(cam, r.x, r.y, roofAt(r.z));
+      expect(roomAt(cam, scene, p.x, p.y)).toBeNull();
+    }
   });
 });

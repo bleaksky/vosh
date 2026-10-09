@@ -23,7 +23,7 @@ const raw = (patch: Partial<RawUiConfig> = {}): RawUiConfig => ({
 });
 
 describe('broadcastUiConfigChanges theme events', () => {
-  it('sends the resolved theme and the four theme fields when they change', async () => {
+  it('sends the resolved theme and the seven theme fields when they change', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ theme: 'nord' }));
     sent.mockClear();
@@ -36,6 +36,9 @@ describe('broadcastUiConfigChanges theme events', () => {
       follow_system_appearance: true,
       light_theme: 'vellum',
       dark_theme: 'nord',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
   });
 
@@ -92,6 +95,92 @@ describe('broadcastUiConfigChanges font event', () => {
       panel: '',
       panelSize: 0,
     });
+  });
+});
+
+describe('broadcastUiConfigChanges screen reader event', () => {
+  const READER = 'vosh://screen-reader-changed';
+  const readerSends = () => vi.mocked(emit).mock.calls.filter(([event]) => event === READER);
+
+  it('sends the four choices as one event when any of them moves', async () => {
+    const base = normalizeUiConfig(raw());
+    for (const moved of [
+      { screen_reader: true },
+      { screen_reader_background: true },
+      { screen_reader_prompt: true },
+      { screen_reader_burst: 16 as const },
+    ]) {
+      vi.mocked(emit).mockClear();
+      await broadcastUiConfigChanges({ ...base, ...moved }, base);
+      expect(readerSends()).toEqual([
+        [
+          READER,
+          {
+            screen_reader: false,
+            screen_reader_background: false,
+            screen_reader_prompt: false,
+            screen_reader_burst: 8,
+            ...moved,
+          },
+        ],
+      ]);
+    }
+  });
+
+  it('stays quiet when no reader choice moved', async () => {
+    const base = normalizeUiConfig(raw({ screen_reader: true }));
+    vi.mocked(emit).mockClear();
+    await broadcastUiConfigChanges({ ...base, font_size: 16 }, base);
+    expect(readerSends()).toEqual([]);
+  });
+});
+
+describe('broadcastUiConfigChanges command line events', () => {
+  const LOOK = 'vosh://input-line-look-changed';
+  const COLORS = 'vosh://input-type-colors-changed';
+  const sends = (name: string) => vi.mocked(emit).mock.calls.filter(([event]) => event === name);
+
+  it('sends the whole look when one look field moves', async () => {
+    const base = normalizeUiConfig(raw());
+    const look = {
+      blink: true,
+      caretColor: null,
+      textColor: null,
+      background: 'theme',
+      backgroundColor: null,
+      size: 0,
+    };
+    for (const [moved, field] of [
+      [{ input_caret_blink: false }, { blink: false }],
+      [{ input_caret_color: '#c6a46a' }, { caretColor: '#c6a46a' }],
+      [{ input_line_color: '#d8dee9' }, { textColor: '#d8dee9' }],
+      [{ input_line_background: 'tint' as const }, { background: 'tint' }],
+      [{ input_line_background_color: '#1d1f21' }, { backgroundColor: '#1d1f21' }],
+      [{ input_line_size: 16 }, { size: 16 }],
+    ] as const) {
+      vi.mocked(emit).mockClear();
+      await broadcastUiConfigChanges({ ...base, ...moved }, base);
+      expect(sends(LOOK)).toEqual([[LOOK, { ...look, ...field }]]);
+      expect(sends(COLORS)).toEqual([]);
+    }
+  });
+
+  it('sends the switch and all four colors when one of them moves', async () => {
+    const base = normalizeUiConfig(raw());
+    vi.mocked(emit).mockClear();
+    await broadcastUiConfigChanges({ ...base, input_type_chat_color: '#f0c674' }, base);
+    expect(sends(COLORS)).toEqual([
+      [COLORS, { on: false, alias: null, hash: null, chat: '#f0c674', unknown: null }],
+    ]);
+    expect(sends(LOOK)).toEqual([]);
+  });
+
+  it('stays quiet when nothing on the command line moved', async () => {
+    const base = normalizeUiConfig(raw({ input_type_colors: true, input_line_size: 18 }));
+    vi.mocked(emit).mockClear();
+    await broadcastUiConfigChanges({ ...base, font_size: 16 }, base);
+    expect(sends(LOOK)).toEqual([]);
+    expect(sends(COLORS)).toEqual([]);
   });
 });
 
@@ -176,7 +265,7 @@ describe('a replaced UI config', () => {
     // The main window last sent these values at a profile switch.
     const loaded = raw({
       echo_macros: false,
-      input_echo_caret: false,
+      input_echo_mark: 'off',
       paste_line_delay_ms: 200,
       spellcheck_prompt: true,
       input_cursor_style: 'underline',
@@ -207,7 +296,12 @@ describe('a replaced UI config', () => {
     expect(sentBeforeApply).toBe(0);
     const payloads = new Map(sent.mock.calls.map(([event, payload]) => [event, payload]));
     expect(payloads.get('vosh://echo-macros-changed')).toBe(false);
-    expect(payloads.get('vosh://input-echo-caret-changed')).toBe(false);
+    expect(payloads.get('vosh://input-echo-mark-changed')).toEqual({
+      mark: 'off',
+      text: '',
+      color: null,
+      dim: false,
+    });
     expect(payloads.get('vosh://paste-line-delay-changed')).toBe(200);
     expect(payloads.get('vosh://spellcheck-prompt-changed')).toBe(true);
     expect(payloads.get('vosh://input-cursor-style-changed')).toBe('underline');

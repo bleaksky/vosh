@@ -18,10 +18,17 @@ import {
   SETTINGS_GOTO_TAB,
 } from './events';
 
-/** The sentences launch kept for you, such as a profile file Vosh could
- *  not read and will not save over. The first call takes them, and every
+/** One thing launch has to tell you. An error says something went wrong,
+ *  such as a profile file Vosh could not read and will not save over, and
+ *  info only points you somewhere, such as the screen reader setting. */
+export interface LaunchNotice {
+  kind: 'error' | 'info';
+  message: string;
+}
+
+/** The notices launch kept for you. The first call takes them, and every
  *  later call gets none. */
-export async function launchNoticesTake(): Promise<string[]> {
+export async function launchNoticesTake(): Promise<LaunchNotice[]> {
   return invoke('launch_notices_take');
 }
 

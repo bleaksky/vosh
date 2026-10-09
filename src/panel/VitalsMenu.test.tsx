@@ -4,13 +4,13 @@ import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VITALS_OPTIONS_CHANGED } from '../ipc/events';
-import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, VITALS_STYLES, type VitalsOptions } from '../ipc/uiConfigVitals';
 import { openSettingsTab } from '../lib/settingsLink';
 import { VitalsChoiceItems, VitalsMenu } from './VitalsMenu';
 import {
   pickVitalsStyle,
   pickVitalsValues,
-  vitalsStyleChoices,
+  vitalsStyleFamilies,
   vitalsValuesChoices,
 } from './vitalsPicks';
 
@@ -43,7 +43,7 @@ vi.mock('../ui/MenuSurface', async (actual) => ({
 // The options the menu reads, the defaults unless a test picks others.
 const shown = vi.hoisted(() => ({ options: null as VitalsOptions | null }));
 vi.mock('../stores/config/vitalsOptionsStore', async () => {
-  const { DEFAULT_VITALS_OPTIONS: defaults } = await import('../ipc/uiConfig');
+  const { DEFAULT_VITALS_OPTIONS: defaults } = await import('../ipc/uiConfigVitals');
   const get = () => shown.options ?? defaults;
   return { useVitalsOptions: get, getVitalsOptions: get };
 });
@@ -76,7 +76,11 @@ const labels = (rows: Row[]) =>
 /** A submenu's rows for `options`, picking with `pick`. */
 const styleRows = (options: VitalsOptions, done = () => {}) =>
   rowsOf(
-    <VitalsChoiceItems choices={vitalsStyleChoices(options)} pick={pickVitalsStyle} done={done} />,
+    <VitalsChoiceItems
+      choices={vitalsStyleFamilies(options).flat()}
+      pick={pickVitalsStyle}
+      done={done}
+    />,
   );
 
 describe('vitals menu', () => {
@@ -92,7 +96,7 @@ describe('vitals menu', () => {
     menuRows(DEFAULT_VITALS_OPTIONS)
       .find((row) => row.children === 'Customize vitals…')
       ?.onSelect?.();
-    expect(openSettingsTab).toHaveBeenCalledWith('layout:customize-vitals');
+    expect(openSettingsTab).toHaveBeenCalledWith('vitals:customize-vitals');
   });
 
   it('adds Edit your text under Text, and Values goes quiet', () => {
@@ -104,6 +108,23 @@ describe('vitals menu', () => {
     expect(openSettingsTab).not.toHaveBeenCalled();
   });
 
+  it('sets the styles apart by family, in the gallery order', () => {
+    const families = vitalsStyleFamilies(DEFAULT_VITALS_OPTIONS).map((family) =>
+      family.map((choice) => choice.label),
+    );
+    expect(families).toEqual([
+      ['Rows', 'One line', 'Ledger'],
+      ['Gauges', 'Pips', 'Bands', 'Ladders', 'Blocks', 'Traces'],
+      ['Dials', 'Rings', 'Vials', 'Orbs', 'Candles'],
+      ['Text'],
+    ]);
+    expect(
+      vitalsStyleFamilies(DEFAULT_VITALS_OPTIONS)
+        .flat()
+        .map((choice) => choice.value),
+    ).toEqual([...VITALS_STYLES]);
+  });
+
   it('checks your style and your Values form', () => {
     const options: VitalsOptions = {
       ...DEFAULT_VITALS_OPTIONS,
@@ -111,7 +132,23 @@ describe('vitals menu', () => {
       values: 'percent',
     };
     const rows = styleRows(options);
-    expect(labels(rows)).toEqual(['Rows', 'One line', 'Ledger', 'Gauges', 'Pips', 'Text']);
+    expect(labels(rows)).toEqual([
+      'Rows',
+      'One line',
+      'Ledger',
+      'Gauges',
+      'Pips',
+      'Bands',
+      'Ladders',
+      'Blocks',
+      'Traces',
+      'Dials',
+      'Rings',
+      'Vials',
+      'Orbs',
+      'Candles',
+      'Text',
+    ]);
     expect(rows.filter((row) => isValidElement(row.trailing)).map((row) => row.children)).toEqual([
       'Gauges',
     ]);

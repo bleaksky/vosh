@@ -29,9 +29,15 @@ export default tseslint.config(
     },
   },
   {
-    files: ['vite.config.ts'],
+    files: ['vite.config.ts', 'knip.ts'],
     languageOptions: {
       parser: tseslint.parser,
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
       globals: globals.node,
     },
   },

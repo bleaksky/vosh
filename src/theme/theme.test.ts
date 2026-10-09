@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pickTheme, resolveActiveTheme, themeAppearance, type ThemePrefs } from './theme';
 
-const { setTheme, emit, invoke, getUiConfig } = vi.hoisted(() => ({
+type Handler = (event: { payload: unknown }) => void;
+
+const { setTheme, emit, invoke, getUiConfig, handlers } = vi.hoisted(() => ({
   setTheme: vi.fn((_theme?: string | null) => Promise.resolve()),
   emit: vi.fn((_event: string, _payload?: unknown) => Promise.resolve()),
-  invoke: vi.fn((_cmd: string, _args?: unknown) => Promise.resolve()),
+  invoke: vi.fn((_cmd: string, _args?: unknown): Promise<unknown> => Promise.resolve()),
+  // Every listener a test module adds, by event, so a test can fire one.
+  handlers: new Map<string, Set<Handler>>(),
   // What a window fetches when it applies a theme id it does not know.
   getUiConfig: vi.fn(() => Promise.resolve({ custom_themes: [] as unknown[] })),
 }));
@@ -15,34 +19,64 @@ vi.mock('@tauri-apps/api/window', () => ({
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit,
-  listen: vi.fn(() => Promise.resolve(() => {})),
+  listen: vi.fn((event: string, cb: Handler) => {
+    let set = handlers.get(event);
+    if (!set) handlers.set(event, (set = new Set()));
+    set.add(cb);
+    return Promise.resolve(() => set.delete(cb));
+  }),
 }));
-vi.mock('../ipc/uiConfig', () => ({ getUiConfig }));
+vi.mock('../ipc/uiConfig', async (original) => ({
+  ...(await original<typeof import('../ipc/uiConfig')>()),
+  getUiConfig,
+}));
 
 const prefs = (patch: Partial<ThemePrefs> = {}): ThemePrefs => ({
   theme: 'nord',
   follow_system_appearance: false,
   light_theme: 'rubric',
   dark_theme: 'tokyo-night',
+  theme_follow: 'off',
+  day_theme: '',
+  night_theme: '',
   ...patch,
 });
 
 describe('resolveActiveTheme', () => {
   it('shows the manual pick while follow is off', () => {
-    expect(resolveActiveTheme(prefs(), true)).toBe('nord');
-    expect(resolveActiveTheme(prefs(), false)).toBe('nord');
+    expect(resolveActiveTheme(prefs(), true, null)).toBe('nord');
+    expect(resolveActiveTheme(prefs(), false, null)).toBe('nord');
   });
 
   it('shows the pair entry that matches the OS while follow is on', () => {
     const ui = prefs({ follow_system_appearance: true });
-    expect(resolveActiveTheme(ui, true)).toBe('tokyo-night');
-    expect(resolveActiveTheme(ui, false)).toBe('rubric');
+    expect(resolveActiveTheme(ui, true, null)).toBe('tokyo-night');
+    expect(resolveActiveTheme(ui, false, null)).toBe('rubric');
   });
 
   it('falls back to the manual pick when the pair entry is blank', () => {
     const ui = prefs({ follow_system_appearance: true, dark_theme: '', light_theme: '' });
-    expect(resolveActiveTheme(ui, true)).toBe('nord');
-    expect(resolveActiveTheme(ui, false)).toBe('nord');
+    expect(resolveActiveTheme(ui, true, null)).toBe('nord');
+    expect(resolveActiveTheme(ui, false, null)).toBe('nord');
+  });
+});
+
+describe('resolveActiveTheme with the game', () => {
+  const ui = prefs({ theme_follow: 'game', day_theme: 'gruvbox', night_theme: 'obsidian-ember' });
+
+  it('shows the day theme by day and the night theme by night, whatever the OS', () => {
+    expect(resolveActiveTheme(ui, true, 'day')).toBe('gruvbox');
+    expect(resolveActiveTheme(ui, false, 'night')).toBe('obsidian-ember');
+  });
+
+  it('shows the manual pick before the game says, and for a slot left empty', () => {
+    expect(resolveActiveTheme(ui, true, null)).toBe('nord');
+    expect(resolveActiveTheme({ ...ui, day_theme: '' }, true, 'day')).toBe('nord');
+  });
+
+  it('follows the game even where an older Vosh left follow system on', () => {
+    const both = { ...ui, follow_system_appearance: true };
+    expect(resolveActiveTheme(both, true, 'day')).toBe('gruvbox');
   });
 });
 
@@ -69,9 +103,9 @@ describe('pickTheme', () => {
     const ui = prefs({ follow_system_appearance: true });
     const next = pickTheme(ui, 'rose-pine');
     expect(next).toEqual({ ...ui, dark_theme: 'rose-pine' });
-    expect(resolveActiveTheme(next, true)).toBe('rose-pine');
+    expect(resolveActiveTheme(next, true, null)).toBe('rose-pine');
     // A light OS keeps showing the light theme.
-    expect(resolveActiveTheme(next, false)).toBe('rubric');
+    expect(resolveActiveTheme(next, false, null)).toBe('rubric');
   });
 
   it('fills the light slot with a light pick while follow is on', () => {
@@ -87,6 +121,32 @@ describe('pickTheme', () => {
     expect(pickTheme(ui, 'everforest-light')).toEqual({ ...ui, light_theme: 'everforest-light' });
   });
 
+  it('fills the slot showing now while the theme follows the game', () => {
+    const ui = prefs({ theme_follow: 'game', day_theme: 'nord', night_theme: 'nord' });
+    // A light pick by night fills the night slot all the same.
+    expect(pickTheme(ui, 'rubric', 'night')).toEqual({ ...ui, night_theme: 'rubric' });
+    expect(pickTheme(ui, 'obsidian-ember', 'day')).toEqual({ ...ui, day_theme: 'obsidian-ember' });
+    // Before the game says, the manual pick is what shows.
+    expect(pickTheme(ui, 'gruvbox', null)).toEqual({ ...ui, theme: 'gruvbox' });
+  });
+
+  it('shows the high contrast pair under Increase contrast while it follows the system', () => {
+    const ui = prefs({ follow_system_appearance: true });
+    expect(resolveActiveTheme(ui, true, null, true)).toBe('high-contrast');
+    expect(resolveActiveTheme(ui, false, null, true)).toBe('high-contrast-light');
+    const blank = prefs({ follow_system_appearance: true, dark_theme: '', light_theme: '' });
+    expect(resolveActiveTheme(blank, true, null, true)).toBe('high-contrast');
+    expect(resolveActiveTheme(blank, false, null, true)).toBe('high-contrast-light');
+  });
+
+  it('leaves Increase contrast alone while off or following the game', () => {
+    expect(resolveActiveTheme(prefs(), true, null, true)).toBe('nord');
+    const game = prefs({ theme_follow: 'game', day_theme: 'rubric', night_theme: 'dracula' });
+    expect(resolveActiveTheme(game, true, 'day', true)).toBe('rubric');
+    expect(resolveActiveTheme(game, false, 'night', true)).toBe('dracula');
+    expect(resolveActiveTheme(game, false, null, true)).toBe('nord');
+  });
+
   it('keeps the other fields of a whole config', () => {
     const ui = { ...prefs(), font_size: 14 };
     expect(pickTheme(ui, 'dracula').font_size).toBe(14);
@@ -95,6 +155,7 @@ describe('pickTheme', () => {
 
 describe('applyThemePrefs', () => {
   let dark = true;
+  let more = false;
   let listeners: Array<() => void> = [];
 
   beforeEach(() => {
@@ -102,11 +163,12 @@ describe('applyThemePrefs', () => {
     setTheme.mockClear();
     emit.mockClear();
     dark = true;
+    more = false;
     listeners = [];
     vi.stubGlobal('window', {
       matchMedia: (query: string) => ({
         get matches() {
-          return query.includes('dark') ? dark : false;
+          return query.includes('dark') ? dark : query.includes('contrast') ? more : false;
         },
         addEventListener: (_type: string, fn: () => void) => listeners.push(fn),
         removeEventListener: (_type: string, fn: () => void) => {
@@ -166,7 +228,8 @@ describe('applyThemePrefs', () => {
     });
     expect(id).toBe('tokyo-night');
     expect(setTheme).toHaveBeenLastCalledWith(null);
-    expect(listeners).toHaveLength(1);
+    // One listener for the appearance, one for Increase contrast.
+    expect(listeners).toHaveLength(2);
 
     flip(false);
     expect(theme.getCurrentThemeId()).toBe('rubric');
@@ -174,6 +237,29 @@ describe('applyThemePrefs', () => {
 
     flip(true);
     expect(theme.getCurrentThemeId()).toBe('tokyo-night');
+  });
+
+  it('swaps in the high contrast pair when Increase contrast goes on', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ follow_system_appearance: true }), { broadcastFlips: true });
+    expect(theme.getCurrentThemeId()).toBe('tokyo-night');
+    more = true;
+    for (const l of listeners) l();
+    expect(theme.getCurrentThemeId()).toBe('high-contrast');
+    expect(emit).toHaveBeenCalledWith('vosh://theme-changed', 'high-contrast');
+    flip(false);
+    expect(theme.getCurrentThemeId()).toBe('high-contrast-light');
+    expect(emit).toHaveBeenCalledWith('vosh://theme-changed', 'high-contrast-light');
+    more = false;
+    for (const l of listeners) l();
+    expect(theme.getCurrentThemeId()).toBe('rubric');
+  });
+
+  it('opens on the high contrast pair when Increase contrast is already on', async () => {
+    more = true;
+    const theme = await import('./theme');
+    expect(theme.applyThemePrefs(prefs({ follow_system_appearance: true }))).toBe('high-contrast');
+    expect(theme.applyThemePrefs(prefs())).toBe('nord');
   });
 
   it('stops following when follow goes off', async () => {
@@ -197,6 +283,7 @@ describe('applyThemePrefs', () => {
 
 describe('the paint cache', () => {
   let dark = true;
+  let more = false;
   let listeners: Array<() => void> = [];
   let stored: Record<string, string> = {};
   let rootAttrs: Record<string, string> = {};
@@ -206,13 +293,14 @@ describe('the paint cache', () => {
     getUiConfig.mockReset();
     getUiConfig.mockImplementation(() => Promise.resolve({ custom_themes: [] }));
     dark = true;
+    more = false;
     listeners = [];
     stored = {};
     rootAttrs = {};
     vi.stubGlobal('window', {
       matchMedia: (query: string) => ({
         get matches() {
-          return query.includes('dark') ? dark : false;
+          return query.includes('dark') ? dark : query.includes('contrast') ? more : false;
         },
         addEventListener: (_type: string, fn: () => void) => listeners.push(fn),
         removeEventListener: (_type: string, fn: () => void) => {
@@ -281,7 +369,7 @@ describe('the paint cache', () => {
     if (paint?.follow !== false) throw new Error('no manual paint');
     expect(paint.manual.vars['--danger']).toBe(deutan.danger);
     expect(paint.manual.vars['--success']).toBe(deutan.success);
-    // The four fields another window sends keep the vision.
+    // The seven fields another window sends keep the vision.
     theme.applyThemePrefs(prefs({ theme: 'kanso-zen' }));
     expect(theme.getColorVision()).toBe('deuteranopia');
     // A new vision paints the theme on screen again at once.
@@ -306,12 +394,31 @@ describe('the paint cache', () => {
       follow: true,
       light: theme.themePaintSide(findTheme('rubric')),
       dark: theme.themePaintSide(findTheme('tokyo-night')),
+      more: {
+        light: theme.themePaintSide(findTheme('high-contrast-light')),
+        dark: theme.themePaintSide(findTheme('high-contrast')),
+      },
     });
     // An OS flip repaints and leaves the same pair.
     flip(false);
     paint = await cached();
-    expect(paint?.follow && paint.light.id).toBe('rubric');
-    expect(paint?.follow && paint.dark.id).toBe('tokyo-night');
+    expect(paint?.follow === true && paint.light.id).toBe('rubric');
+    expect(paint?.follow === true && paint.dark.id).toBe('tokyo-night');
+  });
+
+  it('leaves all four sides while Increase contrast shows the pair', async () => {
+    more = true;
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ follow_system_appearance: true }));
+    expect(rootAttrs['data-theme']).toBe('high-contrast');
+    const paint = await cached();
+    expect(paint?.follow === true && [paint.light.id, paint.dark.id]).toEqual([
+      'rubric',
+      'tokyo-night',
+    ]);
+    expect(
+      paint?.follow === true && paint.more && [paint.more.light.id, paint.more.dark.id],
+    ).toEqual(['high-contrast-light', 'high-contrast']);
   });
 
   it('leaves the successor of a retired id at once, with no catalog to wait on', async () => {
@@ -340,6 +447,10 @@ describe('the paint cache', () => {
       follow: true,
       light: theme.themePaintSide(findTheme('rubric')),
       dark: theme.themePaintSide(findTheme('one-half-dark')),
+      more: {
+        light: theme.themePaintSide(findTheme('high-contrast-light')),
+        dark: theme.themePaintSide(findTheme('high-contrast')),
+      },
     });
   });
 
@@ -636,5 +747,137 @@ describe('the paint cache', () => {
 
   it('reports the appearance where no canvas can read the ground', async () => {
     expect(await reportFor('rgb(16, 16, 16)')).toEqual([{ background: null, appearance: 'dark' }]);
+  });
+});
+
+describe('following the game', () => {
+  let stored: Record<string, string> = {};
+  let rootAttrs: Record<string, string> = {};
+  /** What daylight_get answers, by the session it names. */
+  let daylight: Record<string, string | null> = {};
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  const turn = (phase: string, session: number) => {
+    for (const cb of handlers.get('vosh://daylight-changed') ?? [])
+      cb({ payload: { phase, session } });
+  };
+
+  const GAME = prefs({
+    theme: 'nord',
+    theme_follow: 'game',
+    day_theme: 'gruvbox',
+    night_theme: 'obsidian-ember',
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    handlers.clear();
+    setTheme.mockClear();
+    emit.mockClear();
+    stored = {};
+    rootAttrs = {};
+    daylight = { selected: 'night', '1': 'night', '2': 'day' };
+    invoke.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === 'daylight_get') {
+        const session = (args as { session?: number } | undefined)?.session;
+        return Promise.resolve(daylight[session === undefined ? 'selected' : String(session)]);
+      }
+      if (cmd === 'sessions_list') {
+        return Promise.resolve([
+          { id: 1, name: null, character: 'Tolliver', selected: true },
+          { id: 2, name: null, character: 'Maren', selected: false },
+        ]);
+      }
+      return Promise.resolve();
+    });
+    vi.stubGlobal('window', {
+      matchMedia: () => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+      localStorage: {
+        getItem: (key: string) => stored[key] ?? null,
+        setItem: (key: string, value: string) => {
+          stored[key] = value;
+        },
+      },
+    });
+    vi.stubGlobal('document', {
+      documentElement: {
+        setAttribute: (name: string, value: string) => {
+          rootAttrs[name] = value;
+        },
+        style: { setProperty: () => {} },
+      },
+    });
+  });
+
+  afterEach(() => {
+    invoke.mockReset();
+    invoke.mockImplementation(() => Promise.resolve());
+    vi.unstubAllGlobals();
+  });
+
+  const cached = async () => {
+    const { pageStorage, readThemePaint } = await import('./themePaint');
+    return readThemePaint(pageStorage());
+  };
+
+  it('shows the night theme the game says, then the day theme at dawn', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(GAME, { broadcastFlips: true });
+    await settle();
+    expect(theme.getCurrentThemeId()).toBe('obsidian-ember');
+    // The window takes the theme's own appearance, not the system's.
+    expect(setTheme).toHaveBeenLastCalledWith('dark');
+    turn('day', 1);
+    expect(theme.getCurrentThemeId()).toBe('gruvbox');
+    expect(rootAttrs['data-theme']).toBe('gruvbox');
+    // The main window tells the Terminal, which repaints its palette.
+    expect(emit).toHaveBeenCalledWith('vosh://theme-changed', 'gruvbox');
+    const paint = await cached();
+    expect(paint?.follow === 'game' && [paint.phase, paint.day.id, paint.night.id]).toEqual([
+      'day',
+      'gruvbox',
+      'obsidian-ember',
+    ]);
+  });
+
+  it('changes nothing for a turn in a session behind', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(GAME);
+    await settle();
+    turn('day', 2);
+    expect(theme.getCurrentThemeId()).toBe('obsidian-ember');
+  });
+
+  it('holds the side last shown while the game has not said', async () => {
+    stored['vosh.cache.themePaint'] = JSON.stringify({
+      v: 1,
+      follow: 'game',
+      day: { id: 'gruvbox', appearance: 'dark', vars: { '--bg': '#282828' } },
+      night: { id: 'obsidian-ember', appearance: 'dark', vars: { '--bg': '#0f0e0d' } },
+      phase: 'day',
+    });
+    daylight = { selected: null, '1': null };
+    const { prepaintTheme } = await import('./themePaint');
+    expect(prepaintTheme()?.id).toBe('gruvbox');
+    const theme = await import('./theme');
+    expect(theme.applyThemePrefs(GAME)).toBe('gruvbox');
+    await settle();
+    expect(theme.getCurrentThemeId()).toBe('gruvbox');
+    // A pick fills the side that shows.
+    expect(theme.pickTheme(GAME, 'rubric')).toEqual({ ...GAME, day_theme: 'rubric' });
+  });
+
+  it('stops following when Switch themes goes off', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(GAME);
+    await settle();
+    theme.applyThemePrefs(prefs());
+    turn('day', 1);
+    expect(theme.getCurrentThemeId()).toBe('nord');
   });
 });

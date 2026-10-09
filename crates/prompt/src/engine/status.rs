@@ -21,7 +21,7 @@ pub enum Status {
     /// Three pulses in a row brought no prompt Vosh reads.
     NotMatching,
     /// You turned prompts off in the game, so no prompt comes and none
-    /// is missed (D28).
+    /// is missed.
     PromptsOff,
 }
 
@@ -33,7 +33,7 @@ pub struct StatusReport {
     pub last_match_at: Option<String>,
 }
 
-/// What counts misses between prompts (section 4).
+/// What counts misses between prompts.
 #[derive(Debug, Clone, Default)]
 pub(super) struct Misses {
     /// Pulses or sends in a row that brought no prompt Vosh read.
@@ -78,7 +78,7 @@ impl PromptEngine {
 
     /// A pulse started. Under the Forsaken Lands rules the one before it
     /// is a miss when it brought no prompt Vosh read, unless you turned
-    /// prompts off (D28).
+    /// prompts off.
     pub(super) fn pulse_started(&mut self) {
         if !self.forsaken() {
             return;

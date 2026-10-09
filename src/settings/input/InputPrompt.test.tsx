@@ -95,7 +95,7 @@ describe('the game prompt block', () => {
       />,
     );
     expect(html).toContain('class="st-prompt-meta is-warn"');
-    expect(html).toContain('<span class="st-prompt-dot" aria-hidden="true"></span>');
+    expect(html).toContain('<span class="st-warn-dot dot is-warn" aria-hidden="true"></span>');
     expect(html).toContain('class="pc-command st-prompt-command"');
     expect(html).toContain('prompt &lt;%h %m %vmv&gt;</span>');
     expect(html).toMatch(/<button[^>]*>Copy<\/button>/);
@@ -159,7 +159,7 @@ describe('the game prompt block', () => {
       />,
     );
     expect(html).toContain(
-      `<span class="st-prompt-line-meta is-warn" role="status"><span class="st-prompt-dot" aria-hidden="true"></span><span>${line}</span></span>`,
+      `<span class="st-prompt-line-meta is-warn" role="status"><span class="st-warn-dot dot is-warn" aria-hidden="true"></span><span>${line}</span></span>`,
     );
     expect(html).not.toContain('Last read at');
     expect(text(html)).toContain(`${line}Point at it again…`);

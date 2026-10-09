@@ -1,10 +1,12 @@
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
   useState,
   type ClipboardEvent,
+  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import {
@@ -12,7 +14,18 @@ import {
   nativeSurfaceScroll,
   nativeSurfaceSelectAll,
 } from '../ipc/nativeSurface';
-import { sendInput, sendMaskedInput, stopWalk } from '../ipc/session';
+import { sendInput, sendMaskedInput, sendRawInput, stopWalk } from '../ipc/session';
+import type { LineLook } from '../ipc/uiConfigInput';
+import { writingStart, type WritingKind } from '../ipc/writing';
+import { useWriting, writingOf } from '../stores/session/writingStore';
+import { loadWriting, useWritingFile } from '../writing/draftsStore';
+import { cardTakes } from '../writing/kinds';
+import { pasted } from '../writing/text';
+import { looksLikeChat } from './chatLine';
+import { editorLineOf, heldLine, useFieldCell, washPast } from './editorLine';
+import { EditorMarks } from './EditorMarks';
+import { modeOf, type ModePill as Pill } from './modePill';
+import { LinePill } from './LinePill';
 import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import {
   draftAfterMaskChange,
@@ -25,12 +38,14 @@ import { useCaret } from './useCaret';
 import { useCommandHistory } from './useCommandHistory';
 import { useInputPreferences } from './useInputPreferences';
 import type { MacroKeys } from './useMacroKeys';
+import { TypeColorLayer } from './TypeColorLayer';
 import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { getPasswordMode, subscribePasswordMode } from '../stores/session/inputModeStore';
 import { getSelected, useSelected } from '../stores/session/sessionsStore';
 import { getTargetState } from '../stores/session/targetStore';
+import { useWalk } from '../stores/session/walkStore';
 
 export interface InputHandle {
   focus: () => void;
@@ -63,39 +78,44 @@ interface Props {
    *  holds a stale height until the next keystroke and the whole
    *  layout shifts when that keystroke lands. */
   fontKey?: string;
+  /** Open the writing card on the text the game's editor holds, from
+   *  the editor pill's menu. */
+  onOpenWriting?: (kind: WritingKind) => void;
 }
 
-// Regex set for "is this line chat-like?" — when the toggle in
-// Settings is on and one of these matches the current input, the
-// webview's native spell-check flips on for the prompt. Otherwise
-// MUD verbs like `kill` / `oload` would light up red on every line.
-const CHAT_PREFIXES: RegExp[] = [
-  /^say\b/i,
-  /^'/, // `'hello` = say hello (FL-style say shortcut)
-  /^"/, // `"hello` = say hello on some MUDs
-  /^tell\s+\S+\s/i,
-  /^t\s+\S+\s/i,
-  /^reply\b/i,
-  /^r\s+/i,
-  /^whisper\s+\S+\s/i,
-  /^chat\b/i,
-  /^gossip\b/i,
-  /^;/, // `;hello` = gossip on some servers
-  /^ooc\b/i,
-  /^clan\b/i,
-  /^cb\b/i,
-  /^imm(talk)?\b/i,
-  /^immchat\b/i,
-  /^immtell\b/i,
-  /^quote\b/i,
-  /^emote\b/i,
-  /^pmote\b/i,
-];
+/** The writing card drives the game's editor in `session`, so its other
+ *  sends wait. */
+function writingHolds(session: number): boolean {
+  const job = writingOf(session).job;
+  return job !== null && job.action !== 'paste';
+}
 
-function looksLikeChat(line: string): boolean {
-  const trimmed = line.trimStart();
-  if (trimmed.length === 0) return false;
-  return CHAT_PREFIXES.some((re) => re.test(trimmed));
+const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+/** The color of the pill's edge and wash: the accent for the editor and
+ *  warn past its limit, success for a walk, and secondary where the game
+ *  asks, at a password prompt and at its pager. */
+function modeColor(pill: Pill): string {
+  if (pill.mode === 'editor') return pill.warn ? 'var(--warn)' : 'var(--accent)';
+  if (pill.mode === 'walk') return 'var(--success)';
+  return 'var(--secondary)';
+}
+
+/** The row's look classes and the colors and size you picked, which
+ *  input.css reads as --caret, --line-text and --line-ground. At the
+ *  defaults the row takes no class and no inline style. */
+function rowLook(look: LineLook): { classes: string; style: CSSProperties | undefined } {
+  const ground = look.background === 'own' ? look.backgroundColor : null;
+  const own = ground !== null;
+  const vars: Record<string, string> = {};
+  if (look.caretColor) vars['--caret'] = look.caretColor;
+  if (look.textColor) vars['--line-text'] = look.textColor;
+  if (ground) vars['--line-ground'] = ground;
+  if (look.size > 0) vars.fontSize = `${look.size}px`;
+  return {
+    classes: look.background === 'tint' ? ' is-tint' : own ? ' is-own' : '',
+    style: Object.keys(vars).length > 0 ? (vars as CSSProperties) : undefined,
+  };
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
@@ -108,6 +128,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     onExitSplit,
     onSelectAllTerminal,
     fontKey,
+    onOpenWriting,
   }: Props,
   ref,
 ) {
@@ -137,6 +158,24 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // compose grows past the visible cap.
   const gutterRef = useRef<HTMLDivElement | null>(null);
   const { mirrorRef, caretRef, caretPos, measureCaret } = useCaret(inputRef, value);
+  const {
+    spellcheckPrompt,
+    cursorStyle,
+    lineLook,
+    typeColors,
+    knownWords,
+    lineMark,
+    keepLastRef,
+    pasteDelayRef,
+    echoColorRef,
+    echoMacrosRef,
+    echoMarkRef,
+    echoDimRef,
+  } = useInputPreferences();
+  const look = rowLook(lineLook);
+  // A size of the line's own moves the metrics just as your terminal
+  // font does.
+  const metricsKey = `${fontKey ?? ''}|${lineLook.size}`;
 
   useEffect(() => {
     // Refocus on enable and whenever the element swaps between the
@@ -167,7 +206,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     } else {
       el.style.height = `${el.scrollHeight}px`;
     }
-  }, [value, passwordMode, fontKey]);
+  }, [value, passwordMode, metricsKey]);
 
   // The masked field follows the selected session: the game's echo in
   // that session, and each selection. The listener reads the newest
@@ -197,15 +236,33 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const isQuickKey = (word: string) =>
     getTargetState().quick_keys.some((q) => q.name === word && q.verb.length > 0);
 
-  const {
-    spellcheckPrompt,
-    cursorStyle,
-    keepLastRef,
-    pasteDelayRef,
-    echoColorRef,
-    echoMacrosRef,
-    echoCaretRef,
-  } = useInputPreferences();
+  // The game's line editor, open on a text Vosh names, after you kept
+  // typing there: each line goes raw, and the line shows the tick and
+  // the count. The card's Check spelling covers it, since all you type
+  // there is your text.
+  const writing = useWriting();
+  const editor = editorLineOf(writing);
+  // The pill's menu opens the card only on a text it takes.
+  const editorCard = editor && cardTakes(editor.kind) ? editor.kind : null;
+  const editorRef = useRef(editor);
+  editorRef.current = editor;
+  const writingFile = useWritingFile();
+  const editing = editor !== null;
+  useEffect(() => {
+    if (editing) void loadWriting();
+  }, [editing]);
+  const [field, setField] = useState<HTMLTextAreaElement | null>(null);
+  // One callback for the life of the row, so a render hands the
+  // textarea over once and not on each pass.
+  const fieldRef = useCallback((el: HTMLTextAreaElement | null) => {
+    inputRef.current = el;
+    setField(el);
+  }, []);
+  const cell = useFieldCell(editing ? field : null);
+  const editorText = value.split('\n').pop() ?? '';
+  // What Enter does now, named in the pill in place of the mark.
+  const walk = useWalk();
+  const pill = modeOf({ password: passwordMode, writing, walk: walk.progress });
 
   useImperativeHandle(
     ref,
@@ -250,7 +307,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       masked,
       quickKey: !masked && isQuickKey(firstWord),
       echoColor: echoColorRef.current,
-      echoCaret: echoCaretRef.current,
+      echoMark: echoMarkRef.current,
+      echoDim: echoDimRef.current,
     });
     if (plan.remember) remember(line, to);
     // #nativesurface is handled here, not in the backend, because the
@@ -274,7 +332,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
     if (plan.echo !== null) onLocalEcho?.(plan.echo, to);
     try {
-      await (plan.masked ? sendMaskedInput(line, to) : sendInput(line, to));
+      if (plan.masked) await sendMaskedInput(line, to);
+      else if (editorRef.current) await sendRawInput(line, to);
+      else await sendInput(line, to);
     } catch (e) {
       onError?.(String(e), to);
     }
@@ -300,6 +360,16 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     const text = event.clipboardData.getData('text');
     if (!text.includes('\n') && !text.includes('\r')) return;
     event.preventDefault();
+    // In the game's editor a paste wraps and folds as the card's does,
+    // keeps its empty lines, and goes on the game's >.
+    const open = editorRef.current;
+    if (open) {
+      const lines = pasted(text, open.width).rows.map((row) => row.text);
+      void writingStart({ id: Date.now(), kind: open.kind, action: 'paste', lines }, session).catch(
+        (e: unknown) => onError?.(String(e), session),
+      );
+      return;
+    }
     const lines = text
       .replace(/\r\n?/g, '\n')
       .split('\n')
@@ -330,6 +400,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     setPasteBurst({ sent: 0, total });
     for (let i = 0; i < total; i++) {
       if (pasteCancelRef.current) break;
+      // The writing card holds the session's other sends while it
+      // drives the game's editor, a paste in flight among them.
+      while (writingHolds(to) && !pasteCancelRef.current) await sleep(100);
+      if (pasteCancelRef.current) break;
       await submitLine(lines[i], to);
       setPasteBurst({ sent: i + 1, total });
       if (i < total - 1 && delay > 0) {
@@ -355,10 +429,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     // Tab completion. Pressing Tab once builds a candidate list from
     // history words and room characters that prefix-match the word
     // being typed. Pressing Tab again cycles through the matches.
-    // Any other key resets the cycle.
+    // Any other key resets the cycle. With no word before the caret
+    // Tab moves the focus on, to the panel or back to the terminal.
     if (event.key === 'Tab') {
-      event.preventDefault();
-      complete(event.shiftKey ? -1 : 1);
+      if (complete(event.shiftKey ? -1 : 1)) event.preventDefault();
       return;
     }
     resetCycle();
@@ -384,7 +458,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           masked: maskedNow(),
           quickKey: isQuickKey(firstWord),
           echoColor: echoColorRef.current,
-          echoCaret: echoCaretRef.current,
+          echoMark: echoMarkRef.current,
+          echoDim: echoDimRef.current,
         });
         if (echo !== null) onLocalEcho?.(echo, session);
         try {
@@ -539,7 +614,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       // lines, plus the backend still splits `;` within each). A bare
       // Enter on an empty prompt sends one blank line, which advances
       // MUD prompts and paginated output.
-      const composedLines = composed.split('\n').filter((l) => l.trim().length > 0);
+      // In the game's editor an empty line is a paragraph break, which
+      // goes too.
+      const composedLines = editorRef.current
+        ? composed.split('\n')
+        : composed.split('\n').filter((l) => l.trim().length > 0);
       if (composedLines.length === 0) {
         await submitLine('', session);
       } else {
@@ -578,16 +657,43 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // single-line. The gutter only renders once a second line exists so a
   // normal single command prompt stays clean.
   const lineCount = passwordMode ? 1 : value.split('\n').length;
+  // Coloring as you type draws on a typed command, never on a password
+  // or a line of the game's editor, once Vosh has said what it knows.
+  const typedWords = typeColors.on && !passwordMode && !editor ? knownWords : null;
+
+  const rowStyle = pill
+    ? ({ ...look.style, '--input-mode': modeColor(pill) } as CSSProperties)
+    : look.style;
 
   return (
     <div
-      className={`input-row${pasteBurst ? ' input-row-pasting' : ''}${
-        lineCount > 1 ? ' input-row-multiline' : ''
-      }`}
+      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}${pill ? ' is-mode' : ''}`}
+      style={rowStyle}
     >
-      <span className="prompt" aria-hidden="true">
-        &#8250;
-      </span>
+      {pill ? (
+        <LinePill
+          pill={pill}
+          editor={
+            editor && onOpenWriting
+              ? {
+                  onOpenWriting: editorCard ? () => onOpenWriting(editorCard) : null,
+                  // Finish goes as an @ you typed would.
+                  onFinish: () => void submitLine('@', session),
+                  onReturn: () => inputRef.current?.focus(),
+                }
+              : null
+          }
+        />
+      ) : (
+        lineMark && (
+          <span
+            className={[...lineMark].length > 1 ? 'prompt input-mark-wide' : 'prompt'}
+            aria-hidden="true"
+          >
+            {lineMark}
+          </span>
+        )
+      )}
       {lineCount > 1 && (
         <div className="input-gutter" aria-hidden="true" ref={gutterRef}>
           {Array.from({ length: lineCount }, (_, i) => (
@@ -620,7 +726,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="current-password"
-          placeholder="password"
           aria-label="password input"
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -639,16 +744,16 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         // so the attribute triggers the squiggle pass; plain MUD
         // commands skip it so the prompt stays clean.
         <textarea
-          ref={(el) => {
-            inputRef.current = el;
-          }}
+          ref={fieldRef}
           rows={1}
           value={value}
-          spellCheck={spellcheckPrompt && looksLikeChat(value)}
+          spellCheck={editor ? writingFile.spelling : spellcheckPrompt && looksLikeChat(value)}
+          style={editor ? washPast(editorText, editor, cell) : undefined}
+          placeholder={pill?.hint ?? undefined}
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
-          aria-label="command input"
+          aria-label="Command line"
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
@@ -665,11 +770,21 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           }}
         />
       )}
+      {typedWords && (
+        <TypeColorLayer field={field} value={value} words={typedWords} colors={typeColors} />
+      )}
       {!passwordMode && <div className="input-caret-mirror" aria-hidden="true" ref={mirrorRef} />}
+      {!passwordMode && editor && <EditorMarks field={field} cell={cell} editor={editor} />}
+      {writing.held > 0 && (
+        <span className="wr-held" aria-live="polite">
+          <span className="wr-held-dot dot is-warn" aria-hidden="true" />
+          {heldLine(writing.held)}
+        </span>
+      )}
       {!passwordMode && caretPos && (
         <span
           ref={caretRef}
-          className={`input-caret caret-shape--${cursorStyle}`}
+          className={`input-caret caret-shape--${cursorStyle}${lineLook.blink ? '' : ' is-steady'}`}
           aria-hidden="true"
           style={{ left: caretPos.left, top: caretPos.top }}
         />

@@ -12,7 +12,9 @@ use serde_json::json;
 use tauri::{AppHandle, Manager};
 use tokio::time::Instant;
 use tracing::{info, warn};
-use vosh_protocol::telnet::Negotiator;
+use vosh_protocol::telnet::{
+    codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator,
+};
 
 use crate::app::state::SharedState;
 use crate::input;
@@ -24,11 +26,13 @@ use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
 use super::conn::Conn;
-use super::connection::Connection;
+use super::connection::{Connection, RoomChar};
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp_vars;
+use super::now_ms;
 use super::prompt_view::observe_prompt_gmcp;
 use super::read::walked;
+use super::steps::recolor_target;
 use super::vitals_text;
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
@@ -40,6 +44,12 @@ use super::vitals_text;
 /// mortals nothing). Group carries the roster the Group pane shows.
 /// Aabahran sends every package without this list, so it names them
 /// for servers that honor it.
+///
+/// Snoop is the one Aabahran waits for. A Core.Supports body that holds
+/// `"Snoop ` turns on Snoop.Start, Snoop.Stop and Snoop.Output for the
+/// players you snoop (gmcp.c). The game sends them only to someone who
+/// snoops, so a mortal sees no change. serde writes the list with no
+/// spaces, so the one entry is enough.
 pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Char 1",
     "Room 1",
@@ -48,10 +58,14 @@ pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Map 1",
     "Imm.Queues 1",
     "Group 1",
+    "Snoop 1",
 ];
 
+/// Take one GMCP packet. `log_id` is the session log's row, which the
+/// rows of a snooped player's lines attach to.
 pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     conn: &mut Conn<R>,
+    log_id: Option<i64>,
     payload: &[u8],
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
@@ -71,15 +85,34 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply, daylight, vitals_text) = {
+    let (tick_step, script_apply, daylight, vitals_text, snooped, picked, recolored) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
         let mut c = conn.session.connection.lock();
         let now = Instant::now();
-        c.link.gmcp(&msg.package);
+        let picked = c.link.gmcp(&msg.package);
+        // A channel's packet names the channel of its line, which came
+        // in this read or waits to come.
+        if msg.package == "Comm.Channel" {
+            let since = batch.since_prompt.min(batch.log.len());
+            c.log_kinds.packet(&msg.data, &mut batch.log[since..]);
+        }
+        // A snoop's text goes to its tab and never to the line pipeline.
+        // Lua still hears the packet below. Its whole lines go in the log
+        // with this read's rows.
+        let at = now_ms();
+        let snooped = c.snoops.gmcp(&msg.package, &msg.data, at);
+        if snooped {
+            batch.log.extend(c.snoops.take_log(log_id, at));
+        }
         let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
+        // A Room.Chars that follows a look an earlier read showed colors
+        // your target's line in it again.
+        let recolored = (msg.package == "Room.Chars")
+            .then(|| recolor_target(&p, &mut c, &mut batch.out))
+            .flatten();
         // A tell you got or a fight that starts on you rings its preset.
         apply
             .alerts
@@ -90,8 +123,21 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
             .flatten();
         // Your vitals or the fight moved, so a vitals text draws again.
         let vitals_text = vitals_text::after_package(&conn.session, &p, &c, &msg.package, now);
-        (tick_step, apply.ran_under(p.open()), daylight, vitals_text)
+        (
+            tick_step,
+            apply.ran_under(p.open()),
+            daylight,
+            vitals_text,
+            snooped,
+            picked,
+            recolored,
+        )
     };
+    // The ring keeps the line as the screen shows it now.
+    if let Some(row) = recolored {
+        conn.session.scrollback.lock().await.recolor(&row);
+    }
+    batch.snoop |= snooped;
     vitals_text::emit(&conn.app, &conn.session, vitals_text);
     if let Some(phase) = daylight {
         conn.session.emit(
@@ -116,6 +162,20 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
                 character_named(&conn.app, state.inner(), &conn.session, &owned).await;
             }
         }
+    }
+    // A reconnect to a character left link dead sends no Char.Status
+    // (`check_reconnect`, comm.c), so the character you picked at the
+    // account menu names it at the first vitals of play. The page hears
+    // it as Char.Name, the package that names the character alone.
+    if let Some(name) = picked {
+        batch.character = Some(name.clone());
+        let state = conn.app.state::<SharedState>();
+        character_named(&conn.app, state.inner(), &conn.session, &name).await;
+        conn.session.emit_data(
+            &conn.app,
+            "session://gmcp/Char-Name",
+            &serde_json::json!({ "name": name }),
+        );
     }
     let mut sink = OutputSink::Batch(batch);
     let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
@@ -161,6 +221,14 @@ async fn walk_gmcp<R: tauri::Runtime>(
             return Ok(());
         }
         "Room.Info" => conn.walker.room_info(&msg.data, Instant::now()),
+        // Char.Vitals comes only with the game's own prompt
+        // (`gmcp.c:935`), so the editor and the pager closed. Aabahran
+        // sends it before the text of its pulse, so the writer arms the
+        // tick and fires it once that text is in.
+        "Char.Vitals" => {
+            conn.writer.tick(Instant::now());
+            return Ok(());
+        }
         "Char.Combat" => conn.walker.combat(&msg.data),
         "Char.State" => conn.walker.state(&msg.data),
         _ => return Ok(()),
@@ -238,7 +306,7 @@ pub(super) fn gmcp_step(
         if let Some(arr) = msg.data.as_array() {
             // The look this packet goes with lists one line for each
             // entry after its things.
-            c.room_block.room_chars(arr.len());
+            let _ = c.room_block.room_chars(arr.len());
             let chars = input::target::read_room_chars(arr);
             input::target::set_room_chars(c, chars);
         }
@@ -255,6 +323,53 @@ pub(super) fn gmcp_step(
     let outcome = c.script.dispatch_gmcp(&msg.package, &msg.data);
     let apply = script::apply_actions(p, c, outcome);
     (tick_step, apply)
+}
+
+/// For each event of one read, the people of the next Room.Chars packet
+/// in it with no GA or EOR between, as each event finds them ahead. Where
+/// the game sends a look's packets after its people, the packet that
+/// places your target follows the lines it places, mostly in the same
+/// read, so a line reads it before it shows. Empty when the read holds no
+/// Room.Chars, so an event past the end has none ahead.
+pub(super) fn room_chars_ahead(events: &[TelnetEvent]) -> Vec<Option<Arc<[RoomChar]>>> {
+    if !events
+        .iter()
+        .any(|event| room_chars_payload(event).is_some())
+    {
+        return Vec::new();
+    }
+    let mut ahead = vec![None; events.len()];
+    let mut next: Option<Arc<[RoomChar]>> = None;
+    for (i, event) in events.iter().enumerate().rev() {
+        ahead[i].clone_from(&next);
+        if let Some(payload) = room_chars_payload(event) {
+            next = vosh_protocol::gmcp::parse(payload)
+                .ok()
+                .filter(|msg| msg.package == "Room.Chars")
+                .and_then(|msg| {
+                    msg.data
+                        .as_array()
+                        .map(|arr| input::target::read_room_chars(arr).into())
+                });
+        } else if matches!(event, TelnetEvent::Command(byte)
+            if *byte == telnet_codes::GA || *byte == telnet_codes::EOR)
+        {
+            next = None;
+        }
+    }
+    ahead
+}
+
+/// The payload of a GMCP packet that can be a Room.Chars.
+fn room_chars_payload(event: &TelnetEvent) -> Option<&[u8]> {
+    match event {
+        TelnetEvent::Subnegotiation { option, payload }
+            if *option == telnet_option::GMCP && payload.starts_with(b"Room.Chars") =>
+        {
+            Some(payload)
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn hello_subnegotiation() -> Vec<u8> {

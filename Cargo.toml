@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.9.0"
+version = "0.95.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 authors = ["James Wright"]
@@ -59,3 +59,19 @@ panic = "abort"
 [profile.dev]
 opt-level = 0
 debug = true
+
+# The log search reads every line in scope through SQLite and the regex
+# engine, which a dev build leaves unoptimized. These four build
+# optimized in dev too, so a dev search runs about twice as fast warm
+# (D36). Every other crate keeps the fast dev compile.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
+
+[profile.dev.package.rusqlite]
+opt-level = 3
+
+[profile.dev.package.regex]
+opt-level = 3
+
+[profile.dev.package.regex-automata]
+opt-level = 3

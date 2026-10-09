@@ -1,6 +1,6 @@
 //! A pane a plugin draws, through the real session against the fake
 //! game: the packets of one read send it once, and turning the plugin
-//! off empties it at once (Scripts and Panels Q4 and Q18).
+//! off empties it at once.
 
 use serde_json::{json, Value as Json};
 use tauri::Manager;
@@ -80,7 +80,7 @@ async fn the_packets_of_one_read_send_the_pane_once_and_turning_it_off_empties_i
     h.until_shown("Welcome to the fake Aabahran, Orla.").await;
     plugin(&h, "weather_pane", true).await;
     // The load draws the pane from the packets the game sent at login,
-    // which a plugin gets as it loads (Q24), in one event.
+    // which a plugin gets as it loads, in one event.
     h.until("the pane", |h| !sent(h).is_empty()).await;
     let loaded = sent(&h);
     assert_eq!(loaded.len(), 1, "{loaded:#?}");

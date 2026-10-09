@@ -185,7 +185,7 @@ pub enum BarColor {
     Color(ColorSpec),
 }
 
-/// How a value is drawn (section 1.4 of the build spec).
+/// How a value is drawn.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Format {
     /// The value itself.

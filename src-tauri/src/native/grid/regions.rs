@@ -128,6 +128,10 @@ impl TermGrid {
     /// in their place when it writes them on a new row, or finds the
     /// region open with nothing held, as when the region came from the
     /// scrollback the grid loaded.
+    ///
+    /// Bytes that start a row of their own (`Output::fresh`) get a line
+    /// end first when, the held line ends written, the cursor sits past
+    /// the start of a row.
     pub(crate) fn session_output(&mut self, out: &Output) {
         // A lift's two marks ride in one output.
         self.lift_tracks.clear();
@@ -175,7 +179,13 @@ impl TermGrid {
             self.restore_first();
             self.write_hold();
             self.region = None;
-            let text = self.decode(&out.bytes);
+            let mut text = self.decode(&out.bytes);
+            // A line Vosh prints about itself starts a row of its own.
+            // The row a pinned prompt left drops the line end, as it
+            // drops any.
+            if out.fresh && !self.at_row_start() {
+                text.insert_str(0, "\r\n");
+            }
             let text = self.land(text);
             if !text.is_empty() {
                 let text = self.wrap(&text);
@@ -245,12 +255,12 @@ impl TermGrid {
         }
     }
 
-    /// Your echo `bytes` without the grey mark Mark your commands draws
-    /// first, when the row it lands on already ends in `>`. Anything else
-    /// comes back as it is. The page's twin is `withoutMark` in
-    /// terminalRegion.ts.
+    /// Your echo `bytes` without the mark it starts with, every byte of
+    /// it, when the row it lands on already ends in `>`. Anything else
+    /// comes back as it is, and with the mark off nothing goes. The page's
+    /// twin is `withoutMark` in terminalRegion.ts.
     fn without_mark<'a>(&self, bytes: &'a [u8]) -> &'a [u8] {
-        match bytes.strip_prefix(crate::input::ECHO_CARET.as_bytes()) {
+        match bytes.strip_prefix(self.echo_mark.as_slice()) {
             Some(rest) if self.ends_in_prompt() => rest,
             _ => bytes,
         }

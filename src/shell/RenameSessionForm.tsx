@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
 import { getSelected, rename, useSessions } from '../stores/session/sessionsStore';
+import { Button } from '../ui';
 
 // The Rename session form the session popover swaps in for its list
-// while no sessions sidebar shows, as with one session. Board 9 names a
-// session in a field in its row, and with no row to name it in, the
+// while no sessions sidebar shows, as with one session. The sidebar
+// names a session in a field in its row, and with no row to name it in, the
 // popover's own form recipe holds that one field. Name starts on what
 // the session reads, its text selected, and shows what it reads with no
 // name once you clear it. Save keeps what you typed, and a blank Name
@@ -57,12 +58,10 @@ export function RenameSessionForm({ onCancel, onClose }: Props) {
         />
       </label>
       <div className="shell-form-actions">
-        <button type="button" className="shell-btn" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="submit" className="shell-btn shell-btn-primary">
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" type="submit">
           Save
-        </button>
+        </Button>
       </div>
     </form>
   );

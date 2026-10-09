@@ -45,7 +45,7 @@ export class PaneSizer {
   private lastW = 0;
   private lastH = 0;
   // The native wgpu surface hears this pane's screen rectangle, so its
-  // grid tracks the terminal (docs/native-renderer.md). Live pane only,
+  // grid tracks the terminal (docs/renderer.md). Live pane only,
   // and only while the surface draws it.
   //
   // The rows the pinned band borrows go along, so the grid gives them
@@ -97,8 +97,19 @@ export class PaneSizer {
 
   // Fit xterm to its pane, less the rows the pinned band borrows. The
   // FitAddon only proposes the size, so the lent rows come off here.
+  //
+  // When the native surface owns the pane it is the size authority and
+  // resizes xterm via the native-grid-size event. The FitAddon sizes
+  // xterm from its own cells, so letting it fit here would fight the
+  // native grid. The grid sends its size only when it changes, so a fit
+  // that slipped in kept xterm narrower than the grid for good: the
+  // pinned band then cut a row the session had pushed out to the grid's
+  // columns, the end of a %{right} part under an ellipsis (2026-10-08).
+  // A panel that opens, a font that changes and a face that loads all
+  // fit through here.
   fitKept(): void {
     if (!this.pane.shown()) return;
+    if (!this.pane.quiet() && nativeSurfaceEnabled()) return;
     const dims = this.pane.fit.proposeDimensions();
     if (!dims || Number.isNaN(dims.cols) || Number.isNaN(dims.rows)) return;
     this.pane.resize(dims.cols, keptRows(dims.rows, this.pane.lent()));
@@ -106,11 +117,6 @@ export class PaneSizer {
   }
 
   readonly safeFit = (): void => {
-    // When the native surface owns the pane it is the size authority and
-    // resizes xterm via the native-grid-size event. The FitAddon sizes
-    // xterm from its own cells, so letting it fit here would fight the
-    // native grid.
-    if (!this.pane.quiet() && nativeSurfaceEnabled()) return;
     try {
       this.fitKept();
     } catch {

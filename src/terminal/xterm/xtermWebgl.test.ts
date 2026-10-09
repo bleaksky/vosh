@@ -3,8 +3,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { XtermBlink } from './xtermBlink';
 import { xtermWebgl } from './xtermWebgl';
 
-// Only the pane that shows holds a WebGL context (Q6 of the Sessions
-// review). The addon stands in here, and so do the canvas the probe asks
+// Only the pane that shows holds a WebGL context. The
+// addon stands in here, and so do the canvas the probe asks
 // for a context and the storage that can turn WebGL off.
 
 const addons = vi.hoisted(() => [] as { disposed: number }[]);

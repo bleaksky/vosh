@@ -1,11 +1,12 @@
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from '../../theme/baseAnsi';
 import { indexedRgb } from '../../theme/color';
+import type { LogScope, ScenePalette } from '../../ipc/logs';
 import type { XtermPalette } from '../../theme/themes';
 
-// The Settings log view (the SettingsGeneralLogs board) and the
-// Session logs row on General. The words and numbers they show, the
-// day headings, and each saved line drawn in its own SGR colors with
-// your matches marked, the way the find bar marks them.
+// The Settings log view and the Session logs row on General. The words
+// and numbers they show, the day headings, and each saved line drawn in
+// its own SGR colors with your matches marked, the way the find bar
+// marks them.
 
 /** How many lines one page of the log view loads. */
 export const LOG_PAGE_SIZE = 500;
@@ -26,6 +27,28 @@ const MONTHS = [
   'December',
 ];
 
+/** True when `host` names this computer, ignoring case, spaces and a
+ *  trailing dot, as vosh-log's is_local_host reads it. Log sessions
+ *  starts off for one, since play on your own machine is usually a
+ *  test. */
+export function isLocalHost(host: string): boolean {
+  const clean = host.trim().replace(/\.$/, '').toLowerCase();
+  return clean === '127.0.0.1' || clean === 'localhost';
+}
+
+/** The choices of Keep logs for, as select values: days, or forever. */
+export const KEEP_LOGS: readonly { value: string; label: string }[] = [
+  { value: 'forever', label: 'Forever' },
+  { value: '365', label: '1 year' },
+  { value: '90', label: '90 days' },
+  { value: '30', label: '30 days' },
+];
+
+/** The choices of Scrollback size, in lines. */
+export const SCROLLBACK_SIZES: readonly { value: string; label: string }[] = [
+  1_000, 5_000, 10_000, 25_000, 50_000, 100_000,
+].map((n) => ({ value: String(n), label: `${NUMBER.format(n)} lines` }));
+
 /** A count with thousands separators, like `708,350`. */
 export function formatCount(n: number): string {
   return NUMBER.format(n);
@@ -36,8 +59,8 @@ const plural = (n: number, one: string, many: string) =>
 
 /** The Session logs row on General, like `447 logs and 708,350 lines
  *  on this Mac.` A log is one connection, so a session that connects
- *  three times saves three (Q21). `place` names the computer: Mac,
- *  PC, or computer. */
+ *  three times saves three. `place` names the computer: Mac, PC, or
+ *  computer. */
 export function savedLogsText(logs: number, lines: number, place: string): string {
   if (logs === 0) return `Vosh has not saved a log on this ${place} yet.`;
   return `${plural(logs, 'log', 'logs')} and ${plural(lines, 'line', 'lines')} on this ${place}.`;
@@ -80,6 +103,81 @@ export function logDay(ms: number, now: number = Date.now()): string {
  *  or `September 28, 17:28`. */
 export function logSessionLabel(startedMs: number, now: number = Date.now()): string {
   return `${logDay(startedMs, now)}, ${logTime(startedMs)}`;
+}
+
+// ── What the view reads ────────────────────────────────────────────
+
+/** The spans of time the view reads. Last 7 days opens the view, so a
+ *  search stays quick however big the log grows. */
+export type LogRange = 'session' | 'week' | 'month' | 'all';
+
+export const LOG_RANGES: readonly { value: LogRange; label: string }[] = [
+  { value: 'session', label: 'This session' },
+  { value: 'week', label: 'Last 7 days' },
+  { value: 'month', label: 'Last 30 days' },
+  { value: 'all', label: 'All time' },
+];
+
+const DAY_MS = 86_400_000;
+
+/** The scope of a range on one world: its host and port, and for the
+ *  last 7 or 30 days the time the span starts. */
+export function logRangeScope(
+  range: LogRange,
+  world: { host: string; port: number },
+  now: number = Date.now(),
+): LogScope {
+  const scope: LogScope = { host: world.host, port: world.port };
+  if (range === 'session') scope.thisSession = true;
+  if (range === 'week') scope.sinceMs = now - 7 * DAY_MS;
+  if (range === 'month') scope.sinceMs = now - 30 * DAY_MS;
+  return scope;
+}
+
+/** The search field's placeholder for what the view reads. */
+export function logPlaceholder(range: LogRange | null): string {
+  switch (range) {
+    case null:
+      return 'Search this log';
+    case 'session':
+      return 'Search this session';
+    case 'week':
+      return 'Search the last 7 days';
+    case 'month':
+      return 'Search the last 30 days';
+    case 'all':
+      return 'Search every log';
+  }
+}
+
+/** The name Save as file gives what the view reads, before its
+ *  extension: `Vosh log, last 7 days`, or for one log the day and time
+ *  it started, `Vosh log, 2026-10-08 17.28`. */
+export function logFileName(range: LogRange | null, startedMs: number | null): string {
+  if (range === null) {
+    const at = startedMs ?? 0;
+    const d = new Date(at);
+    const time = `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`;
+    return `Vosh log, ${logDayKey(at)} ${time}`;
+  }
+  const label = LOG_RANGES.find((r) => r.value === range)?.label ?? '';
+  return `Vosh log, ${label.toLowerCase()}`;
+}
+
+/** What the view says when it reads no line and you typed no pattern. */
+export function logEmptyText(range: LogRange | null): string {
+  switch (range) {
+    case null:
+      return 'This log has no saved lines.';
+    case 'session':
+      return 'This session has saved nothing since Vosh opened.';
+    case 'week':
+      return 'Nothing saved from this world in the last 7 days.';
+    case 'month':
+      return 'Nothing saved from this world in the last 30 days.';
+    case 'all':
+      return 'Vosh saves every line as you play. It has none saved from this world yet.';
+  }
 }
 
 export interface LogDayGroup<T> {
@@ -215,6 +313,23 @@ export function logPalette(
   return ANSI_SLOTS.map((slot, i) =>
     themeColors ? theme[slot] : (base?.[i] ?? CANONICAL_ANSI_16[slot]),
   );
+}
+
+/** The theme in front, for a saved HTML page: the terminal's ground and
+ *  text, Settings' quiet text read off `root`, and the 16 colors the log
+ *  view reads with. */
+export function savedPalette(
+  sixteen: string[],
+  theme: XtermPalette,
+  root: HTMLElement | null,
+): ScenePalette {
+  const muted = root ? getComputedStyle(root).getPropertyValue('--tertiary').trim() : '';
+  return {
+    background: theme.background,
+    foreground: theme.foreground,
+    muted,
+    ansi: sixteen,
+  };
 }
 
 /** A span color as CSS. 0 to 15 read from the palette, 16 to 231 are

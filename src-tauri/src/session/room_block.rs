@@ -17,39 +17,70 @@
 //!   nothing before the text. Room.Chars names each one you can see. The
 //!   units of a city raid (`raid.c`) are mobs and print here too.
 //!
-//! An inventory has the shape of the things, and an army or a person a
-//! line with no shape at all, so the session counts. Both packets reach
-//! Vosh before the look's text, since `gmcp_send` writes the socket at
-//! once while text waits for the end of the pulse. So the session
-//! follows each look, line by line.
+//! `do_look` sends Room.Info, Room.Chars and Room.Items right after the
+//! people, and a move (`act_move.c` `move_char`) and an immortal's goto
+//! (`act_wiz.c` `do_goto`) show the room through the same `do_look`. Where
+//! the packets land beside the text depends on the server. Before
+//! d50e4a24 `gmcp_send` wrote each packet to the socket at once while
+//! the text waited for the end of the pulse, so the packets came before
+//! the look. Since d50e4a24 the packets wait in the output buffer with
+//! the text, so they come right after the people and before anything else
+//! the pulse prints, such as `You have explored a quarter of The Eastern
+//! Road.` after a move or a mob that greets you. The session reads both.
 //!
-//! - Room.Chars and Room.Items each hold a count for the next exits line.
-//! - The exits line opens the block and takes both counts.
+//! - An exits line that no prompt follows waits for its packets. A
+//!   Room.Chars or Room.Items packet that comes while it waits belongs to
+//!   that look, which is over, and says the game sends its packets after
+//!   the text. Any other one comes before the look it goes with, says the
+//!   game sends its packets first, and holds its count for the next exits
+//!   line. Until a packet says which, the session takes the packets to
+//!   follow the text, as the game sends them now.
+//! - The exits line opens the block. Where the packets come first it
+//!   takes both counts. Where they follow, no count is known yet, so the
+//!   block runs until the packets come.
 //! - Lines shaped like an army come first, each one an army. An army
 //!   line ends in the reset and holds no other code, or opens with the
 //!   cabal in brackets an area cabal sees. The lines the game colors
 //!   whole, such as `You have explored a quarter of The Eastern Road.`
-//!   after a move into an empty room, carry a code of their own, so they
-//!   close the block.
+//!   after a move into an empty room where the packets come first, carry
+//!   a code of their own, so they close the block.
 //! - Then lines shaped like a thing, each one spending its count of the
-//!   objects Room.Items named, until none are left.
+//!   objects Room.Items named, until none are left, or every one of them
+//!   where no count is known.
 //! - Then as many lines as Room.Chars named, each one a person, in the
 //!   order of Room.Chars, since the look and the packet both walk the
-//!   people of the room in one order.
-//! - A blank line, a line past the counts, a new exits line, your prompt,
-//!   a GA or EOR and a disconnect each close the block. So a say or an
-//!   arrival after the people in the same pulse stays a plain line.
+//!   people of the room in one order. Where the packets follow, every line
+//!   until they come is a person.
+//! - A blank line, a line past the counts, a new exits line, the packets
+//!   that follow a look, your prompt, a GA or EOR and a disconnect each
+//!   close the block. So a say or an arrival after the people in the same
+//!   pulse stays a plain line.
 //!
 //! A ranger's `You spot some fresh spur.` line, which follows the exits
 //! line when the game draws its minimap, leaves the block open and stays
-//! plain. A look with no Room.Items before it takes every line shaped
-//! like a thing until the first person, and a look with no Room.Chars
-//! before it lists its armies and things only, since nothing says how
-//! many people follow. Lines in the block run [`MatchScope::Room`], so
-//! Line and Room triggers both see them. The person at the place in
-//! Room.Chars of the one you target with `tar`, the place `tar` marks
-//! with `>`, runs [`MatchScope::RoomTarget`], so Your target triggers
-//! see that line too, however its long text words the name.
+//! plain. Where the packets come first, a look with no Room.Items before
+//! it takes every line shaped like a thing until the first person, and a
+//! look with no Room.Chars before it lists its armies and things only,
+//! since nothing says how many people follow. Lines in the block run
+//! [`MatchScope::Room`], so Line and Room triggers both see them.
+//!
+//! Each person has a [`Place`], the place `tar` marks with `>` in the
+//! Room.Chars of their look. The person at the place of the one you
+//! target runs [`MatchScope::RoomTarget`], so Your target triggers see
+//! that line too, however its long text words the name. Where the packets
+//! come first, the place is one in the Room.Chars the session holds.
+//! Where they follow, it is one in the Room.Chars still to come. The game
+//! writes the people and the packets after them in one go, so the read
+//! that brings the people mostly brings that packet too, and the session
+//! looks ahead in the read for it before the line shows (see
+//! `room_chars_ahead` in `session/gmcp.rs`). When the packet comes in a
+//! later read, the line shows as a room line, and the packet colors your
+//! target's line again in place (see `recolor_target` in
+//! `session/steps.rs`). Only how the line shows changes then, since what
+//! its other triggers did went with it. The line stays as it shows when
+//! anything was written after the people before the packet, your echo
+//! included, when Collapse repeated lines took the line, and when the
+//! people of one look span two reads and your target is in the first.
 //!
 //! Rare looks the counts get wrong by one: a mob with no long text or a
 //! character in catalepsy (one line after the people turns into a room
@@ -59,7 +90,9 @@
 //! whose long text ends in the reset with no other code and no thing
 //! before it (it reads as an army, and one line after the people turns
 //! into a room line), armies with your color off (they read as people),
-//! and two looks in one pulse.
+//! two looks in one pulse, and a look that sends no packets where they
+//! follow the text, as `do_look` sends none while burrowed, which runs to
+//! the blank line before the prompt.
 //!
 //! [`MatchScope::Room`]: vosh_automation::trigger::MatchScope::Room
 //! [`MatchScope::RoomTarget`]: vosh_automation::trigger::MatchScope::RoomTarget
@@ -143,9 +176,19 @@ pub(crate) enum RoomLine {
     Army,
     /// A thing on the floor, or the things that share a long text.
     Thing,
-    /// A person, a player or a mob, with their place in Room.Chars from
-    /// 1, the place `tar` gives your target.
-    Person(usize),
+    /// A person, a player or a mob, with their place in the Room.Chars of
+    /// the look.
+    Person(Place),
+}
+
+/// Where a person of a look stands in the Room.Chars of that look, from
+/// 1, the place `tar` gives your target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Place {
+    /// In the Room.Chars the session holds, which came before the look.
+    Held(usize),
+    /// In the Room.Chars that follows the look and has not come yet.
+    Coming(usize),
 }
 
 /// The look the session is following, if any. Session state that lives
@@ -160,6 +203,16 @@ pub(crate) struct RoomBlock {
     things: Option<usize>,
     /// The open block, from its exits line to its last line.
     open: Option<Open>,
+    /// Whether the game sends a look's packets before its text, as it did
+    /// before d50e4a24. False until a packet shows it, since the game
+    /// sends them after the text now.
+    packets_lead: bool,
+    /// An exits line came and no prompt since, so the packets of its look
+    /// can still follow.
+    due: bool,
+    /// The packets of the look that is due came, so the next line is past
+    /// them.
+    claimed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,6 +223,9 @@ struct Open {
     /// People lines still to come, or None when no Room.Chars came
     /// before the look.
     people_left: Option<usize>,
+    /// Every line until the packets is a person, since they follow the
+    /// look.
+    until_packets: bool,
     /// People lines so far.
     people_seen: usize,
     /// The run the block is in.
@@ -185,26 +241,65 @@ enum Run {
 }
 
 impl RoomBlock {
-    /// Room.Chars named `count` people.
-    pub(crate) fn room_chars(&mut self, count: usize) {
-        self.people = Some(count);
+    /// Room.Chars named `count` people. True when the packet follows the
+    /// look it goes with, which is over then.
+    pub(crate) fn room_chars(&mut self, count: usize) -> bool {
+        let trails = self.trails();
+        if !trails {
+            self.people = Some(count);
+        }
+        trails
     }
 
     /// Room.Items named `count` objects.
     pub(crate) fn room_items(&mut self, count: usize) {
-        self.things = Some(count);
+        if !self.trails() {
+            self.things = Some(count);
+        }
+    }
+
+    /// Whether a Room.Chars or Room.Items packet follows the look it goes
+    /// with. The look is over then. Otherwise the packet comes before its
+    /// look, and the game sends its packets first.
+    fn trails(&mut self) -> bool {
+        if self.due {
+            self.claimed = true;
+            self.packets_lead = false;
+            self.open = None;
+            true
+        } else {
+            self.packets_lead = true;
+            false
+        }
     }
 
     /// The next complete line of text, `plain` without ANSI and `bytes`
     /// as the game sent it. Returns what the line is to the open look.
     pub(crate) fn line(&mut self, plain: &str, bytes: &[u8]) -> RoomLine {
+        if self.claimed {
+            self.due = false;
+            self.claimed = false;
+        }
         if exits().is_match(plain) {
-            self.open = Some(Open {
-                things_left: self.things.take(),
-                people_left: self.people.take(),
-                people_seen: 0,
-                run: Run::Armies,
+            let (things_left, people_left) = (self.things.take(), self.people.take());
+            self.open = Some(if self.packets_lead {
+                Open {
+                    things_left,
+                    people_left,
+                    until_packets: false,
+                    people_seen: 0,
+                    run: Run::Armies,
+                }
+            } else {
+                Open {
+                    things_left: None,
+                    people_left: None,
+                    until_packets: true,
+                    people_seen: 0,
+                    run: Run::Armies,
+                }
             });
+            self.due = true;
             return RoomLine::Other;
         }
         let Some(open) = self.open.as_mut() else {
@@ -238,31 +333,42 @@ impl RoomBlock {
                 Some(_) => {}
             }
         }
-        match open.people_left {
+        let person = match open.people_left {
+            _ if open.until_packets => true,
             Some(left) if left > 0 => {
                 open.people_left = Some(left - 1);
-                open.people_seen += 1;
-                open.run = Run::People;
-                RoomLine::Person(open.people_seen)
+                true
             }
-            _ => {
-                self.open = None;
-                RoomLine::Other
-            }
+            _ => false,
+        };
+        if !person {
+            self.open = None;
+            return RoomLine::Other;
         }
+        open.people_seen += 1;
+        open.run = Run::People;
+        RoomLine::Person(if open.until_packets {
+            Place::Coming(open.people_seen)
+        } else {
+            Place::Held(open.people_seen)
+        })
     }
 
-    /// Your prompt, a GA or an EOR. The look is over. The counts the
-    /// packets left stay, since a prompt the session reads at its line
-    /// end can land after the next look's packets.
+    /// Your prompt, a GA or an EOR. The look is over, and packets after
+    /// it come before the next one. The counts the packets left stay,
+    /// since a prompt the session reads at its line end can land after
+    /// the next look's packets.
     pub(crate) fn end(&mut self) {
         self.open = None;
+        self.due = false;
+        self.claimed = false;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use Place::{Coming, Held};
     use RoomLine::{Army, Other, Person, Thing};
 
     const EXITS_LINE: &str = "[Exits: north east south west]";
@@ -334,7 +440,15 @@ mod tests {
                 &mut block,
                 &[EXITS_LINE, HELM, GAUNTLETS, VILLAGER, RESTING, WALKS_IN, HELM],
             ),
-            [Other, Thing, Thing, Person(1), Person(2), Other, Other]
+            [
+                Other,
+                Thing,
+                Thing,
+                Person(Held(1)),
+                Person(Held(2)),
+                Other,
+                Other
+            ]
         );
     }
 
@@ -356,7 +470,7 @@ mod tests {
                     "A werebeast looks into the sky.",
                 ],
             ),
-            [Other, Army, Thing, Person(1), Other]
+            [Other, Army, Thing, Person(Held(1)), Other]
         );
     }
 
@@ -376,7 +490,7 @@ mod tests {
                     WALKS_IN,
                 ],
             ),
-            [Other, Army, Person(1), Other]
+            [Other, Army, Person(Held(1)), Other]
         );
     }
 
@@ -405,7 +519,7 @@ mod tests {
         block.room_items(0);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, VILLAGER, FORTRESS]),
-            [Other, Person(1), Other]
+            [Other, Person(Held(1)), Other]
         );
     }
 
@@ -433,7 +547,7 @@ mod tests {
         block.room_items(1);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, HELM, HELM, HELM]),
-            [Other, Thing, Person(1), Other]
+            [Other, Thing, Person(Held(1)), Other]
         );
     }
 
@@ -449,10 +563,132 @@ mod tests {
 
     #[test]
     fn with_no_room_chars_only_the_armies_and_things_count() {
+        // Room.Items alone came first, so the game sends its packets
+        // before the look and nothing says how many people follow.
         let mut block = RoomBlock::default();
+        block.room_items(1);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, FORTRESS, HELM, VILLAGER, RESTING]),
             [Other, Army, Thing, Other, Other]
+        );
+    }
+
+    #[test]
+    fn packets_after_the_look_end_it_and_the_lines_before_them_are_the_room() {
+        // Since d50e4a24 the game queues the packets after the people.
+        let mut block = RoomBlock::default();
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[EXITS_LINE, FORTRESS, HELM, GAUNTLETS, VILLAGER, RESTING]
+            ),
+            [
+                Other,
+                Army,
+                Thing,
+                Thing,
+                Person(Coming(1)),
+                Person(Coming(2))
+            ]
+        );
+        assert!(block.room_chars(2));
+        block.room_items(3);
+        assert_eq!(kinds(&mut block, &[WALKS_IN, HELM]), [Other, Other]);
+        // Neither count waits for the next look, which runs until its own
+        // packets.
+        block.end();
+        assert_eq!(
+            kinds(&mut block, &["[Exits: east west]", HELM, VILLAGER, RESTING]),
+            [Other, Thing, Person(Coming(1)), Person(Coming(2))]
+        );
+        block.room_chars(2);
+        assert_eq!(kinds(&mut block, &[WALKS_IN]), [Other]);
+    }
+
+    #[test]
+    fn a_move_after_packets_that_follow_takes_no_count_from_the_room_left() {
+        // Room 6910 holds no one and nothing. Its packets follow its look
+        // and the explore line follows them. The move west into room 6909
+        // lists an army, a thing and a mob all the same.
+        let mut block = RoomBlock::default();
+        let explored = "\x1b[0;1;30mYou have explored a quarter of The Eastern Road.\x1b[0;0m";
+        assert_eq!(kinds(&mut block, &["[Exits: east west]"]), [Other]);
+        block.room_chars(0);
+        block.room_items(0);
+        assert_eq!(kinds(&mut block, &[explored, ""]), [Other, Other]);
+        block.end();
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[
+                    "\x1b[38;5;82m\x1b[0;33mThe Crossroads\x1b[0;0m\x1b[0;0m",
+                    "[Exits: north east south west]",
+                    FORTRESS,
+                    "     A stand of blue dried leaves grows in the wild here.",
+                    "A young werebeast stands here, leaning on his spear.",
+                ],
+            ),
+            [Other, Other, Army, Thing, Person(Coming(1))]
+        );
+        block.room_chars(1);
+        block.room_items(1);
+        assert_eq!(
+            kinds(&mut block, &["A werebeast looks into the sky."]),
+            [Other]
+        );
+    }
+
+    #[test]
+    fn where_the_packets_follow_each_person_has_a_place_in_the_room_chars_to_come() {
+        // The first look of a session, and a look after a move, alike.
+        let mut block = RoomBlock::default();
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[
+                    "\x1b[0;1;30mThe Bank of Aabahran\x1b[0;0m [Room 5279]",
+                    EXITS_LINE,
+                    VILLAGER,
+                    RESTING
+                ]
+            ),
+            [Other, Other, Person(Coming(1)), Person(Coming(2))]
+        );
+    }
+
+    #[test]
+    fn packets_before_a_look_after_ones_that_followed_count_again() {
+        let mut block = RoomBlock::default();
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, VILLAGER]),
+            [Other, Person(Coming(1))]
+        );
+        assert!(block.room_chars(1));
+        block.end();
+        assert!(!block.room_chars(1));
+        block.room_items(0);
+        assert_eq!(
+            kinds(&mut block, &[EXITS_LINE, VILLAGER, WALKS_IN]),
+            [Other, Person(Held(1)), Other]
+        );
+    }
+
+    #[test]
+    fn a_look_with_no_packets_where_they_follow_runs_to_the_blank_line() {
+        let mut block = RoomBlock::default();
+        assert_eq!(
+            kinds(
+                &mut block,
+                &[EXITS_LINE, HELM, VILLAGER, WALKS_IN, "", RESTING]
+            ),
+            [
+                Other,
+                Thing,
+                Person(Coming(1)),
+                Person(Coming(2)),
+                Other,
+                Other
+            ]
         );
     }
 
@@ -472,7 +708,7 @@ mod tests {
         block.room_chars(2);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, VILLAGER, HELM, HELM]),
-            [Other, Person(1), Person(2), Other]
+            [Other, Person(Held(1)), Person(Held(2)), Other]
         );
     }
 
@@ -491,7 +727,7 @@ mod tests {
                     RESTING
                 ]
             ),
-            [Other, Other, Army, Thing, Person(1)]
+            [Other, Other, Army, Thing, Person(Held(1))]
         );
     }
 
@@ -517,7 +753,7 @@ mod tests {
         block.end();
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, HELM, VILLAGER, WALKS_IN]),
-            [Other, Thing, Person(1), Other]
+            [Other, Thing, Person(Held(1)), Other]
         );
     }
 
@@ -528,7 +764,7 @@ mod tests {
         block.room_items(0);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, VILLAGER]),
-            [Other, Person(1)]
+            [Other, Person(Held(1))]
         );
         // A second look with no packets of its own lists armies and
         // things only.
@@ -582,7 +818,7 @@ mod tests {
         block.room_items(0);
         assert_eq!(
             kinds(&mut block, &[EXITS_LINE, fortress, VILLAGER]),
-            [Other, Army, Person(1)]
+            [Other, Army, Person(Held(1))]
         );
     }
 
@@ -604,7 +840,13 @@ mod tests {
                     WALKS_IN,
                 ],
             ),
-            [Other, Person(1), Person(2), Person(3), Other]
+            [
+                Other,
+                Person(Held(1)),
+                Person(Held(2)),
+                Person(Held(3)),
+                Other
+            ]
         );
     }
 }

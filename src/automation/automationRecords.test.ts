@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import aliasesExport from '../../fixtures/ipc/aliases_export.json?raw';
 import keptKeys from '../../fixtures/macros/kept-keys.json';
 import type { Macro } from '../ipc/automation';
-import { PRESET_ALERT_DEFAULT } from './alertPresets';
 import {
   addDraftItem,
   createDraft,
@@ -37,12 +36,10 @@ import {
   normalizeTimer,
   parseJsonList,
   presetLaunchPlan,
-  presetSavePlan,
   presetToggles,
   PRESETS_OFF_MARKER,
   saveMacroDraft,
   saveTimerDraft,
-  storedPresetIds,
   timerEntry,
   timerKey,
   timerLabel,
@@ -619,75 +616,14 @@ describe('presets', () => {
     expect(enabledPresetIds([])).toEqual(defaultEnabledIds());
   });
 
-  it('round trips every preset turned off', () => {
-    const off = presetToggles([]).map((t) => ({ ...t, enabled: false }));
-    const stored = storedPresetIds(off);
-    expect(stored).toEqual([PRESETS_OFF_MARKER]);
-    expect(enabledPresetIds(stored)).toEqual([]);
-    expect(presetToggles(stored).every((t) => !t.enabled)).toBe(true);
+  it('reads the off marker as every preset off', () => {
+    expect(enabledPresetIds([PRESETS_OFF_MARKER])).toEqual([]);
+    expect(presetToggles([PRESETS_OFF_MARKER]).every((t) => !t.enabled)).toBe(true);
   });
 
-  it('keeps the ids no preset of this build knows', () => {
-    const stored = [PRESETS[0].id, 'later_preset'];
-    const off = presetToggles(stored).map((t) => ({ ...t, enabled: false }));
-    expect(storedPresetIds(off, stored)).toEqual(['later_preset']);
-    const on = presetToggles(stored);
-    expect(storedPresetIds(on, stored)).toEqual([PRESETS[0].id, 'later_preset']);
-    expect(storedPresetIds(off, [PRESETS_OFF_MARKER])).toEqual([PRESETS_OFF_MARKER]);
-  });
-
-  it('keeps or drops an alert preset by its toggle', () => {
-    const stored = [PRESETS[0].id, 'alert_tells', 'alert_name'];
-    const library = presetToggles(stored);
-    const alerts = [
-      { id: 'alert_tells', enabled: true, alert: PRESET_ALERT_DEFAULT },
-      { id: 'alert_name', enabled: false, alert: PRESET_ALERT_DEFAULT },
-      { id: 'alert_attacked', enabled: true, alert: PRESET_ALERT_DEFAULT },
-    ];
-    expect(storedPresetIds([...library, ...alerts], stored)).toEqual([
-      PRESETS[0].id,
-      'alert_tells',
-      'alert_attacked',
-    ]);
-  });
-
-  it('drops the marker when an alert preset is all that is on', () => {
-    const library = presetToggles([PRESETS_OFF_MARKER]);
-    const tells = { id: 'alert_tells', enabled: true, alert: PRESET_ALERT_DEFAULT };
-    const stored = storedPresetIds([...library, tells], [PRESETS_OFF_MARKER]);
-    expect(stored).toEqual(['alert_tells']);
-    expect(enabledPresetIds(stored)).toEqual([]);
-    const off = { ...tells, enabled: false };
-    expect(storedPresetIds([...library, off], stored)).toEqual([PRESETS_OFF_MARKER]);
-  });
-
-  it('round trips a partial pick in library order', () => {
+  it('reads a partial pick in library order', () => {
     const pick = [PRESETS[2].id, PRESETS[0].id];
-    const toggles = presetToggles(pick);
-    expect(storedPresetIds(toggles)).toEqual([PRESETS[0].id, PRESETS[2].id]);
-  });
-
-  it('plans installs and removals from the toggles that changed', () => {
-    let draft = createDraft(presetToggles([PRESETS[0].id]));
-    draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: false }));
-    draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: true }));
-    expect(presetSavePlan(draft)).toEqual({ install: [PRESETS[1].id], remove: [PRESETS[0].id] });
-    draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: false }));
-    draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: true }));
-    expect(isDraftDirty(draft)).toBe(false);
-  });
-
-  it('leaves the alert presets out of installs and removals', () => {
-    let draft = createDraft([
-      ...presetToggles([PRESETS[0].id]),
-      { id: 'alert_tells', enabled: false, alert: PRESET_ALERT_DEFAULT },
-      { id: 'alert_name', enabled: true, alert: PRESET_ALERT_DEFAULT },
-    ]);
-    const uid = (id: string) => draft.items.find((i) => i.value.id === id)?.uid ?? '';
-    draft = updateDraftItem(draft, uid('alert_tells'), (t) => ({ ...t, enabled: true }));
-    draft = updateDraftItem(draft, uid('alert_name'), (t) => ({ ...t, enabled: false }));
-    draft = updateDraftItem(draft, uid(PRESETS[1].id), (t) => ({ ...t, enabled: true }));
-    expect(presetSavePlan(draft)).toEqual({ install: [PRESETS[1].id], remove: [] });
+    expect(enabledPresetIds(pick)).toEqual([PRESETS[0].id, PRESETS[2].id]);
   });
 
   it('installs the presets that are on at launch, in library order', () => {
@@ -712,6 +648,19 @@ describe('presets', () => {
   it('takes out at launch a preset this build no longer has', () => {
     const plan = presetLaunchPlan([], ['renamed_long_ago', ...defaultEnabledIds()]);
     expect(plan.remove).toEqual(['renamed_long_ago']);
+  });
+
+  it('turns presets on and off over the stored list first', () => {
+    const [first, second] = [PRESETS[0].id, PRESETS[1].id];
+    const plan = presetLaunchPlan(
+      [first],
+      [first],
+      [
+        { id: first, on: false },
+        { id: second, on: true },
+      ],
+    );
+    expect(plan).toEqual({ install: [second], remove: [first] });
   });
 
   it('removes nothing at launch while the store matches the list', () => {
@@ -743,7 +692,8 @@ describe('presets', () => {
     if (!numpad) throw new Error('no numpad_movement preset');
     const theirs = { key: 'Numpad8', command: 'n', preset: 'numpad_movement' };
     expect(keysYourMacrosKeep(numpad, [theirs, { key: 'F1', command: 'score' }])).toEqual([]);
-    // Yours keeps a key while it is on, off or in a group.
+    // Where the store holds no macro of the preset, yours keeps a key while
+    // it is on, off or in a group.
     expect(
       keysYourMacrosKeep(numpad, [
         { key: 'Numpad3', command: 'rec', enabled: false },
@@ -751,6 +701,15 @@ describe('presets', () => {
         theirs,
       ]),
     ).toEqual(['Numpad9', 'Numpad3']);
+    // With the preset on, its macro on the key tells, so one Rust left on
+    // beside yours, as loadout mode does for a group you keep off, keeps
+    // its key.
+    expect(
+      keysYourMacrosKeep(numpad, [
+        { key: 'Numpad3', command: 'rec', group: '(Healer)' },
+        { key: 'Numpad3', command: 'd', preset: 'numpad_movement' },
+      ]),
+    ).toEqual([]);
     // A preset with no macros wants no key.
     const heals = presetById('healing_basics');
     if (!heals) throw new Error('no healing_basics preset');

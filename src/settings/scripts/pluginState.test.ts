@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { LuaLine } from '../../ipc/scripts';
-import { errorMark, revealLabel, saveStatus, stopNote } from './pluginState';
+import { errorMark, saveStatus, stopNote } from './pluginState';
 
 // What a plugin's page says about the plugin, from its row and the
 // Output ring.
 
 const at = (h: number, m: number, s: number) => new Date(2026, 9, 4, h, m, s).getTime();
 
-// Board 1's Output for vitals_alert and board 3's stop of wait_full.
+// The Output of vitals_alert, and the stop of wait_full, a plugin whose
+// loop never ends.
 const BOARD_ONE: LuaLine[] = [
   {
     ts_ms: at(21, 14, 3),
@@ -80,7 +81,7 @@ describe('errorMark', () => {
   });
 
   it('marks nothing once the plugin loaded again after its error', () => {
-    // Board 1's reload at 21:14:31 came after the error at line 22.
+    // The reload at 21:14:31 came after the error at line 22.
     const reloaded = at(21, 14, 31);
     expect(errorMark(BOARD_ONE, 'vitals_alert', 'main.lua', reloaded)).toBeNull();
     // An error the load itself prints carries its time or a later one.
@@ -122,14 +123,5 @@ describe('saveStatus', () => {
   it('says when you saved, and whether the plugin loaded again', () => {
     expect(saveStatus({ at: at(21, 14, 31), reloaded: true })).toBe('Reloaded at 21:14');
     expect(saveStatus({ at: at(9, 5, 0), reloaded: false })).toBe('Saved at 09:05');
-  });
-});
-
-describe('revealLabel', () => {
-  it('names the file manager of each platform', () => {
-    expect(revealLabel('macos')).toBe('Show in Finder');
-    expect(revealLabel('windows')).toBe('Show in Explorer');
-    expect(revealLabel('linux')).toBe('Show the folder');
-    expect(revealLabel(undefined)).toBe('Show the folder');
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { reconnectCancel, reconnectNow } from '../../ipc/session';
 import { useReconnect } from '../../stores/session/reconnectStore';
+import { Button } from '../../ui';
 
 // A press on the notice's buttons leaves the caret on the command line,
 // as on the update notice.
@@ -20,11 +21,11 @@ interface Props {
   onError: (message: string, session: number) => void;
 }
 
-// The reconnect notice of the Alerts review (board 7), in the update
-// notice's card at the toasts' corner. While a try waits it counts down
-// with Cancel and Reconnect now, while a try dials it rings in the
-// success tone with Cancel, and once the tries run out it offers Try
-// again, which dials as Connect does.
+// The reconnect notice, in the update notice's card at the toasts'
+// corner. While a try waits it counts down with Cancel and Reconnect
+// now, while a try dials it rings in the success tone with Cancel, and
+// once the tries run out it offers Try again, which dials as Connect
+// does.
 export function ReconnectNotice({ session, onTryAgain, onError }: Props) {
   const redial = useReconnect();
   const [now, setNow] = useState(Date.now);
@@ -55,44 +56,33 @@ export function ReconnectNotice({ session, onTryAgain, onError }: Props) {
     message = `Vosh stopped after ${redial.tries} tries`;
   }
 
+  const dialing = redial.kind === 'dialing';
   return (
     <div
-      className={`ov-update ${redial.kind === 'dialing' ? 'is-wait' : 'is-error'}`}
+      className={`ov-update ${dialing ? 'is-wait' : 'is-error'}`}
       role="status"
       aria-live="polite"
     >
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span
+        className={`ov-update-dot dot ${dialing ? 'is-off is-success' : 'is-danger'}`}
+        aria-hidden="true"
+      />
       <span className="ov-update-msg">{message}</span>
       {meta && <span className="ov-update-meta">{meta}</span>}
       <span className="ov-update-actions">
         {redial.kind === 'stopped' ? (
-          <button
-            type="button"
-            className="ov-button is-primary"
-            onMouseDown={keepCaret}
-            onClick={onTryAgain}
-          >
+          <Button variant="primary" onMouseDown={keepCaret} onClick={onTryAgain}>
             Try again
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            className="ov-button"
-            onMouseDown={keepCaret}
-            onClick={act(reconnectCancel)}
-          >
+          <Button onMouseDown={keepCaret} onClick={act(reconnectCancel)}>
             Cancel
-          </button>
+          </Button>
         )}
         {redial.kind === 'waiting' && (
-          <button
-            type="button"
-            className="ov-button is-primary"
-            onMouseDown={keepCaret}
-            onClick={act(reconnectNow)}
-          >
+          <Button variant="primary" onMouseDown={keepCaret} onClick={act(reconnectNow)}>
             Reconnect now
-          </button>
+          </Button>
         )}
       </span>
     </div>

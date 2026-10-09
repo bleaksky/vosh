@@ -91,7 +91,7 @@ function draw(
 function chipsOf(html: string): string[] {
   const out: string[] = [];
   const chip =
-    /<li class="pane-chip ([^"]*)"(?: style="--gauge:([^"]*)")?><span class="pane-chip-name">([^<]*)(?:<span class="pane-sr">([^<]*)<\/span>)?<\/span>(?:<span class="pane-chip-hours([^"]*)"[^>]*>([^<]*)<\/span>)?(?:<svg class="pane-chip-dots"[^>]*>.*?<\/svg>)?<\/li>/g;
+    /<li class="pane-chip ([^"]*)"(?: style="--gauge:([^"]*)")?><span class="pane-chip-name">([^<]*)(?:<span class="visually-hidden">([^<]*)<\/span>)?<\/span>(?:<span class="pane-chip-hours([^"]*)"[^>]*>([^<]*)<\/span>)?(?:<svg class="pane-chip-dots"[^>]*>.*?<\/svg>)?<\/li>/g;
   for (const m of html.matchAll(chip)) {
     const tone = (m[5] ?? '').trim().replace('is-', '');
     out.push(
@@ -459,8 +459,10 @@ describe('Draining chips', () => {
     'tango-dark danger': '4.89 to 4.06',
     'classic-vivid warn': '13.29 to 7.38',
     'classic-vivid danger': '4.60 to 3.81',
-    'high-contrast warn': '12.88 to 7.18',
-    'high-contrast danger': '6.59 to 4.81',
+    'high-contrast warn': '10.74 to 6.50',
+    'high-contrast danger': '7.51 to 5.32',
+    'high-contrast-light warn': '7.15 to 5.38',
+    'high-contrast-light danger': '5.85 to 4.96',
     'everforest-dark warn': '5.08 to 3.57',
     'everforest-dark danger': '4.53 to 3.63',
     'green-screen warn': '12.78 to 7.21',

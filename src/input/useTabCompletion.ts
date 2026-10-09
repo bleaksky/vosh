@@ -10,7 +10,9 @@ import { recentNames } from './recentNames';
  *  and write each completion through `setValue`. `history` holds the
  *  typed commands of `session`, the selected session, oldest first.
  *  Input calls complete on Tab, with -1 for Shift+Tab, and resetCycle on
- *  every other key and edit and on each selection. */
+ *  every other key and edit and on each selection. complete answers
+ *  whether it took the key. It leaves it, so the focus moves on (Q22),
+ *  only while no cycle runs and the line is blank. */
 export function useTabCompletion(
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement>,
   value: string,
@@ -68,14 +70,16 @@ export function useTabCompletion(
     return matches;
   };
 
-  const complete = (step: number) => {
+  const complete = (step: number): boolean => {
     const el = inputRef.current;
-    if (!el) return;
+    if (!el) return false;
     const caret = el.selectionStart ?? value.length;
     const state = tabStateRef.current;
+    // Only a blank line lets the key go. A Tab mid-line stays here.
+    if (!state && value.trim() === '') return false;
     if (state) {
       // Cycle within the existing match set.
-      if (state.matches.length === 0) return;
+      if (state.matches.length === 0) return true;
       const next = (state.idx + step + state.matches.length) % state.matches.length;
       const match = state.matches[next];
       const before = value.slice(0, state.wordStart);
@@ -91,16 +95,16 @@ export function useTabCompletion(
         const pos = before.length + match.length;
         e2.setSelectionRange(pos, pos);
       });
-      return;
+      return true;
     }
     // Fresh completion. Walk back from caret to find the start of
     // the current word.
     let start = caret;
     while (start > 0 && /\S/.test(value[start - 1])) start -= 1;
     const prefix = value.slice(start, caret);
-    if (prefix.length === 0) return;
+    if (prefix.length === 0) return true;
     const matches = buildTabMatches(prefix);
-    if (matches.length === 0) return;
+    if (matches.length === 0) return true;
     const idx = step >= 0 ? 0 : matches.length - 1;
     const match = matches[idx];
     const before = value.slice(0, start);
@@ -119,6 +123,7 @@ export function useTabCompletion(
       const pos = before.length + match.length;
       e2.setSelectionRange(pos, pos);
     });
+    return true;
   };
 
   const resetCycle = () => {

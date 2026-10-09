@@ -7,11 +7,11 @@ import type { Connection } from '../stores/session/useConnection';
 import type { SessionLine } from './sessionLine';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 
-// The session popover while the sidebar is folded, board 8, with the
-// sidebar's two line rows of board 05 of the Sessions Sidebar review.
-// SESSIONS heads a list of every session, the selected one with the
-// check, one behind with what waits there and any other with its key,
-// and then the board 4 rows. A click brings that session to the front.
+// The session popover while the sidebar is folded, with the sidebar's
+// two line rows. SESSIONS heads a list of every session, the selected
+// one with the check, one behind with what waits there and any other
+// with its key, and then the session rows. A click brings that session
+// to the front.
 
 const store = vi.hoisted(() => ({
   rows: [] as SessionRow[],
@@ -94,6 +94,9 @@ const cleanups: (() => Promise<void>)[] = [];
 
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  // A row the pointer reaches looks for open submenus it could be in
+  // the way of, and this popover opens none.
+  Object.assign(doc, { querySelectorAll: () => [] });
   vi.stubGlobal('document', doc);
   vi.stubGlobal('window', {
     document: doc,
@@ -174,22 +177,22 @@ describe('the session popover with the sidebar folded', () => {
     lines.set(1, { who: null, text: 'Thickening Woods', health: 100, low: false });
     lines.set(2, { who: null, text: 'Fighting a Blackwatch guard', health: 18, low: true });
     const { menu, items } = await mount(true);
-    expect(findAll(menu, hasClass('shell-menu-head'))[0]?.textContent).toBe('Sessions');
+    expect(findAll(menu, hasClass('menu-head'))[0]?.textContent).toBe('Sessions');
     expect(items.map((el) => el.textContent)).toEqual([
-      'TolliverThickening Woods100%',
-      'Orla18252Fighting a Blackwatch guard18%',
+      'TolliverThickening WoodsHealth 100%',
+      'Orla18252Fighting a Blackwatch guardHealth 18%',
       'The Forsaken Lands1825⌘3The Forsaken Lands',
       'Edit connection…',
       'Rename session…',
       'New session…⌘T',
       'Disconnect',
     ]);
-    // Frame 05 draws no line between Rename session… and New session…,
+    // No line between Rename session… and New session… while the list shows,
     // so five rows fit whole at 720 by 450.
     const actions = findAll(
       menu,
-      (el) => hasClass('shell-menu-item')(el) || hasClass('shell-menu-sep')(el),
-    ).map((el) => (hasClass('shell-menu-sep')(el) ? '|' : el.textContent));
+      (el) => hasClass('menu-item')(el) || hasClass('menu-sep')(el),
+    ).map((el) => (hasClass('menu-sep')(el) ? '|' : el.textContent));
     expect(actions).toEqual([
       '|',
       'Edit connection…',
@@ -205,7 +208,7 @@ describe('the session popover with the sidebar folded', () => {
       .map((el) => findAll(el, hasClass('shell-sessions-mark'))[0]?.getAttribute('aria-label'));
     expect(marks).toEqual(['Playing', 'Playing', 'Not connected']);
     expect(items[0].getAttribute('aria-current')).toBe('true');
-    expect(findAll(items[0], hasClass('pane-menu-check'))).toHaveLength(1);
+    expect(findAll(items[0], hasClass('menu-check'))).toHaveLength(1);
     expect(findAll(items[1], hasClass('shell-sessions-port'))[0]?.textContent).toBe('1825');
     const count = findAll(items[1], hasClass('shell-sessions-count'))[0];
     expect(count?.getAttribute('aria-label')).toBe('2 waiting');
@@ -245,15 +248,29 @@ describe('the session popover with the sidebar folded', () => {
   // stops 8 above the window's foot, so every session stays in reach.
   it('keeps the list inside the window and lets it scroll', async () => {
     const { menu } = await mount(true);
-    expect(menu.style.maxHeight).toBe('calc(100vh - 16px)');
-    expect(menu.getAttribute('class')).toBe('shell-menu is-listed');
+    // With no button to hang from it sits 8 from the top of the 450
+    // high window, and stops 8 above its foot.
+    expect(menu.style.maxHeight).toBe('434px');
+    expect(menu.getAttribute('class')).toBe('menu is-listed');
     const list = findAll(menu, hasClass('shell-menu-sessions'))[0];
     expect(findAll(list, (el) => el.getAttribute('role') === 'menuitem')).toHaveLength(3);
   });
 
+  // The row under focus is lit and no other, so the pointer moves the
+  // focus as the arrow keys do, and pointing at a close button lights
+  // its row.
+  it('gives the row under the pointer the focus, its close button too', async () => {
+    const { menu, items } = await mount(true);
+    await act(async () => on(items[1]).onPointerMove({ currentTarget: items[1] }));
+    expect(doc.activeElement).toBe(items[1]);
+    const closers = findAll(menu, hasClass('shell-menu-session-close'));
+    await act(async () => on(closers[2]).onPointerEnter({ currentTarget: closers[2] }));
+    expect(doc.activeElement).toBe(items[2]);
+  });
+
   it('lists no session while the sidebar shows', async () => {
     const { menu, items } = await mount(false);
-    expect(findAll(menu, hasClass('shell-menu-head'))).toHaveLength(0);
+    expect(findAll(menu, hasClass('menu-head'))).toHaveLength(0);
     expect(items[0].textContent).toBe('Edit connection…');
   });
 });
@@ -268,5 +285,15 @@ describe('the session popover while a redial waits', () => {
       'New session…⌘T',
       'Disconnect',
     ]);
+    // The keys stay out of the name, read apart in aria-keyshortcuts.
+    expect(items.map((el) => el.getAttribute('aria-keyshortcuts'))).toEqual([
+      'Meta+R',
+      null,
+      null,
+      'Meta+T',
+      null,
+    ]);
+    const [kbd] = findAll(items[0], hasClass('menu-keys'));
+    expect(kbd.getAttribute('aria-hidden')).toBe('true');
   });
 });

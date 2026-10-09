@@ -8,6 +8,7 @@
 //! shows it. The profile folder and the log live in a temporary folder.
 
 pub(super) mod harness;
+mod room_colors;
 
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -663,7 +664,7 @@ async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
     assert!(leftover.is_empty(), "{leftover:?}");
 
     // More > Use Forsaken Lands prompt codes… in the card, then prompt in
-    // the game: the reply fills the card's fields (P2).
+    // the game: the reply fills the card's fields.
     crate::ipc::prompt::prompt_code_reader_set(h.app.state(), true, None)
         .await
         .expect("the card chose the code reader");
@@ -855,6 +856,80 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
         .await
         .expect("seen");
     assert_eq!(seen.source, "gmcp");
+    h.finish(grid).await;
+}
+
+/// What the page hears on `session://gmcp/Char-Name`, kept as it comes.
+fn hear_char_name(h: &Harness) -> Arc<StdMutex<Vec<Json>>> {
+    let heard = Arc::new(StdMutex::new(Vec::new()));
+    let keep = heard.clone();
+    h.app.listen_any("session://gmcp/Char-Name", move |e| {
+        let payload: Json = serde_json::from_str(e.payload()).expect("a JSON payload");
+        keep.lock().expect("the names").push(payload);
+    });
+    heard
+}
+
+// A character left link dead takes the new link with no Char.Status
+// (`check_reconnect`, comm.c), so the name you picked at the account menu
+// names the character once the game plays: the session, its row and the
+// page all learn it. The guard keeps other tests off the shared native
+// grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reconnect_names_the_character_you_picked_at_the_account_menu() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        reconnect: true,
+        account: vec!["Tolliver".into(), "Maren".into()],
+        ..Options::new(Build::New)
+    })
+    .await;
+    let names = hear_char_name(&h);
+    h.connect().await;
+    h.until_shown("Your choice>").await;
+    h.type_line("2").await;
+    h.until_shown("Reconnecting.").await;
+    let session = h.state.selected_session();
+    h.until("the character from the pick", |_| {
+        session.character().as_deref() == Some("Maren")
+    })
+    .await;
+    assert_eq!(session.row(true).character.as_deref(), Some("Maren"));
+    h.until("the page hears the name", |_| {
+        !names.lock().expect("the names").is_empty()
+    })
+    .await;
+    let heard = names.lock().expect("the names").clone();
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0]["data"], serde_json::json!({ "name": "Maren" }));
+    assert_eq!(heard[0]["session"], serde_json::json!(h.first));
+    h.finish(grid).await;
+}
+
+// A fresh login names the character with Char.Status, so the pick names
+// no one of its own and the page hears no Char.Name.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_fresh_login_from_the_account_menu_takes_the_name_from_char_status() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        account: vec!["Orla".into(), "Tester".into()],
+        ..Options::new(Build::New)
+    })
+    .await;
+    let names = hear_char_name(&h);
+    h.connect().await;
+    h.until_shown("Your choice>").await;
+    h.type_line("2").await;
+    h.until_shown("Welcome to the fake Aabahran, Tester.").await;
+    let session = h.state.selected_session();
+    h.until("the character from Char.Status", |_| {
+        session.character().as_deref() == Some("Tester")
+    })
+    .await;
+    h.until_shown("[1020/1020hp").await;
+    assert!(names.lock().expect("the names").is_empty());
     h.finish(grid).await;
 }
 
@@ -1563,7 +1638,7 @@ async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
     })
     .await;
     // Out of a fight the band is the vitals row alone, as the gallery
-    // mockup draws it.
+    // draws it.
     let band = pins(&h).pop().expect("a band");
     assert_eq!(band, "1020/1020hp 800/800mn 930/930mv  [S]  1,250g ");
     // In a fight the tank row comes first. Solo you are the tank.
@@ -2466,5 +2541,132 @@ async fn a_disconnect_clears_your_target_the_room_list_and_both_prompt_feeds() {
             .any(|w| w[0] == "current target: orc" && w[1] == "(no Room.Chars data yet)")
     })
     .await;
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_round_trip_reads_while_you_play_and_lag_lists_it() {
+    use crate::app::events::ROUND_TRIP;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.connect().await;
+    h.until_shown("[Exits: south]").await;
+    // Nothing shows before the first reading, which comes two seconds in.
+    assert_eq!(h.events_of(h.first, ROUND_TRIP), Vec::<Json>::new());
+    h.until("the first reading", |h| {
+        h.events_of(h.first, ROUND_TRIP)
+            .iter()
+            .any(|p| p["ms"].is_u64())
+    })
+    .await;
+
+    h.type_line("#lag").await;
+    h.until_shown("round trip to the game ").await;
+    h.until_shown("no stalls since you connected at ").await;
+
+    // The reading goes with the connection, and #lag says so.
+    h.disconnect().await;
+    h.until("the reading to clear", |h| {
+        h.events_of(h.first, ROUND_TRIP)
+            .last()
+            .is_some_and(|p| p["ms"].is_null())
+    })
+    .await;
+    h.type_line("#lag").await;
+    h.until_shown("you are not connected, so there is no round trip to show")
+        .await;
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_bash_with_lines_typed_ahead_and_a_trigger_line_is_no_stall() {
+    use crate::app::events::ROUND_TRIP;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        bash_ms: 3_000,
+        ..Options::new(Build::New)
+    })
+    .await;
+    h.connect().await;
+    h.until_shown("[Exits: south]").await;
+    h.until("the first reading", |h| {
+        h.events_of(h.first, ROUND_TRIP)
+            .iter()
+            .any(|p| p["ms"].is_u64())
+    })
+    .await;
+
+    // The bash lags you three seconds. A trigger on its line sends afk
+    // while you are lagged, and you type kick and look at once. The
+    // game holds all three and answers them once the lag ends.
+    h.type_line("#trigger slam {^You slam into Tolliver} send afk")
+        .await;
+    let bashed = tokio::time::Instant::now();
+    h.type_line("bash Tolliver").await;
+    h.type_line("kick").await;
+    h.type_line("look").await;
+    h.until_shown("You slam into Tolliver, and send him flying!")
+        .await;
+    h.until_shown("You are now in AFK mode.").await;
+    h.until_shown("Huh?").await;
+    h.until("the held look", |h| {
+        h.screen()
+            .iter()
+            .filter(|r| r.contains("The Bank of Aabahran"))
+            .count()
+            == 2
+    })
+    .await;
+    // The lag ran longer than the reading interval, so at least one
+    // reading fell inside it.
+    assert!(bashed.elapsed() > crate::session::round_trip::READ_EVERY);
+
+    // The held lines came back in the order the game read them.
+    let received =
+        String::from_utf8_lossy(&h.servers[0].received.lock().expect("the bytes")).into_owned();
+    let after_bash = &received[received.find("bash Tolliver").expect("the bash")..];
+    let mut read: Vec<(usize, &str)> = [
+        ("kick\r\n", "Huh?"),
+        ("look\r\n", "The Bank of Aabahran"),
+        ("afk\r\n", "You are now in AFK mode."),
+    ]
+    .into_iter()
+    .map(|(line, answer)| (after_bash.find(line).expect("the held line"), answer))
+    .collect();
+    read.sort_unstable();
+    let screen = h.screen();
+    let slam = screen
+        .iter()
+        .position(|r| r.contains("You slam into Tolliver"))
+        .expect("the bash");
+    let shown: Vec<usize> = read
+        .iter()
+        .map(|(_, answer)| {
+            slam + screen[slam..]
+                .iter()
+                .position(|r| r.contains(answer))
+                .expect("the answer")
+        })
+        .collect();
+    assert!(shown.is_sorted(), "{read:?} at {shown:?} in {screen:#?}");
+
+    // No reading counted the lag, and #lag lists no stall.
+    let payloads = h.events_of(h.first, ROUND_TRIP);
+    assert!(
+        payloads
+            .iter()
+            .all(|p| p["ms"].as_u64().is_some_and(|ms| ms < 300)),
+        "{payloads:?}"
+    );
+    h.type_line("#lag").await;
+    h.until_shown("no stalls since you connected at ").await;
     h.finish(grid).await;
 }

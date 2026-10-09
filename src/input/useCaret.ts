@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
+/** Where the caret's top sits on a line that starts at `lineTop` and is
+ *  `lineHeight` tall: centred on it, at the caret's height, one cell of
+ *  a `fontSize` px font (--caret-h in tokens.css, 1.2em to the pixel). */
+export function caretTop(lineTop: number, lineHeight: number, fontSize: number): number {
+  return lineTop + (lineHeight - Math.round(1.2 * fontSize)) / 2;
+}
+
 /** Place the block caret for the command line in `inputRef`, which holds
  *  `value`. Input draws the mirror and the caret with the refs this
  *  returns, at caretPos, and calls measureCaret on focus, blur and
@@ -10,7 +17,7 @@ export function useCaret(
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement>,
   value: string,
 ) {
-  // Ember block caret. The textarea's native caret is transparent in
+  // The block caret. The textarea's native caret is transparent in
   // CSS and replaced with an absolutely-positioned accent block. The
   // position comes from a hidden mirror div cloning the textarea's
   // text up to selectionStart with identical font, padding, and
@@ -38,8 +45,9 @@ export function useCaret(
     }
     // Rebuild the mirror: text up to the caret (line breaks survive —
     // the mirror is pre-wrap), then the marker. The zero-width space
-    // gives the marker the line box's height so the 15px block can
-    // center on the line, and cloning the textarea's clientWidth keeps
+    // gives the marker the line box's height so the caret, one cell
+    // of the font tall (--caret-h in tokens.css), can center on the
+    // line, and cloning the textarea's clientWidth keeps
     // the soft-wrap points identical.
     mirror.style.width = `${el.clientWidth}px`;
     mirror.textContent = el.value.slice(0, el.selectionStart);
@@ -47,7 +55,11 @@ export function useCaret(
     marker.textContent = '\u200b';
     mirror.appendChild(marker);
     const left = el.offsetLeft + marker.offsetLeft - el.scrollLeft;
-    const top = el.offsetTop + marker.offsetTop - el.scrollTop + (marker.offsetHeight - 15) / 2;
+    const top = caretTop(
+      el.offsetTop + marker.offsetTop - el.scrollTop,
+      marker.offsetHeight,
+      parseFloat(getComputedStyle(el).fontSize),
+    );
     setCaretPos((prev) => (prev && prev.left === left && prev.top === top ? prev : { left, top }));
   };
   // Latest-closure ref so the document-level listeners below register

@@ -1,14 +1,15 @@
-// Trigger logic for Settings, Automation. The board shows a trigger as
-// a name, a group, one pattern, a Style, and one command to send. A
-// stored trigger holds a list of patterns and a list of actions, so
-// these helpers read and write the board's fields as views over those
-// lists. An edit changes the action it names in place and leaves the
-// rest of the list, and its order, as it was.
+// Trigger logic for Settings, Automation. The trigger card shows a
+// trigger as a name, a group, one pattern, a Style, and one command to
+// send. A stored trigger holds a list of patterns and a list of
+// actions, so these helpers read and write the card's fields as views
+// over those lists. An edit changes the action it names in place and
+// leaves the rest of the list, and its order, as it was.
 
 import { normalizeAlert } from './alertParts';
 import { saveDraftOnto, type Draft } from './automationDraft';
 import { parseJsonList } from './automationRecords';
 import { colorize, decolorize } from './colorTokens';
+import { PRESETS } from './presets';
 import {
   exportTriggers,
   importTriggers,
@@ -23,7 +24,7 @@ import {
 } from '../ipc/automation';
 import { quoted } from '../lib/text';
 
-/** The Style select on the board. */
+/** The Style select on the trigger card. */
 export type TriggerStyle = 'none' | 'highlight' | 'wash' | 'replace' | 'hide';
 
 export const TRIGGER_STYLE_OPTIONS: readonly { value: TriggerStyle; label: string }[] = [
@@ -250,7 +251,7 @@ export function withPatternSource(row: TriggerPattern, value: string): TriggerPa
   return isTextRow(row) ? { ...row, text: value } : { ...row, pattern: value };
 }
 
-/** The modes the Pattern row offers, in board 6's order. */
+/** The modes the Pattern row offers, in the order it lists them. */
 export const MATCH_MODE_OPTIONS: readonly { value: MatchMode; label: string }[] = [
   { value: 'text', label: 'Text' },
   { value: 'starts_with', label: 'Starts with' },
@@ -374,7 +375,7 @@ export function triggerForSave(trigger: TriggerRecord): TriggerRecord {
   };
 }
 
-/** A new trigger: no name, one empty Text pattern (Q11), Style None. */
+/** A new trigger: no name, one empty Text pattern, Style None. */
 export function blankTrigger(): TriggerRecord {
   return {
     name: '',
@@ -387,8 +388,17 @@ export function blankTrigger(): TriggerRecord {
 
 /** Why the triggers cannot save yet, or null. Every trigger needs a
  *  name, names must differ (the store keys by name, so a second one
- *  would replace the first), and a trigger needs a pattern. */
+ *  would replace the first), and a trigger needs a pattern. A trigger of
+ *  yours never takes the name of a trigger in the preset library, its
+ *  preset on or off, since the next launch would put the preset's in its
+ *  place. */
 export function validateTriggers(list: readonly TriggerRecord[]): string | null {
+  for (const t of list) {
+    if (t.preset) continue;
+    const name = t.name.trim();
+    const preset = PRESETS.find((p) => p.triggers.some((pt) => pt.name === name));
+    if (preset) return `${preset.name} uses the name ${name}. Give your trigger its own name.`;
+  }
   const seen = new Set<string>();
   for (const t of list) {
     const name = t.name.trim();
@@ -430,16 +440,9 @@ export async function loadTriggers(
   return parseJsonList(await api.exportTriggers(), normalizeTrigger) ?? [];
 }
 
-/** Set the trigger named `name` to match Prompts, as Match does in the
- *  Triggers editor. The prompt card offers it for a Line trigger that
- *  matched your prompt as a line (D6), which no longer sees it once the
- *  profile reads your prompt. It reads the store's list again and writes
- *  it back with only that trigger's target changed, every other field as
- *  the store wrote it. */
-export async function moveTriggerToPrompts(
-  name: string,
-  api: TriggerStoreApi = triggerStore(),
-): Promise<void> {
+// The store's list as it wrote it, each field kept, so a change to one
+// field writes every other back untouched. Throws when it does not read.
+async function storedList(api: TriggerStoreApi): Promise<unknown[]> {
   let list: unknown;
   try {
     list = JSON.parse(await api.exportTriggers());
@@ -449,13 +452,47 @@ export async function moveTriggerToPrompts(
   if (!Array.isArray(list)) {
     throw new Error('Vosh could not read your saved triggers, so it changed nothing.');
   }
-  const at = list.findIndex(
-    (t: unknown) => t !== null && typeof t === 'object' && (t as { name?: unknown }).name === name,
-  );
+  return list;
+}
+
+type Stored = { name?: unknown; group?: string | null };
+const isStored = (t: unknown): t is Stored => t !== null && typeof t === 'object';
+
+/** Set the trigger named `name` to match Prompts, as Match does in the
+ *  Triggers editor. The prompt card offers it for a Line trigger that
+ *  matched your prompt as a line, which no longer sees it once the
+ *  profile reads your prompt. It reads the store's list again and writes
+ *  it back with only that trigger's target changed, every other field as
+ *  the store wrote it. */
+export async function moveTriggerToPrompts(
+  name: string,
+  api: TriggerStoreApi = triggerStore(),
+): Promise<void> {
+  const list = await storedList(api);
+  const at = list.findIndex((t) => isStored(t) && t.name === name);
   if (at < 0) throw new Error(`Vosh no longer has a trigger named ${quoted(name)}.`);
   const next = [...list];
-  next[at] = { ...(list[at] as object), target: 'prompt' };
+  next[at] = { ...(list[at] as Stored), target: 'prompt' };
   await api.importTriggers(JSON.stringify(next, null, 2));
+}
+
+/** Put each stored trigger `groups` names in its group there, blank for
+ *  none, every other field as the store wrote it. A name the store does
+ *  not hold is passed over, and with none to change it writes nothing. */
+export async function setTriggerGroups(
+  groups: ReadonlyMap<string, string>,
+  api: TriggerStoreApi = triggerStore(),
+): Promise<void> {
+  const list = await storedList(api);
+  let changed = false;
+  const next = list.map((t) => {
+    const group = isStored(t) ? groups.get(String(t.name)) : undefined;
+    if (!isStored(t) || group === undefined) return t;
+    const moved = withGroup(t, group);
+    changed ||= moved.group !== t.group;
+    return moved;
+  });
+  if (changed) await api.importTriggers(JSON.stringify(next, null, 2));
 }
 
 /** Save the Triggers draft. The store takes a whole list, so Save reads

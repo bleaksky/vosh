@@ -7,18 +7,17 @@ import {
 } from '../../panel/paneLayout';
 import { listJoin, possessive } from '../../lib/text';
 
-// The small drawing of a profile's panel in Settings > Characters
-// (SettingsCharacters.dc.html, Panel layout). A 180 by 110 box with a
-// 1 px ring, the profile's real pane tree split by 1 px lines in each
-// split's share, and the pinned Vitals strip along the bottom. Pure, so
-// any split shape is tested without a page.
+// The small drawing of a profile's panel in Settings > Characters,
+// under Panel layout. A 180 by 110 box with a 1 px ring, the profile's
+// real pane tree split by 1 px lines in each split's share, and the
+// pinned Vitals strip along the bottom. Pure, so any split shape is
+// tested without a page.
 //
 // Coordinates are SVG user units, one per CSS pixel. A line sits on the
-// half pixel so it draws one crisp pixel wide, the way the board draws
-// `M1 43.5H179`. A region's rect runs from the box edge (0) or from the
-// pixel after a line to the next line or edge, so a label sits 10 in
-// and 16 down from where the region starts, as the board's `Map` does
-// at (10, 16).
+// half pixel so it draws one crisp pixel wide, as in `M1 43.5H179`. A
+// region's rect runs from the box edge (0) or from the pixel after a
+// line to the next line or edge, so a label sits 10 in and 16 down from
+// where the region starts, as `Map` does at (10, 16).
 
 export const SCHEMATIC_WIDTH = 180;
 export const SCHEMATIC_HEIGHT = 110;

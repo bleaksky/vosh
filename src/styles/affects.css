@@ -1,22 +1,8 @@
 /* The Affects pane in its three styles, Timers first, Countdown and
    Grouped chips, with the markers, the recast tint and the draining
-   fill you pick, and the words a screen reader hears for a cell. */
+   fill you pick. */
 
 /* ── Affects ─────────────────────────────────────────────────────── */
-
-/* Words for a screen reader that a cell shows only as glyphs and
-   color. */
-.pane-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 
 /* Board Affects A, timers first. Two columns 16 apart on 22 px rows
    at 12 px, 18 in from the left and 12 from the right. In each cell the mark
@@ -250,13 +236,12 @@
   border-radius: var(--r-key);
 }
 
-/* Board Affects B, Countdown. One run on 23 px rows, two columns 24
-   apart from 360 px, 18 in from the left and 12 from the right, at 12
-   px. Each cell holds the mark at x 0, y 5, the name from x 14, the
-   hours at the right edge, and a 2 px meter under the text from x 14
-   to the edge. The line is 17 tall with 1 px above the text, as the
-   board draws it under the app's border-box reset. At another size
-   the mark stays centered on the text. */
+/* Countdown. One run on 23 px rows, two columns 24 apart from 360 px,
+   18 in from the left and 12 from the right, at 12 px. Each cell holds
+   the mark at x 0, y 5, the name from x 14, the hours at the right
+   edge, and a 2 px meter under the text from x 14 to the edge. The line
+   is 17 tall with 1 px above the text under the app's border-box reset.
+   At another size the mark stays centered on the text. */
 .pane-countdown-window {
   overflow: hidden;
 }
@@ -401,11 +386,12 @@
 }
 
 /* Tint what to recast, in Timers first and Countdown: a missing affect
-   sits on a red wash, and one about to drop on board C's yellow at two
-   hours or red at one or none. The wash sits behind the row, 6 px past
-   it each side at radius 4, 20 tall in Timers first like a chip, and
-   22 tall over the text and the meter in Countdown. The missing wash is
-   8 percent, so a red name keeps 4 to 1 or better on the light themes. */
+   sits on a red wash, and one about to drop on a yellow wash at two
+   hours or a red one at one or none. The wash sits behind the row, 6 px
+   past it each side at radius 4, 20 tall in Timers first like a chip,
+   and 22 tall over the text and the meter in Countdown. The missing
+   wash is 8 percent, so a red name keeps 4 to 1 or better on the light
+   themes. */
 [data-affects-tint] .pane-affect,
 [data-affects-tint] .pane-countdown-cell {
   isolation: isolate;
@@ -480,7 +466,7 @@
   list-style: none;
 }
 
-/* The group's name in the board's 56 px gutter, 8 px before the chips,
+/* The group's name in a 56 px gutter, 8 px before the chips,
    on the group's first line. Under 360 px it runs in at the start of
    that line instead. */
 .pane-chips-label {
@@ -581,7 +567,7 @@
   color: var(--danger-text);
 }
 
-/* A tracked chip is filled, as board C draws it, and the fill drains
+/* A tracked chip is filled, and the fill drains
    from the left as the hours run down. While it drains, a hairline
    shows the chip's full width. */
 .pane-chip-tracked {
@@ -594,9 +580,9 @@
   --chip-edge: var(--sep);
 }
 
-/* Running out, the whole chip takes board C's tint, yellow at two hours
+/* Running out, the whole chip takes the warn tint, yellow at two hours
    and red at one or none, and the chip's extent needs no hairline. At
-   full it is exactly the board. While it drains, the gauge shows in the
+   full it is exactly that tint. While it drains, the gauge shows in the
    same hue over the tint. */
 .pane-chip-tracked.is-warn {
   --chip-track: color-mix(in srgb, var(--warn) 14%, transparent);
@@ -645,7 +631,7 @@
   stroke-linecap: round;
 }
 
-/* The rest keep the board's hairline ring, and a harmful affect a
+/* The rest keep a hairline ring, and a harmful affect a
    danger ring. Their hours count down, and they carry no gauge. */
 .pane-chip-other {
   --chip-edge: var(--sep);

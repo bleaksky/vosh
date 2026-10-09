@@ -11,6 +11,7 @@ use vosh_automation::alias::AliasStore;
 use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
 
+use crate::loadouts::preset_edits::PresetEdits;
 use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist};
 use crate::profile::ui::UiConfig;
 use crate::tick::TickSettings;
@@ -37,6 +38,14 @@ pub(crate) struct Profile {
     /// `TriggerStore` but lives here directly because there is no
     /// `MacroStore` wrapper.
     pub(crate) disabled_macro_groups: BTreeSet<String>,
+    /// Set once loadout mode lays the shared catalog over this profile,
+    /// see [`lay_catalog_over`]. A macro of yours in a group this profile
+    /// keeps off then keeps no key from a preset macro, see
+    /// [`hold_profile_keys`].
+    ///
+    /// [`lay_catalog_over`]: crate::loadouts::catalog::lay_catalog_over
+    /// [`hold_profile_keys`]: crate::loadouts::presets::hold_profile_keys
+    pub(crate) on_catalog: bool,
     /// Timer groups turned off, kept the way `disabled_macro_groups` is.
     /// A timer in one of them waits as a timer that is off does. Timers
     /// stay in the profile file in loadout mode too, so no loadout turns
@@ -90,6 +99,10 @@ pub(crate) struct Profile {
     /// mode catalog.toml keeps them, beside the list of presets that are
     /// on.
     pub(crate) alerts: BTreeMap<String, AlertParts>,
+    /// Your edits to the presets, which the file saves under
+    /// `[preset_edits]`. In loadout mode catalog.toml keeps them, beside
+    /// the list of presets that are on, as it keeps `alerts`.
+    pub(crate) preset_edits: PresetEdits,
     /// Vosh dials again after the link drops while you play, see
     /// [`crate::session::reconnect`]. On at first.
     pub(crate) reconnect: OnSwitch,

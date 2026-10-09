@@ -1,6 +1,6 @@
 // The kit every window shares. Settings, Help and the prompt card build
-// from these, so each piece keeps its geometry and its One Window tokens
-// in one place. The controls draw from src/styles/controls.css, and the
+// from these, so each piece keeps its geometry and its shared tokens in
+// one place. The controls draw from src/styles/controls.css, and the
 // sections, cards and rows from src/styles/settings.css. README.md
 // beside this file lists each one and its props.
 //
@@ -12,6 +12,8 @@
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';
 export { CardNote } from './CardNote';
+export { clearCoach, menuRows, showCoach, type Coach } from './coach';
+export { CoachRing } from './CoachRing';
 export { Chip, ChipButton, type ChipButtonProps, type ChipProps } from './Chip';
 export { ColorField, type ColorFieldProps } from './ColorField';
 export { cx } from './cx';

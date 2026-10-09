@@ -2,16 +2,24 @@
 
 mod alerts;
 mod broadcast;
+mod bundle;
 mod config_golden;
 mod echo;
 mod fake_mud;
 mod ipc_contract;
 mod latency;
+mod log_kinds;
+mod log_sessions;
 mod lua_panes;
 mod reconnect;
+mod screen_reader;
+mod scrollback_size;
 mod sessions;
+mod snoop;
 mod throughput;
 mod upgrade_order;
+mod version;
 mod vitals_text;
 pub(crate) mod walk;
 mod wizard_roundtrip;
+mod writing;

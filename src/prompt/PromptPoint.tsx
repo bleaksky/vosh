@@ -21,11 +21,13 @@ import {
 import { numberRuns } from './promptScreen';
 import { parseSgrCells } from '../terminal/sgrCells';
 import { Button, CheckIcon, ChevronDownIcon, Field } from '../ui';
-import { CardMenu, MenuSeparator } from './CardMenu';
+import { MenuSeparator } from '../ui/MenuSurface';
+import { focusUnderPointer } from '../ui/menuAim';
+import { CardMenu } from './CardMenu';
 import { MatchRow } from './PromptCandidate';
 import { CellLine } from './PromptCells';
 
-// P15, other games: B2's question, which line is your prompt, then A2's
+// On other games: the question of which line is your prompt, then the
 // naming of its numbers inside the card. Vosh saves an anchored pattern
 // with its settle flag to the profile, never to the catalog.
 
@@ -46,7 +48,7 @@ interface PointPickProps {
   onShow?: (plain: string | null) => void;
 }
 
-/** B2: the line that came right before your commands most often, which
+/** The line that came right before your commands most often, which
  *  Vosh proposes as your prompt. */
 export function PointPick({ session, start, onRead, onShow }: PointPickProps) {
   const [groups, setGroups] = useState<PromptCandidateGroup[] | null>(null);
@@ -135,7 +137,7 @@ function charIndex(line: string, at: number): number {
   return new TextDecoder().decode(bytes.slice(0, at)).length;
 }
 
-/** A2: the line with each number marked and a menu under each pair that
+/** The line with each number marked and a menu under each pair that
  *  names the value it reads. */
 export function PointName({
   session,
@@ -314,7 +316,6 @@ export function PointName({
         <CardMenu
           anchor={menu.anchor}
           place="below-start"
-          width={208}
           label={`Name for ${current.text}`}
           onClose={() => {
             setMenu(null);
@@ -336,7 +337,8 @@ export function PointName({
               <button
                 type="button"
                 role="menuitem"
-                className="pc-name-item"
+                className="menu-item pc-name-item"
+                onPointerMove={focusUnderPointer}
                 onClick={() => setOther('')}
               >
                 <span>Other name…</span>
@@ -366,7 +368,8 @@ export function PointName({
             <button
               type="button"
               role="menuitem"
-              className="pc-name-item"
+              className="menu-item pc-name-item"
+              onPointerMove={focusUnderPointer}
               onClick={() => choose(menu.number, '')}
             >
               <span>Leave out</span>
@@ -378,7 +381,7 @@ export function PointName({
   );
 }
 
-function NameGroup({
+export function NameGroup({
   first,
   choices,
   current,
@@ -401,7 +404,8 @@ function NameGroup({
               role="menuitemradio"
               aria-checked={checked}
               aria-label={choice.package ? `${choice.name} from ${choice.package}` : undefined}
-              className="pc-name-item"
+              className="menu-item pc-name-item"
+              onPointerMove={focusUnderPointer}
               onClick={() => onChoose(choice.name)}
             >
               {checked && <CheckIcon className="pc-start-check" />}

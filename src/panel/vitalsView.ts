@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { PromptShowState } from '../ipc/prompt';
+import type { UiFields } from '../ipc/uiConfig';
 import type {
-  UiFields,
   Vital,
   VitalOff,
   VitalsColors,
@@ -9,7 +9,7 @@ import type {
   VitalsOptions,
   VitalsStyle,
   VitalsValues,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalPercent, type Vitals } from '../stores/gmcp/vitalsStore';
 import { ANSI_SLOTS } from '../theme/baseAnsi';
@@ -18,7 +18,7 @@ import { liftAtHue, parseHex, toHex } from '../theme/color';
 import type { XtermPalette } from '../theme/themes';
 
 // How your vitals read in the panel footer and in the status line, from
-// the rows under Layout, Vitals (VitalsOptions.dc.html). Values picks
+// the rows under Settings, Vitals. Values picks
 // the form of each number, Meter the line under it, and Warn before you
 // run low the thresholds that color it. Kept pure for the unit tests.
 
@@ -97,7 +97,7 @@ export interface VitalsGeometry {
 }
 
 const GEOMETRY: Record<VitalsMeter, VitalsGeometry> = {
-  // The 2 px meter 1 px under the text on a 28 px pitch (SPEC 5, G3).
+  // The 2 px meter 1 px under the text on a 28 px pitch.
   line: { row: 28, rowTop: 4, meter: 2, meterGap: 1, meterRadius: 1, padTop: 8, padBottom: 11 },
   // Twice as thick and 2 px under the text, on the same pitch.
   bar: { row: 28, rowTop: 4, meter: 4, meterGap: 2, meterRadius: 2, padTop: 8, padBottom: 11 },
@@ -140,8 +140,27 @@ export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
   ledger: 'Ledger',
   gauges: 'Gauges',
   pips: 'Pips',
+  bands: 'Bands',
+  ladders: 'Ladders',
+  blocks: 'Blocks',
+  traces: 'Traces',
+  dials: 'Dials',
+  rings: 'Rings',
+  vials: 'Vials',
+  orbs: 'Orbs',
+  candles: 'Candles',
   text: 'Text',
 };
+
+/** The styles by family, as the vitals menu sets them apart with a
+ *  line: the lines, the rows with a mark, the instruments, then Text
+ *  Together they are VITALS_STYLES in order. */
+export const VITALS_STYLE_FAMILIES: readonly (readonly VitalsStyle[])[] = [
+  ['rows', 'line', 'ledger'],
+  ['gauges', 'pips', 'bands', 'ladders', 'blocks', 'traces'],
+  ['dials', 'rings', 'vials', 'orbs', 'candles'],
+  ['text'],
+];
 
 /** Each Values form's name, as Customize vitals and the vitals menu
  *  write it. */
@@ -153,7 +172,7 @@ export const VITALS_VALUES_LABELS: Readonly<Record<VitalsValues, string>> = {
 
 /** What a pick of `style` saves. Rows and One line live in
  *  vitals_density, so an older build still reads them, and clear any
- *  style you picked before (Q15). */
+ *  style you picked before. */
 export function vitalsStylePick(style: VitalsStyle): UiFields {
   return style === 'rows' || style === 'line'
     ? { vitals_density: style, vitals_style: null }
@@ -278,6 +297,18 @@ export function vitalInks(
     inks[vital] = rgb && panel ? toHex(liftAtHue(rgb, panel, VITAL_COLOR_CONTRAST, dir)) : color;
   }
   return inks;
+}
+
+/** The color the Candles flame burns in: the palette's yellow on a dark
+ *  theme, and a yellow leaning red on a light one, where the yellow
+ *  alone reads brown. */
+export function vitalsFlame(
+  palette: XtermPalette,
+  ground: Pick<VitalsGround, 'appearance'>,
+): string {
+  return ground.appearance === 'dark'
+    ? palette.yellow
+    : `color-mix(in oklab, ${palette.yellow} 45%, ${palette.red})`;
 }
 
 /** A vital's tone and color as the classes and the custom property

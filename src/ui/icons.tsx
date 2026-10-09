@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 
-// The SPEC 6 icon set that Settings, Help, the prompt card, the panes,
+// The icon set that Settings, Help, the prompt card, the panes,
 // the terminal menu, the title band and the sessions sidebar draw: 16
 // unit strokes at 1.25, round caps and joins, drawn in currentColor so
 // each control sets the tone. At 12 px the stroke keeps its 1.25 px
-// weight through vector-effect, the way the boards draw the chevrons
-// and the chip close icon. shell/icons.tsx draws the panel glyph and
+// weight through vector-effect, so the chevrons and the chip close
+// icon keep it. shell/icons.tsx draws the panel glyph and
 // the status line glyphs on the same Glyph.
 
 interface IconProps {
@@ -163,10 +163,29 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+/** A pencil: you changed this. */
+export function PencilIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M10.75 2.75l2.5 2.5L6 12.5l-3.25.75.75-3.25z" {...scale(props.size)} />
+      <path d="M9.25 4.25l2.5 2.5" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Glyph {...props}>
       <path d="M3.5 8.5l3 3 6-7" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
+/** An open ring: a step still to do, where a done one takes the check. */
+export function RingIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="5.25" {...scale(props.size)} />
     </Glyph>
   );
 }
@@ -178,6 +197,19 @@ export function CopyIcon(props: IconProps) {
       <rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.75" {...scale(props.size)} />
       <path
         d="M10.75 5.25v-1.5c0-.83-.67-1.5-1.5-1.5h-5.5c-.83 0-1.5.67-1.5 1.5v5.5c0 .83.67 1.5 1.5 1.5h1.5"
+        {...scale(props.size)}
+      />
+    </Glyph>
+  );
+}
+
+/** An arrow down onto a tray, the button that saves a file. */
+export function SaveFileIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M8 2.75v7.5M4.75 7l3.25 3.25L11.25 7" {...scale(props.size)} />
+      <path
+        d="M2.75 10.75v1.5c0 .83.67 1.5 1.5 1.5h7.5c.83 0 1.5-.67 1.5-1.5v-1.5"
         {...scale(props.size)}
       />
     </Glyph>
@@ -211,6 +243,29 @@ export function MoreIcon({ size = 16, className }: IconProps) {
       <circle cx="8" cy="8" r="1.25" />
       <circle cx="12.5" cy="8" r="1.25" />
     </svg>
+  );
+}
+
+/** Pin to the panel: a push pin, its head a bar over a tapered body
+ *  and its point straight down. */
+export function PinIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5.5 2.5h5M6.5 2.5v3.75L4.5 9h7l-2-2.75V2.5M8 9v4.5" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
+/** Float over the terminal: a box with an arrow leaving its top right
+ *  corner. */
+export function PopOutIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path
+        d="M9.5 2.5h4v4M13.5 2.5L8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"
+        {...scale(props.size)}
+      />
+    </Glyph>
   );
 }
 
@@ -257,9 +312,9 @@ export function MaximizeIcon(props: IconProps) {
   );
 }
 
-// The Help section icons from the approved Help boards. Automate, Shape
-// the window, Make it yours, and Characters and data reuse BoltIcon,
-// LayoutIcon, AppearanceIcon, and UserIcon.
+// The Help section icons. Automate, Shape the window, Make it yours,
+// and Characters and data reuse BoltIcon, LayoutIcon, AppearanceIcon,
+// and UserIcon.
 
 /** A plug: Get connected. */
 export function PlugIcon(props: IconProps) {
@@ -312,11 +367,10 @@ export function BookIcon(props: IconProps) {
   );
 }
 
-// The marks a session's row in the sessions sidebar shows at its left,
-// after otty's badges (Sessions Q8, board 3). Each draws in a 16 square
-// in currentColor, so the row sets its tone.
+// The marks a session's row in the sessions sidebar shows at its left.
+// Each draws in a 16 square in currentColor, so the row sets its tone.
 
-/** Vosh dials or redials: otty's spinner, eight spokes in a 1.5 stroke
+/** Vosh dials or redials: a spinner, eight spokes in a 1.5 stroke
  *  fading round the circle from the one at 12 o clock. */
 export function SpinnerIcon({ size = 16, className }: IconProps) {
   return (
@@ -344,7 +398,7 @@ export function SpinnerIcon({ size = 16, className }: IconProps) {
   );
 }
 
-/** The game waits for your login: otty's raised hand, 12 across. */
+/** The game waits for your login: a raised hand, 12 across. */
 export function HandIcon(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -356,7 +410,7 @@ export function HandIcon(props: IconProps) {
   );
 }
 
-/** Connect again yourself: otty's failure badge, a filled triangle 10.5
+/** Connect again yourself: a failure badge, a filled triangle 10.5
  *  across. Its ! is a hole in the fill, so the row's own ground shows
  *  through it, the pill or the hover tone included. */
 export function TriangleIcon({ size = 16, className }: IconProps) {
@@ -374,5 +428,38 @@ export function TriangleIcon({ size = 16, className }: IconProps) {
     >
       <path d="M7.185 3.41a.937.937 0 0 1 1.63 0l4.309 7.587a.937.937 0 0 1-.815 1.405H3.691a.937.937 0 0 1-.815-1.405zM7.3 6.408a.7.7 0 0 1 1.4 0v2.529a.7.7 0 0 1-1.4 0zM7.305 10.81a.7.7 0 1 0 1.4 0a.7.7 0 1 0-1.4 0z" />
     </svg>
+  );
+}
+
+// The icons of the Accessibility, Vitals and Logs groups in Settings.
+// Prompt reuses TerminalIcon.
+
+/** A figure in a ring: Accessibility. */
+export function AccessibilityIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="6.25" />
+      <circle cx="8" cy="4.85" r="0.9" fill="currentColor" stroke="none" />
+      <path d="M4.9 6.6L8 7.15l3.1-.55M8 7.15v2.6M8 9.75l-1.6 2.6M8 9.75l1.6 2.6" />
+    </Glyph>
+  );
+}
+
+/** A pulse line: Vitals. */
+export function VitalsIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M1.75 8.5h2.75l1.5-3.75 2.5 7 1.75-3.25h4" />
+    </Glyph>
+  );
+}
+
+/** A page of lines: Logs. */
+export function LogsIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="2.75" y="1.75" width="10.5" height="12.5" rx="2" />
+      <path d="M5.5 5.25h5M5.5 8h5M5.5 10.75h3" />
+    </Glyph>
   );
 }

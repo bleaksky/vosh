@@ -1,9 +1,9 @@
 //! Loadout mode, where every character shares one catalog of aliases,
 //! triggers, and macros. `catalog.rs` holds catalog.toml and `set.rs`
 //! loadouts.toml. `gating.rs` lays the group state of the active
-//! loadouts over the live profile, and `presets.rs` keeps the list of
-//! trigger presets that are on. `wizard/` builds the catalog from the
-//! profile files.
+//! loadouts over the live profile, `presets.rs` keeps the list of
+//! trigger presets that are on, and `preset_edits.rs` your edits to
+//! them. `wizard/` builds the catalog from the profile files.
 //!
 //! ## Types
 //!
@@ -22,6 +22,7 @@
 
 pub(crate) mod catalog;
 pub(crate) mod gating;
+pub(crate) mod preset_edits;
 pub(crate) mod presets;
 pub(crate) mod set;
 #[cfg(test)]

@@ -678,7 +678,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-Modus Vivendi
+Modus Vivendi and High Contrast Light
 
 Source   The Modus themes by Protesilaos Stavrou
          https://github.com/protesilaos/modus-themes
@@ -690,6 +690,9 @@ Copyright (C) 2019-2026 Free Software Foundation, Inc.
 The Modus themes are part of GNU Emacs. They carry the GNU General
 Public License version 3 or any later version, the same license as
 Vosh, whose full text ships with the Vosh source code in LICENSE.
+
+High Contrast Light takes its terminal colors from Modus Operandi, the
+light theme of the Modus themes.
 
 ========================================================================
 Harbor Dark

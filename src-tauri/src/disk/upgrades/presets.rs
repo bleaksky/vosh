@@ -263,6 +263,17 @@ name = "Quiet"
         assert_eq!(recorded(root), ROLLOUTS.len());
     }
 
+    #[tokio::test]
+    async fn a_fresh_install_keeps_every_preset_off() {
+        // Every launch upgrade, as launch runs them on a new install.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut set = ProfileSet::load_or_migrate(root.to_path_buf()).unwrap();
+        crate::disk::upgrades::run(&mut set, root, true).await;
+        assert_eq!(list(root, "default"), strings(&[PRESETS_OFF]));
+        assert_eq!(recorded(root), ROLLOUTS.len());
+    }
+
     #[test]
     fn every_rollout_names_a_library_preset() {
         let library = include_str!("../../../../src/automation/presets.ts");

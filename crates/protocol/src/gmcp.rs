@@ -34,8 +34,16 @@ pub enum ParseError {
 /// Parse a subnegotiation payload into a [`Message`]. The bytes should be
 /// the contents of `IAC SB GMCP <bytes> IAC SE` after the telnet parser has
 /// stripped the framing and IAC IAC escaping.
+///
+/// A Snoop packet decodes lossily. Aabahran copies the snooped player's
+/// screen into Snoop.Output byte for byte (gmcp.c `gmcp_send_snoop`), so a
+/// byte that is not UTF-8 reads as U+FFFD instead of losing the packet.
 pub fn parse(payload: &[u8]) -> Result<Message, ParseError> {
-    let s = std::str::from_utf8(payload)?;
+    let s = match std::str::from_utf8(payload) {
+        Ok(s) => std::borrow::Cow::Borrowed(s),
+        Err(_) if payload.starts_with(b"Snoop.") => String::from_utf8_lossy(payload),
+        Err(e) => return Err(e.into()),
+    };
     let trimmed = s.trim();
     let (package, json_part) = match trimmed.find(char::is_whitespace) {
         Some(idx) => trimmed.split_at(idx),
@@ -129,6 +137,16 @@ mod tests {
     #[test]
     fn rejects_non_utf8_payload() {
         assert!(matches!(parse(&[0x80, 0xff]), Err(ParseError::Utf8(_))));
+    }
+
+    #[test]
+    fn a_snoop_packet_with_bytes_past_ascii_decodes_lossily() {
+        let mut payload = b"Snoop.Output {\"name\":\"Maren\",\"text\":\"a".to_vec();
+        payload.extend([0x80, b'b', b'"', b'}']);
+        let msg = parse(&payload).unwrap();
+        assert_eq!(msg.data["text"], "a\u{fffd}b");
+        payload[0] = b'X';
+        assert!(matches!(parse(&payload), Err(ParseError::Utf8(_))));
     }
 
     #[test]

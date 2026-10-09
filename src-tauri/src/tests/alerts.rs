@@ -1,8 +1,8 @@
 //! Alerts through the real session against the fake game: a trigger's
 //! alert table, the presets the packets and lines ring, the 10 second
-//! cap, and the focus rule with two sessions (Alerts Q2, Q5 and Q6 with
-//! Sessions Q10). A test build keeps each banner in a list instead of
-//! posting it, so no test reaches the system's notification center.
+//! cap, and the focus rule with two sessions. A test build keeps each
+//! banner in a list instead of posting it, so no test reaches the
+//! system's notification center.
 
 use serde_json::Value as Json;
 use tauri::Manager;
@@ -242,7 +242,7 @@ async fn with_every_preset_off_a_tell_behind_still_marks_its_row_and_rings_nothi
     .await;
     h.state.focus.set("main", true);
     // Every preset ships off. The welcome named Orla, and a tell to the
-    // session behind marks its row again (Sessions Q9), each mark with
+    // session behind marks its row again, each mark with
     // the alert it stands for. The one to the session you look at marks
     // nothing.
     h.servers[0].push(&tell_from("Tolliver"));

@@ -5,6 +5,7 @@ migrations = [
     "prompt-line-triggers",
 ]
 notices = ["Vosh moved your prompt capture into the Default profile."]
+keep_logs_days = 90
 
 [[profile]]
 name = "default"
@@ -34,3 +35,7 @@ font = "global"
 dock_layout = "profile"
 keep_last_command = "profile"
 auto_update = "global"
+
+[get_started]
+at_launch = false
+done = ["connect"]

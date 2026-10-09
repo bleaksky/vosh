@@ -6,6 +6,7 @@ migrations = [
 ]
 notices = ["Vosh moved your prompt capture into the Default profile."]
 selected = 3
+keep_logs_days = 90
 
 [[profile]]
 name = "default"

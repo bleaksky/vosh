@@ -1,7 +1,7 @@
 // The parts of an alert, as the Alert row of a trigger and the card of
-// an alert preset edit them (Alerts Q6). Rust reads the same table, so
-// the page reads it the way `AlertParts` in crates/automation/src/alert.rs
-// and the trigger reader in crates/automation/src/trigger/store.rs do.
+// an alert preset edit them. Rust reads the same table, so the page reads
+// it the way `AlertParts` in crates/automation/src/alert.rs and the
+// trigger reader in crates/automation/src/trigger/store.rs do.
 
 import type { AlertParts } from '../ipc/automation';
 
@@ -10,8 +10,7 @@ import type { AlertParts } from '../ipc/automation';
 export type AlertPart = 'banner' | 'sound' | 'attention';
 
 /** The tone Sound plays until you pick another, Chime, the first of the
- *  tones Alerts Q4 lists. Its row under Advanced shows it while Sound
- *  is off. */
+ *  tones. Its row under Advanced shows it while Sound is off. */
 export const FIRST_TONE = 'chime';
 
 /** How long Bounce asks for you until you pick another, once. Its row

@@ -40,24 +40,26 @@ import {
   Segmented,
   type SegmentedOption,
 } from '../ui';
-import { CardMenu, MenuSeparator } from './CardMenu';
+import { MenuSeparator } from '../ui/MenuSurface';
+import { focusUnderPointer } from '../ui/menuAim';
+import { CardMenu } from './CardMenu';
 
-// The part you picked on your prompt (P5, P7, P8a, P8b, P10). The name line
-// says what it is and what it reads now, with the part's own codes as you
-// wrote them. The rows show its effective look, so an italic it inherits
-// reads as on. A value has Show as, each segment labeled with what it
-// draws now, a bar Width in place of Style, text its words, and a line
-// break only When. Every change goes through prompt_edit, which keeps
-// every other part's look.
+// The part you picked on your prompt. The name line says what it is and
+// what it reads now, with the part's own codes as you wrote them. The
+// rows show its effective look, so an italic it inherits reads as on. A
+// value has Show as, each segment labeled with what it draws now, a bar
+// Width in place of Style, text its words, and a line break only When.
+// Every change goes through prompt_edit, which keeps every other part's
+// look.
 //
-// The colors and styles follow the styles board: Color and Background
-// each take the terminal's own, By value on a value, a theme color or any
-// true color. Style keeps B, I and U, and More styles holds
-// strikethrough, dim, reverse and blink, then the underline kinds past the
-// single line. While an underline is on, the Underline row picks its
-// kind, each drawn in its own line, and its color, empty for the text
-// color. A color by value that no swatch shows, such as one
-// typed in Edit as text, names itself in the Custom field.
+// The colors and styles: Color and Background each take the terminal's
+// own, By value on a value, a theme color or any true color. Style
+// keeps B, I and U, and More styles holds strikethrough, dim, reverse
+// and blink, then the underline kinds past the single line. While an
+// underline is on, the Underline row picks its kind, each drawn in its
+// own line, and its color, empty for the text color. A color by value
+// that no swatch shows, such as one typed in Edit as text, names itself
+// in the Custom field.
 
 const WHEN_OPTIONS: SegmentedOption<PromptWhen>[] = [
   { value: 'always', label: 'Always' },
@@ -191,7 +193,7 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
             palette={palette}
             onColor={paint('text')}
           />
-          {/* The hint stays right under Color, as P5 draws it. By value's
+          {/* The hint stays right under Color. By value's
               rule holds for the ground too, so it also shows for one. */}
           <p className={cx('pc-piece-hint', hint === THEME_HINT && 'is-nowrap')}>{hint}</p>
           {rows.background && (
@@ -297,7 +299,7 @@ function ByValueSwatch({
   );
 }
 
-/** A row of colors (P5, styles board): the terminal's own, By value on a
+/** A row of colors: the terminal's own, By value on a
  *  value, the theme's seven, then Custom for any true color. The Color
  *  and Background rows are each one, so their swatches line up. A color
  *  by value no swatch shows, such as by another value, names itself in
@@ -426,7 +428,6 @@ function MoreStyles({
         <CardMenu
           anchor={anchor}
           place={MORE_STYLES_PLACE}
-          width={184}
           label="More styles"
           onClose={() => setAnchor(null)}
         >
@@ -467,7 +468,8 @@ export function MoreStyleItems({
         type="button"
         role={role}
         aria-checked={checked}
-        className="pc-style-item"
+        className="menu-item pc-style-item"
+        onPointerMove={focusUnderPointer}
         onClick={() => onToggle(style, !checked)}
       >
         {checked && <CheckIcon className="pc-start-check" />}

@@ -2,8 +2,8 @@
    Pinned). The dock sits in the terminal area under the text and is as
    tall as the band it draws now. It takes one row of room under the
    terminal and reaches up over the terminal's bottom for the rows past
-   the first, which the terminal gives up. The band is the edit band of
-   the prompt boards: --selrow at radius 4, reaching 4 px past the text on
+   the first, which the terminal gives up. The band is the edit band:
+   --selrow at radius 4, reaching 4 px past the text on
    each side and 2 px above and below its rows, its bottom 9.5 px above
    the input band. PromptDock.tsx sets its size and puts each character on
    the terminal's cell grid.
@@ -27,8 +27,8 @@
   background: var(--selrow);
 }
 
-/* A white band on paper needs the light float ring to read, drawn inside
-   the band so its size stays the board's. */
+/* A white band on paper needs the light float ring to read, drawn
+   inside the band so its size stays the same. */
 :root[data-appearance='light'] .prompt-band {
   box-shadow: inset 0 0 0 1px var(--edge);
 }
@@ -130,15 +130,14 @@
   text-overflow: ellipsis;
 }
 
-/* The prompt card (section 7 of the prompt build spec, boards P1 to P15).
-   A floating card on the SPEC 3 recipe, 560 wide, its left edge 12 px in
-   from the terminal and its bottom 4 px above the row right above your
-   prompt (useCardPlace.ts places it). Header 46, a hairline, the body, a
-   hairline, footer 52. It composes the Settings primitives, so it carries
-   .st-controls for their fills. */
+/* The prompt card. A floating card on the floating recipe, 560 wide,
+   its left edge 12 px in from the terminal and its bottom 4 px above
+   the row right above your prompt (useCardPlace.ts places it). Header
+   46, a hairline, the body, a hairline, footer 52. It composes the
+   Settings primitives, so it carries .st-controls for their fills. */
 .pc-card {
   position: fixed;
-  z-index: 900;
+  z-index: calc(var(--z-card) + 100);
   display: flex;
   flex-direction: column;
   width: 560px;
@@ -153,6 +152,22 @@
   line-height: 18px;
   font-weight: 400;
   color: var(--text);
+}
+
+/* Get started slides down and fades as it folds to its notice.
+   GetStarted.tsx sets the class only when your system lets
+   things move, so the slide needs no media query, and the end of the
+   slide unmounts the card. */
+.pc-card.is-folding {
+  pointer-events: none;
+  animation: gs-fold 160ms ease-in forwards;
+}
+
+@keyframes gs-fold {
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
 }
 
 .pc-head {
@@ -188,12 +203,12 @@
   flex: 1 1 auto;
 }
 
-.pc-head .st-button {
+.pc-head .btn {
   margin-right: 4px;
 }
 
 .pc-head .st-icon-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-rule {
@@ -259,14 +274,13 @@
   margin-left: auto;
 }
 
-/* The compact menu buttons at the foot (MenuButton), where your prompt
-   shows and the preview, in the 12/500 face of a segmented control, the
-   chevron in the secondary tone. */
-.pc-menu-button {
+/* The small menu buttons at the foot (MenuButton), where your prompt
+   shows and the preview. The small button sets 24 tall at 12/500. This
+   rule keeps 6 at the right for the chevron, in the secondary tone, and
+   takes two classes so it outranks .btn.is-small. */
+.btn.pc-menu-button {
   gap: 2px;
   padding: 0 6px 0 10px;
-  font-size: 12px;
-  line-height: 16px;
 }
 
 /* Preview: before the preview it reads, in the secondary tone. */
@@ -280,7 +294,7 @@
 }
 
 .pc-menu-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-menu-button[aria-disabled='true'] {
@@ -334,7 +348,8 @@
   color: var(--tertiary);
 }
 
-/* P2: a label column of 88 and a field of 440, mono for the codes. */
+/* Your prompt setting: a label column of 88 and a field of 440, mono
+   for the codes. */
 .pc-field-row {
   display: flex;
   align-items: center;
@@ -358,9 +373,9 @@
   margin-left: 88px;
 }
 
-/* The candidate box (A2's recipe): the terminal ground with the hairline
-   ring, radius 8, the prompt as the game sent it from x 10, each value in
-   the selection token, and its name under it. */
+/* The candidate box: the terminal ground with the hairline ring, radius
+   8, the prompt as the game sent it from x 10, each value in the
+   selection token, and its name under it. */
 .pc-box {
   position: relative;
   width: 528px;
@@ -432,8 +447,8 @@
   color: var(--tertiary);
 }
 
-/* The match line beside the stepper. A sentence takes a line, so a fight
-   count sits under the match count (P3c). */
+/* The match line beside the stepper. A sentence takes a line, so a
+   fight count sits under the match count. */
 .pc-match {
   display: flex;
   align-items: flex-start;
@@ -470,13 +485,7 @@
 }
 
 .pc-warn-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin: 4px 4px 0;
-  border-radius: 4px;
-  background: var(--warn);
 }
 
 .pc-match-text.is-wrap {
@@ -532,7 +541,7 @@
   white-space: pre;
 }
 
-.pc-command .st-button {
+.pc-command .btn {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -634,7 +643,8 @@
   color: var(--secondary);
 }
 
-/* B2's line: the check and how often the line came. */
+/* The line Vosh proposes as your prompt: the check and how often the
+   line came. */
 .pc-seen {
   display: flex;
   align-items: center;
@@ -645,8 +655,8 @@
   color: var(--secondary);
 }
 
-/* P15: a menu button under each number, 20 tall, its name 6 px in so it
-   starts under the first digit. */
+/* On another game, a menu button under each number, 20 tall, its name 6
+   px in so it starts under the first digit. */
 .pc-name-button {
   position: absolute;
   display: flex;
@@ -674,7 +684,7 @@
 
 .pc-name-button:hover,
 .pc-name-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -687,8 +697,9 @@
   outline-offset: 1px;
 }
 
-/* The start list (P4): the palette row recipe, a name over its sample in
-   the terminal's face, slots 48, a two line sample 65.5, the check at 10. */
+/* The start list: the palette row recipe, a name over its sample in
+   the terminal's face, slots 48, a two line sample 65.5, the check
+   at 10. */
 .pc-starts {
   margin: 8px 0 0;
   padding: 0 8px;
@@ -734,12 +745,12 @@
 }
 
 /* The checked start is the row the list stands on, as the palette's
-   selected row is (P4). */
+   selected row is. */
 .pc-start:hover,
 .pc-start:focus-visible,
 .pc-start[aria-checked='true'],
 .pc-start[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-start-check {
@@ -762,8 +773,8 @@
   white-space: nowrap;
 }
 
-/* The sample's glyphs are placed cells with no baseline, so the tag sits
-   from the top, 3 px under the sample's as P4 sets it. */
+/* The sample's glyphs are placed cells with no baseline, so the tag
+   sits from the top, 3 px under the sample's. */
 .pc-start-sample {
   display: flex;
   align-items: flex-start;
@@ -808,82 +819,33 @@
   color: var(--secondary);
 }
 
-/* P11: the danger text button sits with its text on the copy's edge. */
+/* Drawing off: the danger text button sits with its text on the
+   copy's edge. */
 .pc-forget {
   margin: 12px 0 0 -12px;
 }
 
-.pc-forget .st-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+.pc-forget .btn[aria-expanded='true'] {
+  background: var(--hover);
 }
 
-/* Menus the card opens: More, Presets, From another profile and the name
-   menu, on the ov-menu recipe. */
-.pc-menu {
-  position: fixed;
-  z-index: 1000;
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  border-radius: var(--r-float);
-  background: var(--raised);
-  box-shadow: var(--shadow-float);
-  box-sizing: border-box;
-  outline: none;
-  font-family: var(--font-ui);
-  color: var(--text);
+/* Presets holds the start list with its samples, not rows, so it keeps
+   the list's own width past the one menu's 320. */
+.menu.pc-presets-menu {
+  width: 468px;
+  max-width: 468px;
 }
 
-.pc-menu > li {
-  display: block;
-  margin: 0;
-  padding: 0;
-}
-
-.pc-menu > li.pc-menu-sep {
-  height: 1px;
-  margin: 6px 12px;
-  background: var(--sep);
-}
-
-.pc-menu .ov-menu-item:hover,
-.pc-menu .ov-menu-item:focus-visible {
-  background: var(--menu-hi);
-}
-
-.pc-menu .pc-starts {
+.pc-presets-menu .pc-starts {
   margin: 0;
   padding: 0;
 }
 
 /* The name menu: radio rows with the check column, and a GMCP name in
    the terminal's face with its package where a menu puts shortcuts. */
-.pc-name-item {
+.menu-item.pc-name-item {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px 0 36px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-sizing: border-box;
-  font: inherit;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text);
-  text-align: left;
-  cursor: default;
-}
-
-.pc-name-item:hover,
-.pc-name-item:focus-visible,
-.pc-name-item[aria-checked='true'] {
-  background: var(--menu-hi);
+  padding-left: 36px;
 }
 
 .pc-name-item .pc-start-check {
@@ -906,10 +868,9 @@
   padding: 3px 6px;
 }
 
-/* A part you picked (P5, P7, P8a, P8b, P10). The name line, then rows
-   on a label column of 88: Show as, When, Width or Style, Color with its
-   hint, and the actions 16 below. Rows sit 8 apart and the first 12 under
-   the name line. */
+/* A part you picked. The name line, then rows on a label column of 88:
+   Show as, When, Width or Style, Color with its hint, and the actions
+   16 below. Rows sit 8 apart and the first 12 under the name line. */
 .pc-piece-name {
   display: flex;
   align-items: baseline;
@@ -1142,32 +1103,12 @@
 }
 
 /* Its menu: rows of the name menu with the check column at 12, each
-   style drawn as the styles board draws it. A check marks what is on,
+   style drawn in its own style. A check marks what is on,
    and the highlight follows the pointer and the keys alone. */
-.pc-style-item {
+.menu-item.pc-style-item {
   position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px 0 36px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-sizing: border-box;
-  font: inherit;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text);
-  text-align: left;
-  cursor: default;
-}
-
-.pc-style-item:hover,
-.pc-style-item:focus-visible {
-  background: var(--menu-hi);
+  justify-content: flex-start;
+  padding-left: 36px;
 }
 
 .pc-style-item .pc-start-check {
@@ -1221,8 +1162,8 @@
 }
 
 /* The Underline row's kinds, each word drawn in its own line: 1 px, 3
-   below the baseline, through the descenders, as the styles board draws
-   them. A color of its own draws the line in it. */
+   below the baseline, through the descenders. A color of its own draws
+   the line in it. */
 .pc-line {
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
@@ -1237,7 +1178,7 @@
   margin-top: 16px;
 }
 
-/* P14: you turned prompts off in the game, in place of the hint, with
+/* You turned prompts off in the game, in place of the hint, with
    the status dot 4 px either side and 6 before the sentence. */
 .pc-hint.is-warn {
   display: flex;
@@ -1251,7 +1192,7 @@
   margin: 4px 4px 0;
 }
 
-/* P8c: what the Lament preview hides, under the hint at rest. */
+/* What the Lament preview hides, under the hint at rest. */
 .pc-rest-note {
   margin: 4px 0 0;
   font-size: 11px;
@@ -1259,12 +1200,12 @@
   color: var(--secondary);
 }
 
-/* 12 after Back as P6 draws it: Back's own 4 px margin and these 8. */
+/* 12 after Back: Back's own 4 px margin and these 8. */
 .pc-title.is-picker {
   margin-left: 8px;
 }
 
-/* Insert value… (P6, P6b): a list of 248 on the left, the highlighted
+/* Insert value…: a list of 248 on the left, the highlighted
    field's forms in 264 on the right, 16 apart. */
 .pc-body.pc-picker {
   display: flex;
@@ -1338,7 +1279,7 @@
 
 .pc-picker-row:hover,
 .pc-picker-row.is-current {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-picker-name {
@@ -1434,7 +1375,7 @@
 }
 
 .pc-form.is-on {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 /* A sample sits on the terminal's ground, as it draws in the text. */
@@ -1476,7 +1417,7 @@
   color: var(--text);
 }
 
-/* Edit as text (P9): the design in the terminal's face, wrapping only
+/* Edit as text: the design in the terminal's face, wrapping only
    between tokens, then the help, the token rows, and Insert value…. */
 .pc-text-field {
   width: 528px;
@@ -1573,7 +1514,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 850;
+  z-index: calc(var(--z-card) + 50);
   width: 0;
   height: 0;
   pointer-events: none;
@@ -1590,7 +1531,7 @@
 /* The marks over the terminal cannot redraw the glyphs under them, so
    where a mark in the window takes the opaque selection, these take the
    accent tint. A value Vosh reads on the game's own line while the card
-   reads your codes takes the tint alone (P2, P3). */
+   reads your codes takes the tint alone. */
 .pc-mark-value,
 .pc-mark-token,
 .pc-mark-return[aria-pressed='true'] {
@@ -1613,7 +1554,7 @@
 
 .pc-mark-return {
   position: fixed;
-  z-index: 850;
+  z-index: calc(var(--z-card) + 50);
   display: block;
   margin: 0;
   padding: 0;
@@ -1633,8 +1574,8 @@
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-/* The D6 row: Line triggers that matched your prompt, in the start list
-   on first use. */
+/* The Line triggers row: Line triggers that matched your prompt, in the
+   start list on first use. */
 .pc-d6 {
   margin: 12px 16px 4px;
 }
@@ -1701,4 +1642,204 @@
   color: var(--tertiary);
   white-space: pre;
   text-overflow: ellipsis;
+}
+
+/* Get started on the prompt card's recipe, in its place over the
+   terminal. The steps take the palette row recipe of the start list: 36
+   slots, a 34 row inset 8, the mark at 10, the name at 42, the meta in
+   the tertiary tone and keycaps 20 square. The row in focus wears the
+   palette's selected fill. */
+.gs-steps {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gs-steps.is-after {
+  margin-top: 0;
+}
+
+.gs-steps > li {
+  height: 36px;
+  padding: 1px 8px;
+  box-sizing: border-box;
+}
+
+.gs-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  margin: 0;
+  padding: 0 12px 0 34px;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+
+.gs-step:hover,
+.gs-step.is-current {
+  background: var(--hover);
+}
+
+.gs-step:focus-visible {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.gs-mark {
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  display: block;
+  color: var(--tertiary);
+}
+
+.gs-step.is-done .gs-mark {
+  color: var(--accent);
+}
+
+.gs-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gs-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.gs-keys {
+  margin-left: 12px;
+}
+
+.gs-chev {
+  display: block;
+  flex: none;
+  margin-left: 8px;
+  color: var(--tertiary);
+}
+
+.gs-caps {
+  height: 30px;
+  margin: 4px 0 0;
+  padding: 8.85px 0 0 42px;
+  box-sizing: border-box;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+/* A preset the card suggests: its name and switch, its description, and
+   its sample in the box the Presets page draws. A hairline parts two. */
+.gs-sec {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 28px;
+  margin-top: 12px;
+}
+
+.gs-sec-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.gs-sugs {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gs-sec + .gs-sugs {
+  margin-top: 0;
+}
+
+.gs-sug {
+  position: relative;
+  padding: 12px 0 14px;
+}
+
+.gs-sug.is-only {
+  padding-bottom: 0;
+}
+
+.gs-sug + .gs-sug::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--sep);
+  content: '';
+}
+
+.gs-sug-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.gs-sug-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.gs-sug-top .st-toggle {
+  margin-left: auto;
+}
+
+.gs-sug-line {
+  margin: 2px 0 0;
+  padding-right: 54px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.gs-sample {
+  margin-top: 8px;
+}
+
+/* The Chat pane's own line sits on the panel's ground. */
+.gs-sample.is-panel {
+  background: var(--panel);
+}
+
+.gs-end {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
 }

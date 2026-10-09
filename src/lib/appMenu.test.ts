@@ -2,15 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import {
   APP_SHORTCUTS,
+  appShortcut,
   buildMenuState,
   commandRepeats,
   pageHasSelection,
   resetAppMenuState,
   resolveShortcut,
-  sessionKeyOfMacro,
+  settingsShortcutOf,
+  appKeyOfMacro,
   setAppMenuState,
+  type AppShortcutId,
+  type ShortcutPress,
   type MenuStateInput,
 } from './appMenu';
+import { shortcutLabel } from './shortcuts';
 import { buildPaletteEntries, type PaletteDeps } from '../shell/overlays/palette';
 import { paneKey } from '../panel/paneLayout';
 
@@ -72,8 +77,72 @@ describe('resolveShortcut', () => {
     // AZERTY, where the 1 key types &.
     expect(resolveShortcut(press('&', 'Digit1'))).toEqual({ kind: 'goto', place: 1 });
     expect(resolveShortcut(press('0', 'Digit0'))).toBeNull();
-    expect(resolveShortcut(press('!', 'Digit1', true))).toBeNull();
     expect(resolveShortcut(press('1', 'Numpad1'))).toBeNull();
+  });
+
+  it('opens a Settings page from Ctrl+Shift with the digits 1 to 4 on Windows and Linux', () => {
+    const run = (id: string) => ({ kind: 'run', id });
+    const on = (p: ShortcutPress) => resolveShortcut(p, undefined, undefined, false);
+    // Shift with 1 types ! on a US layout, and the physical key decides.
+    expect(on(press('!', 'Digit1', true))).toEqual(run('settings-automation:timers'));
+    expect(on(press('@', 'Digit2', true))).toEqual(run('settings-automation:aliases'));
+    expect(on(press('#', 'Digit3', true))).toEqual(run('settings-automation:triggers'));
+    expect(on(press('$', 'Digit4', true))).toEqual(run('settings-automation:macros'));
+    // A layout that types something else on the digit row still reaches it.
+    expect(on(press('"', 'Digit2', true))).toEqual(run('settings-automation:aliases'));
+    // Without Shift the digit still goes to a session.
+    expect(on(press('1', 'Digit1'))).toEqual({ kind: 'goto', place: 1 });
+    // Ctrl with Alt is AltGr there, and types characters.
+    expect(on({ ...press('1', 'Digit1'), alt: true })).toBeNull();
+    expect(on({ ...press('!', 'Digit1', true), alt: true })).toBeNull();
+  });
+
+  it('opens a Settings page from Cmd+Option with the digits 1 to 4 on macOS', () => {
+    const run = (id: string) => ({ kind: 'run', id });
+    const on = (p: ShortcutPress) => resolveShortcut(p, undefined, undefined, true);
+    const option = (key: string, code: string) => ({ ...press(key, code), alt: true });
+    // Option with 1 types ¡ on a US layout, and the physical key decides.
+    expect(on(option('¡', 'Digit1'))).toEqual(run('settings-automation:timers'));
+    expect(on(option('™', 'Digit2'))).toEqual(run('settings-automation:aliases'));
+    expect(on(option('£', 'Digit3'))).toEqual(run('settings-automation:triggers'));
+    expect(on(option('¢', 'Digit4'))).toEqual(run('settings-automation:macros'));
+    // Whatever the layout types there, as the digit itself.
+    expect(on(option('1', 'Digit1'))).toEqual(run('settings-automation:timers'));
+    expect(on(option('&', 'Digit1'))).toEqual(run('settings-automation:timers'));
+    // Cmd Shift 3 and 4 are the system screenshot keys, and Vosh takes
+    // no Shift digit on macOS.
+    for (let place = 1; place <= 9; place += 1) {
+      expect(on(press('#', `Digit${place}`, true))).toBeNull();
+    }
+    // Option with Shift, with another digit, or with a letter is no app key.
+    expect(on({ ...option('⁄', 'Digit1'), shift: true })).toBeNull();
+    expect(on(option('§', 'Digit6'))).toBeNull();
+    expect(on({ ...letter('k'), alt: true })).toBeNull();
+    expect(on({ ...letter('r', true), alt: true })).toBeNull();
+    // Without Option the digit still goes to a session.
+    expect(on(press('1', 'Digit1'))).toEqual({ kind: 'goto', place: 1 });
+  });
+
+  it('reads the Settings keys from the same spot in both windows', () => {
+    expect(settingsShortcutOf({ ...press('£', 'Digit3'), alt: true }, true)).toBe(
+      'settings-automation:triggers',
+    );
+    expect(settingsShortcutOf(press('#', 'Digit3', true), true)).toBeNull();
+    expect(settingsShortcutOf(press('#', 'Digit3', true), false)).toBe(
+      'settings-automation:triggers',
+    );
+    expect(settingsShortcutOf({ ...press('£', 'Digit3'), alt: true }, false)).toBeNull();
+    expect(settingsShortcutOf({ ...press('£', 'Digit3'), alt: true, ctrl: true }, true)).toBeNull();
+  });
+
+  it('leaves every other Shift with a digit to the page', () => {
+    const bound = vi.fn(() => true);
+    for (let place = 5; place <= 9; place += 1) {
+      expect(resolveShortcut(press('%', `Digit${place}`, true), bound)).toBeNull();
+    }
+    expect(resolveShortcut(press(')', 'Digit0', true), bound)).toBeNull();
+    expect(resolveShortcut(press('1', 'Numpad1', true), bound)).toBeNull();
+    expect(bound).not.toHaveBeenCalled();
   });
 
   it('leaves a session key to a macro the profile binds to it', () => {
@@ -83,18 +152,65 @@ describe('resolveShortcut', () => {
     expect(resolveShortcut(letter('w'), bound)).toEqual({ kind: 'macro' });
     expect(resolveShortcut(letter('w', true), bound)).toEqual({ kind: 'macro' });
     expect(resolveShortcut(press('}', 'BracketRight', true), bound)).toEqual({ kind: 'macro' });
+    // A Settings key too, on either platform.
+    expect(resolveShortcut(press('!', 'Digit1', true), bound, undefined, false)).toEqual({
+      kind: 'macro',
+    });
+    expect(resolveShortcut(press('$', 'Digit4', true), bound, undefined, false)).toEqual({
+      kind: 'macro',
+    });
+    expect(resolveShortcut({ ...press('¢', 'Digit4'), alt: true }, bound, undefined, true)).toEqual(
+      { kind: 'macro' },
+    );
     // Every other app key wins over a macro, as before.
     expect(resolveShortcut(letter('k'), bound)).toEqual({ kind: 'run', id: 'palette' });
     expect(resolveShortcut(letter('r'), bound)).toEqual({ kind: 'run', id: 'connect' });
   });
 
-  it('asks after a macro only for a session key', () => {
+  it('asks after a macro only for a session or Settings key', () => {
     const bound = vi.fn(() => false);
     resolveShortcut(letter('k'), bound);
     resolveShortcut(letter('c'), bound);
     expect(bound).not.toHaveBeenCalled();
     resolveShortcut(press('2', 'Digit2'), bound);
     expect(bound).toHaveBeenCalledTimes(1);
+    resolveShortcut(press('@', 'Digit2', true), bound, undefined, false);
+    expect(bound).toHaveBeenCalledTimes(2);
+    resolveShortcut({ ...press('™', 'Digit2'), alt: true }, bound, undefined, true);
+    expect(bound).toHaveBeenCalledTimes(3);
+  });
+
+  it('toggles the sessions sidebar on Ctrl with Cmd and S on macOS', () => {
+    const toggle = { kind: 'run', id: 'sessions-sidebar' };
+    const ctrl = { ...letter('s'), ctrl: true };
+    expect(resolveShortcut(ctrl, undefined, undefined, true)).toEqual(toggle);
+    // Cmd S alone, Cmd Shift S and a Ctrl with Cmd digit stay the page's.
+    expect(resolveShortcut(letter('s'), undefined, undefined, true)).toBeNull();
+    expect(resolveShortcut(letter('s', true), undefined, undefined, true)).toBeNull();
+    expect(
+      resolveShortcut({ ...press('1', 'Digit1'), ctrl: true }, undefined, undefined, true),
+    ).toBeNull();
+    // Ctrl with Cmd reaches no other app key.
+    expect(resolveShortcut({ ...letter('k'), ctrl: true }, undefined, undefined, true)).toBeNull();
+    expect(
+      resolveShortcut({ ...letter('r', true), ctrl: true }, undefined, undefined, true),
+    ).toBeNull();
+  });
+
+  it('toggles the sessions sidebar on Ctrl+Shift+S on Windows and Linux', () => {
+    const toggle = { kind: 'run', id: 'sessions-sidebar' };
+    expect(resolveShortcut(letter('s', true), undefined, undefined, false)).toEqual(toggle);
+    expect(resolveShortcut(letter('s'), undefined, undefined, false)).toBeNull();
+  });
+
+  it('leaves the sessions toggle key to a macro bound to it', () => {
+    const bound = () => true;
+    expect(resolveShortcut({ ...letter('s'), ctrl: true }, bound, undefined, true)).toEqual({
+      kind: 'macro',
+    });
+    expect(resolveShortcut(letter('s', true), bound, undefined, false)).toEqual({
+      kind: 'macro',
+    });
   });
 
   it('takes Shift+R without running anything, so the page never reloads', () => {
@@ -110,35 +226,121 @@ describe('resolveShortcut', () => {
   });
 });
 
-describe('sessionKeyOfMacro', () => {
+describe('the prompt key', () => {
+  const reading = (id: string) => id === 'read-prompt';
+
+  it('reads your prompt while the screen reader is on', () => {
+    expect(resolveShortcut(letter('p', true), undefined, reading)).toEqual({
+      kind: 'run',
+      id: 'read-prompt',
+    });
+    expect(resolveShortcut(letter('p', true), undefined, reading, false)).toEqual({
+      kind: 'run',
+      id: 'read-prompt',
+    });
+  });
+
+  it('stays the page key with the reader off, so a macro on it still fires', () => {
+    expect(resolveShortcut(letter('p', true))).toBeNull();
+    expect(resolveShortcut(letter('p', true), () => true)).toBeNull();
+  });
+
+  it('is Mod+Shift+P, a window key that runs once per press, apart from the snoop', () => {
+    expect(APP_SHORTCUTS['read-prompt']).toBe('Mod+Shift+P');
+    expect(commandRepeats('read-prompt')).toBe(false);
+    expect(resolveShortcut(letter('p'), undefined, reading)).toBeNull();
+    expect(resolveShortcut(letter('j'), undefined, reading)).toBeNull();
+  });
+});
+
+describe('the snoop key', () => {
+  it('goes to the snoop while the session has one open', () => {
+    expect(resolveShortcut(letter('j'), undefined, () => true)).toEqual({
+      kind: 'run',
+      id: 'snoop',
+    });
+  });
+
+  it('stays the page key with no snoop open, so a macro on it still fires', () => {
+    expect(resolveShortcut(letter('j'))).toBeNull();
+    expect(
+      resolveShortcut(
+        letter('j'),
+        () => true,
+        () => false,
+      ),
+    ).toBeNull();
+  });
+
+  it('is Mod+J, a window key that runs once per press', () => {
+    expect(APP_SHORTCUTS.snoop).toBe('Mod+J');
+    expect(commandRepeats('snoop')).toBe(false);
+    expect(resolveShortcut(letter('j', true), undefined, () => true)).toBeNull();
+  });
+});
+
+describe('appKeyOfMacro', () => {
+  it('finds the sessions toggle key on either platform', () => {
+    const toggle = { kind: 'run', id: 'sessions-sidebar' };
+    expect(appKeyOfMacro('Ctrl+Meta+S', true)).toEqual(toggle);
+    expect(appKeyOfMacro('Ctrl+Shift+S', false)).toEqual(toggle);
+    expect(appKeyOfMacro('Meta+S', true)).toBeNull();
+    expect(appKeyOfMacro('Ctrl+Shift+S', true)).toBeNull();
+    expect(appKeyOfMacro('Ctrl+S', false)).toBeNull();
+  });
+
   it('finds the session key a macro key shares on macOS', () => {
-    expect(sessionKeyOfMacro('Meta+1', true)).toEqual({ kind: 'goto', place: 1 });
-    expect(sessionKeyOfMacro('Meta+9', true)).toEqual({ kind: 'goto', place: 9 });
-    expect(sessionKeyOfMacro('Meta+T', true)).toEqual({ kind: 'run', id: 'session-new' });
-    expect(sessionKeyOfMacro('Meta+W', true)).toEqual({ kind: 'run', id: 'session-close' });
-    expect(sessionKeyOfMacro('Shift+Meta+W', true)).toEqual({ kind: 'run', id: 'close-window' });
+    expect(appKeyOfMacro('Meta+1', true)).toEqual({ kind: 'goto', place: 1 });
+    expect(appKeyOfMacro('Meta+9', true)).toEqual({ kind: 'goto', place: 9 });
+    expect(appKeyOfMacro('Meta+T', true)).toEqual({ kind: 'run', id: 'session-new' });
+    expect(appKeyOfMacro('Meta+W', true)).toEqual({ kind: 'run', id: 'session-close' });
+    expect(appKeyOfMacro('Shift+Meta+W', true)).toEqual({ kind: 'run', id: 'close-window' });
     // Shift with ] types } on a US layout, and either reads as the key.
-    expect(sessionKeyOfMacro('Shift+Meta+}', true)).toEqual({ kind: 'run', id: 'session-next' });
-    expect(sessionKeyOfMacro('Shift+Meta+]', true)).toEqual({ kind: 'run', id: 'session-next' });
-    expect(sessionKeyOfMacro('Shift+Meta+{', true)).toEqual({
+    expect(appKeyOfMacro('Shift+Meta+}', true)).toEqual({ kind: 'run', id: 'session-next' });
+    expect(appKeyOfMacro('Shift+Meta+]', true)).toEqual({ kind: 'run', id: 'session-next' });
+    expect(appKeyOfMacro('Shift+Meta+{', true)).toEqual({
       kind: 'run',
       id: 'session-previous',
     });
     // Ctrl belongs to your macros on macOS, and no app key takes it.
-    expect(sessionKeyOfMacro('Ctrl+1', true)).toBeNull();
-    expect(sessionKeyOfMacro('Meta+0', true)).toBeNull();
-    expect(sessionKeyOfMacro('Meta+K', true)).toBeNull();
-    expect(sessionKeyOfMacro('F1', true)).toBeNull();
+    expect(appKeyOfMacro('Ctrl+1', true)).toBeNull();
+    expect(appKeyOfMacro('Meta+0', true)).toBeNull();
+    expect(appKeyOfMacro('Meta+K', true)).toBeNull();
+    expect(appKeyOfMacro('Shift+Meta+5', true)).toBeNull();
+    expect(appKeyOfMacro('Meta+!', true)).toBeNull();
+    expect(appKeyOfMacro('F1', true)).toBeNull();
   });
 
   it('reads Ctrl on Windows and Linux', () => {
-    expect(sessionKeyOfMacro('Ctrl+2', false)).toEqual({ kind: 'goto', place: 2 });
-    expect(sessionKeyOfMacro('Ctrl+Shift+W', false)).toEqual({ kind: 'run', id: 'close-window' });
-    expect(sessionKeyOfMacro('Ctrl+Shift+[', false)).toEqual({
+    expect(appKeyOfMacro('Ctrl+2', false)).toEqual({ kind: 'goto', place: 2 });
+    expect(appKeyOfMacro('Ctrl+Shift+W', false)).toEqual({ kind: 'run', id: 'close-window' });
+    expect(appKeyOfMacro('Ctrl+Shift+[', false)).toEqual({
       kind: 'run',
       id: 'session-previous',
     });
-    expect(sessionKeyOfMacro('Meta+1', false)).toBeNull();
+    expect(appKeyOfMacro('Meta+1', false)).toBeNull();
+  });
+
+  it('finds the Settings key a macro key shares, by the digit or what Option or Shift types', () => {
+    const run = (id: string) => ({ kind: 'run', id });
+    expect(appKeyOfMacro('Alt+Meta+1', true)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Alt+Meta+¡', true)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Alt+Meta+™', true)).toEqual(run('settings-automation:aliases'));
+    expect(appKeyOfMacro('Alt+Meta+3', true)).toEqual(run('settings-automation:triggers'));
+    expect(appKeyOfMacro('Alt+Meta+£', true)).toEqual(run('settings-automation:triggers'));
+    expect(appKeyOfMacro('Alt+Meta+¢', true)).toEqual(run('settings-automation:macros'));
+    expect(appKeyOfMacro('Ctrl+Shift+1', false)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Ctrl+Shift+!', false)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Ctrl+Shift+2', false)).toEqual(run('settings-automation:aliases'));
+    expect(appKeyOfMacro('Ctrl+Shift+#', false)).toEqual(run('settings-automation:triggers'));
+    expect(appKeyOfMacro('Ctrl+Shift+4', false)).toEqual(run('settings-automation:macros'));
+    // Cmd Shift with a digit is no app key on macOS any more.
+    expect(appKeyOfMacro('Shift+Meta+1', true)).toBeNull();
+    expect(appKeyOfMacro('Shift+Meta+$', true)).toBeNull();
+    // The other platform's spelling is no app key.
+    expect(appKeyOfMacro('Ctrl+Shift+1', true)).toBeNull();
+    expect(appKeyOfMacro('Alt+Meta+1', false)).toBeNull();
+    expect(appKeyOfMacro('Ctrl+Alt+1', false)).toBeNull();
   });
 });
 
@@ -179,10 +381,23 @@ describe('shared shortcut table', () => {
     }
   });
 
-  it('uses Mod for every menu shortcut, never Ctrl', () => {
-    for (const spec of Object.values(APP_SHORTCUTS)) {
-      expect(spec.startsWith('Mod+')).toBe(true);
-      expect(spec.toLowerCase()).not.toContain('ctrl');
+  it('uses Mod for every menu shortcut, and Ctrl only beside it on macOS', () => {
+    for (const id of Object.keys(APP_SHORTCUTS) as AppShortcutId[]) {
+      const other = appShortcut(id, false);
+      expect(other.startsWith('Mod+')).toBe(true);
+      expect(other.toLowerCase()).not.toContain('ctrl');
+      const mac = appShortcut(id, true);
+      expect(mac.startsWith('Mod+') || mac.startsWith('Ctrl+Mod+')).toBe(true);
+    }
+  });
+
+  it('gives no two app keys one key on either platform', () => {
+    for (const mac of [true, false]) {
+      const ids = Object.keys(APP_SHORTCUTS) as AppShortcutId[];
+      const keys = ids.map((id) => shortcutLabel(appShortcut(id, mac), mac));
+      expect(new Set(keys).size).toBe(keys.length);
+      // Mod with a digit goes to a session, so no app key may take one.
+      for (const key of keys) expect(key).not.toMatch(/^(⌘|Ctrl\+)[1-9]$/);
     }
   });
 });
@@ -203,6 +418,7 @@ describe('buildMenuState', () => {
     theme: 'nord',
     sessions: 1,
     sessionsShown: false,
+    snoops: 0,
     ...over,
   });
 
@@ -264,6 +480,11 @@ describe('buildMenuState', () => {
     });
   });
 
+  it('carries how many snoops the session has, which lists Go to snoop', () => {
+    expect(buildMenuState(input()).snoops).toBe(0);
+    expect(buildMenuState(input({ snoops: 2 })).snoops).toBe(2);
+  });
+
   it('sends no world name when there is none to show', () => {
     expect(buildMenuState(input({ worldName: '  ' })).worldName).toBeNull();
     expect(buildMenuState(input({ worldName: null })).worldName).toBeNull();
@@ -289,6 +510,7 @@ describe('setAppMenuState', () => {
       theme: 'nord',
       sessions: 1,
       sessionsShown: false,
+      snoops: 0,
     });
     setAppMenuState(state);
     setAppMenuState({ ...state });

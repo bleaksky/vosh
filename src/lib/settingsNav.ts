@@ -1,28 +1,37 @@
 // Where a Settings deep link lands. A target travels as a bare string,
-// so localStorage, the goto event, and palette Recent ids need no
-// migration. The grammar is `group`, `group:section`, and
-// `group:section#anchor`, with `group#anchor` when no section applies.
-// For example `automation:macros`, `characters:Ilsabet#tracked` or
+// through localStorage, the goto event and palette Recent ids. The
+// grammar is `group`, `group:section`, and `group:section#anchor`, with
+// `group#anchor` when no section applies. For example
+// `automation:macros`, `characters:Ilsabet#tracked` or
 // `scripts:vitals_alert`.
-// Every tab id the old Settings window used still resolves.
 
 export type SettingsGroup =
   | 'general'
   | 'appearance'
+  | 'accessibility'
   | 'layout'
+  | 'vitals'
+  | 'prompt'
   | 'input'
   | 'automation'
   | 'scripts'
+  | 'logs'
   | 'characters';
 
-/** The seven groups in nav order, with their visible names. */
-export const SETTINGS_GROUPS: readonly { id: SettingsGroup; label: string }[] = [
+/** The eleven groups in nav order, with their visible names. `gap`
+ *  starts a cluster, which the sidebar sets off with a 13 px gap and no
+ *  heading. */
+export const SETTINGS_GROUPS: readonly { id: SettingsGroup; label: string; gap?: boolean }[] = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
-  { id: 'layout', label: 'Layout' },
+  { id: 'accessibility', label: 'Accessibility' },
+  { id: 'layout', label: 'Layout', gap: true },
+  { id: 'vitals', label: 'Vitals' },
+  { id: 'prompt', label: 'Prompt' },
   { id: 'input', label: 'Input' },
-  { id: 'automation', label: 'Automation' },
+  { id: 'automation', label: 'Automation', gap: true },
   { id: 'scripts', label: 'Scripts' },
+  { id: 'logs', label: 'Logs', gap: true },
   { id: 'characters', label: 'Characters' },
 ];
 
@@ -63,11 +72,11 @@ const SECTION_KEEPS_CASE: ReadonlySet<SettingsGroup> = new Set(['scripts', 'char
 const SETTINGS_SUBPAGES: Readonly<
   Partial<Record<SettingsGroup, Readonly<Record<string, string>>>>
 > = {
-  general: { logs: 'Session logs' },
+  logs: { search: 'Search logs', scene: 'Save a scene' },
 };
 
 /** The title of the page inside a group that `target` opens, like
- *  `Session logs` for `general:logs`, or null for the group's own
+ *  `Search logs` for `logs:search`, or null for the group's own
  *  page. A plugin opens its own page under Scripts, titled by its name,
  *  like `vitals_alert` for `scripts:vitals_alert`. */
 export function settingsSubpage(target: SettingsTarget): string | null {
@@ -84,45 +93,10 @@ export function leavesSettingsPage(from: SettingsTarget, to: SettingsTarget): bo
   return from.group !== to.group || settingsSubpage(from) !== settingsSubpage(to);
 }
 
-// The tab ids the old Settings window used, from the palette, the pane
-// menu, and any pending tab left over from an older build.
-const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
-  general: { group: 'general' },
-  themes: { group: 'appearance', section: 'theme' },
-  typography: { group: 'appearance', section: 'text' },
-  vitals: { group: 'layout', section: 'vitals' },
-  tick: { group: 'automation', section: 'timers', anchor: 'tick' },
-  panels: { group: 'characters', anchor: 'layout' },
-  profiles: { group: 'characters' },
-  loadouts: { group: 'automation', section: 'loadouts' },
-  triggers: { group: 'automation', section: 'triggers' },
-  aliases: { group: 'automation', section: 'aliases' },
-  macros: { group: 'automation', section: 'macros' },
-  timers: { group: 'automation', section: 'timers' },
-  import: { group: 'automation', anchor: 'import' },
-  logs: { group: 'general', section: 'logs' },
-};
-
-// Rows that moved out of a section, by the anchor they had there, with
-// where they are now. Your prompt left Input, Advanced for its own
-// section (P12), and the switch is the section's own row. Values, Meter
-// and the warning left Layout, Vitals for Customize vitals (Vitals
-// Styles Q3).
-const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
-  'input:advanced#prompt': { group: 'input', section: 'prompt' },
-  'input:advanced#prompt-show': { group: 'input', section: 'prompt', anchor: 'prompt-show' },
-  'layout:vitals#values': { group: 'layout', section: 'customize-vitals', anchor: 'values' },
-  'layout:vitals#meter': { group: 'layout', section: 'customize-vitals', anchor: 'meter' },
-  'layout:vitals#warn-low': { group: 'layout', section: 'customize-vitals', anchor: 'warn-low' },
-};
-
-/** Resolve a deep link string. Legacy tab ids and rows that moved map to
- *  their new place. Anything this cannot read opens General. */
+/** Resolve a deep link string. Anything this cannot read opens
+ *  General. */
 export function resolveSettingsTarget(raw: string): SettingsTarget {
   const text = raw.trim();
-  const legacy = LEGACY_TARGETS[text.toLowerCase()];
-  if (legacy) return { ...legacy };
-
   const hash = text.indexOf('#');
   const head = hash === -1 ? text : text.slice(0, hash);
   const anchor = hash === -1 ? '' : text.slice(hash + 1).trim();
@@ -135,8 +109,7 @@ export function resolveSettingsTarget(raw: string): SettingsTarget {
   const section = SECTION_KEEPS_CASE.has(group) ? rawSection : rawSection.toLowerCase();
   if (section) target.section = section;
   if (anchor) target.anchor = anchor.toLowerCase();
-  const moved = MOVED_ANCHORS[formatSettingsTarget(target)];
-  return moved ? { ...moved } : target;
+  return target;
 }
 
 /** The string form of a target, the inverse of resolveSettingsTarget. */

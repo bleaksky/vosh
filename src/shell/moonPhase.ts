@@ -3,8 +3,8 @@
 // new, 1 to 3 grow, 4 is full, and 5 to 7 fade, so the angle from new
 // is the phase times a quarter of pi.
 //
-// The disc sits at 8,8 with a 6.25 radius, the circle the One Window
-// icons share. The lit part runs along the limb on the lit side and
+// The disc sits at 8,8 with a 6.25 radius, the circle Vosh's icons
+// share. The lit part runs along the limb on the lit side and
 // back along the terminator, half an ellipse. A growing moon lights the
 // right side and a fading one the left, the way a northern sky shows
 // it. Before the half the terminator bows toward the light and leaves a

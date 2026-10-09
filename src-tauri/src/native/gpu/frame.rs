@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
+use vosh_automation::trigger::color::wash_field;
 
 use super::bands::{
     band_instances, band_rects, band_viewport, ground_tint, lift_boxes, widen_newest, LiftBox,
@@ -24,7 +25,7 @@ use super::style::{
 };
 use super::{Drawn, Placement};
 use crate::native::grid::find::FindMatch;
-use crate::native::grid::{TermGrid, Underline};
+use crate::native::grid::{TermGrid, Underline, SPLIT_MIN_ROWS};
 
 /// One quad instance. `offset` is the top-left in surface pixels and `size`
 /// its width/height. The fragment shader samples the atlas coverage across
@@ -120,7 +121,7 @@ pub(super) fn split_regions(
 ) -> (Vec<Region>, Option<f32>) {
     let rows = grid.screen_lines();
     let offset = grid.display_offset() as i32;
-    let split = offset > 0 && rows >= 6 && !finding;
+    let split = offset > 0 && rows >= SPLIT_MIN_ROWS && !finding;
     let divider_px = if split {
         let raw = split_ratio * surface_h as f32;
         Some(raw.clamp(cell_h, surface_h as f32 - cell_h).round())
@@ -263,11 +264,8 @@ pub(super) fn build_frame(
     //
     // Each entry maps the canonical tint to the field this renderer
     // draws: the theme's color for that mark mixed down into the
-    // terminal ground. There is no edge bar, so a washed row reads
+    // terminal ground (wash_field in the trigger crate). There is no edge bar, so a washed row reads
     // as one quiet band, the way the rest of the window marks rows.
-    // How far the field carries toward the mark color. Low enough
-    // that a washed row reads as marked rather than painted.
-    let wash_field_mix = 0.18_f32;
     let wash_paint: HashMap<[u8; 3], Rgba> = vosh_automation::trigger::NamedColor::ALL
         .iter()
         .enumerate()
@@ -275,15 +273,8 @@ pub(super) fn build_frame(
             let (tr, tg, tb) = c.wash_tint();
             let mark = inputs.wash_palette[idx];
             let ground = inputs.wash_ground;
-            let mix = |m: u8, g: u8| {
-                (f32::from(g) + (f32::from(m) - f32::from(g)) * wash_field_mix).round() as u8
-            };
-            let field = Rgb {
-                r: mix(mark.r, ground.r),
-                g: mix(mark.g, ground.g),
-                b: mix(mark.b, ground.b),
-            };
-            ([tr, tg, tb], rgb_to_rgba(field))
+            let (r, g, b) = wash_field((mark.r, mark.g, mark.b), (ground.r, ground.g, ground.b));
+            ([tr, tg, tb], rgb_to_rgba(Rgb { r, g, b }))
         })
         .collect();
 

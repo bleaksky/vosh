@@ -9,10 +9,13 @@ import { sessionOf } from './session';
 
 /** The last Char.Vitals and Char.Combat of a session's connection, raw
  *  as the game sent them, each null before the first one and after the
- *  connection ends. Mirrors VitalsSnapshot in src-tauri/src/ipc/vitals.rs. */
+ *  connection ends, and the last 60 Char.Vitals the game showed, oldest
+ *  first, each with the time it came in ms since the epoch. Mirrors
+ *  VitalsSnapshot in src-tauri/src/ipc/vitals.rs. */
 export interface VitalsSnapshot {
   vitals: unknown;
   combat: unknown;
+  history?: { at: number; vitals: unknown }[];
 }
 
 /** Vosh's vitals text, which a profile that sets no vitals_text draws.
@@ -25,7 +28,7 @@ export const VOSH_VITALS_TEXT =
   '%move%c_gray/%{maxmove}mv%c_default';
 
 /** The text Text starts from while you have none. Your 0.7 template,
- *  in today's codes, while it was on (Vitals Styles Q13), or Vosh's. */
+ *  in today's codes, while it was on, or Vosh's. */
 export function startVitalsText(legacy: string | null): string {
   return legacy ?? VOSH_VITALS_TEXT;
 }
@@ -41,7 +44,7 @@ export function drawnVitalsText(config: {
 
 /** Read the last vitals and fight of a session, the selected one when it
  *  names none, so the gallery in Settings draws your numbers as it
- *  opens (Vitals Styles Q17). */
+ *  opens. */
 export async function vitalsSnapshotGet(session?: number): Promise<VitalsSnapshot> {
   return invoke('vitals_snapshot_get', { session });
 }

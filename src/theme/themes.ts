@@ -73,11 +73,11 @@ export interface AppTheme {
 // ── Kanso Zen ───────────────────────────────────────────────────────
 // Mirrors the user's Ghostty config exactly, so Settings and exports
 // match the terminal outside Vosh. In play Fit game colors retunes the
-// game colors (Themes review Q15).
+// game colors.
 const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',
-  description: 'Calm Japanese dark. Cool blue accent, with sage, gold and red for status.',
+  description: 'Calm Japanese dark. Cool blue accent, with sage, gold, and red for status.',
   source: 'kanso.nvim',
   author: 'Webhooked',
   license: 'MIT',
@@ -106,7 +106,7 @@ const kansoZen: AppTheme = {
     brightWhite: '#c5c9c7',
   },
   // The palette stays as the Ghostty config has it, and in play the fit
-  // retunes 16 slots to pass 44 of 46 (Q15).
+  // retunes 16 slots to pass 44 of 46.
   fitted: {
     foreground: '#c9cdcb',
     black: '#656565',
@@ -130,7 +130,7 @@ const kansoZen: AppTheme = {
 };
 
 // ── Obsidian Ember ──────────────────────────────────────────────────
-// The Ember redesign palette. A warm near-black ground, pastel ANSI,
+// Vosh's own palette. A warm near-black ground, pastel ANSI,
 // and an ember cursor the theme pins as its single accent. The orange
 // sits 8.1 dE from the danger red, under the 12 the chrome rule asks of
 // an accent it picks itself, so without the pin the rule would take
@@ -138,7 +138,7 @@ const kansoZen: AppTheme = {
 const obsidianEmber: AppTheme = {
   id: 'obsidian-ember',
   label: 'Obsidian Ember',
-  description: 'Warm near black ground, pastel colors and a single ember accent.',
+  description: 'Warm near black ground, pastel colors, and a single ember accent.',
   source: 'Vosh',
   author: 'James Wright',
   license: 'GPL-3.0',
@@ -182,8 +182,8 @@ const obsidianEmber: AppTheme = {
     brightMagenta: '#d0aae2',
     brightCyan: '#9de3ee',
   },
-  // The ember accent, and the ember ink the approved canvas sets on
-  // accent buttons.
+  // The ember accent, and the dark ember ink that reads on accent
+  // buttons.
   chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
 };
 
@@ -377,10 +377,10 @@ const nord: AppTheme = {
     brightCyan: '#b6e4e3',
     brightWhite: '#feffff',
   },
-  // otty's Nord, measured from otty's own theme file. The panel and
+  // Nord, measured from a published terminal theme file. The panel and
   // floating surfaces stay on the terminal ground, and the text tiers
   // follow nord5 rather than the terminal's nord4 foreground. Danger
-  // words use the lighter red the approved boards draw them in.
+  // words use a lighter red.
   chrome: {
     panel: '#2e3440',
     raised: '#2e3440',
@@ -535,7 +535,7 @@ const classicVivid: AppTheme = {
     brightWhite: '#ffffff',
   },
   // The fit lifts blue from Lc 0 to 39 in play and leaves 6 checks
-  // short, red at Lc 40.7 among them (Q17).
+  // short, red at Lc 40.7 among them.
   fitted: {
     black: '#232323',
     red: '#ef5746',
@@ -648,7 +648,7 @@ const monokai: AppTheme = {
     brightWhite: '#f9f8f5',
   },
   // Bright white has no room above body text, so the fit lowers body
-  // text to #e4e4df in play (Q19).
+  // text to #e4e4df in play.
   fitted: {
     foreground: '#e4e4df',
     black: '#363831',
@@ -673,9 +673,9 @@ const monokai: AppTheme = {
 
 // ── One Half Dark ───────────────────────────────────────────────────
 // One Half Dark as its Sublime Text and iTerm2 ports ship it. Atom's
-// One Dark colors with a brighter foreground (#dcdfe4), which lifts body
-// text from Lc 56 to Lc 83. It took the place of One Dark (Themes review
-// Q13), so a saved One Dark shows it (RETIRED_THEMES).
+// One Dark colors with a brighter foreground (#dcdfe4), which lifts
+// body text from Lc 56 to Lc 83. It took the place of One Dark, so a
+// saved One Dark shows it (RETIRED_THEMES).
 const oneHalfDark: AppTheme = {
   id: 'one-half-dark',
   label: 'One Half Dark',
@@ -762,7 +762,7 @@ const tangoDark: AppTheme = {
     brightWhite: '#eeeeec',
   },
   // The fit lifts blue and magenta past Lc 45 in play. Red stays at
-  // Lc 36.2, with 4 checks short in all (Q18).
+  // Lc 36.2, with 4 checks short in all.
   fitted: {
     foreground: '#d4d8d0',
     black: '#3d4345',
@@ -784,61 +784,121 @@ const tangoDark: AppTheme = {
 };
 
 // ── High Contrast ───────────────────────────────────────────────────
-// Re-thought from the original WCAG-AA stab: an off-black ground (so
-// it isn't a flat black void) and pure white text. Its yellow cursor
-// sits too near the warn tone, so the window rule takes its magenta as
-// the accent.
+// White on an off black ground, rebuilt so every text color reads 7:1
+// or better (Board 14). The chrome is pinned, not derived, so the text
+// tones, the status words and the accent hold their ratios on every
+// ground, and the lines and field edges read 3:1. Black plays as
+// #9a9a9a so the game's black text still shows. Fit game colors keeps
+// out, since the palette already reads and the fit would lower body
+// text.
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
-  description: 'Maximum readability. White text on near black, magenta accent.',
+  description: 'White on black, every text color 7:1 or better.',
   source: 'Vosh',
   author: 'James Wright',
   license: 'GPL-3.0',
   xterm: {
-    // Slight off-black instead of pure #000000. xterm.js can't be
-    // told to override the 256-color cube; ANSI 256 codes like 022
-    // (rgb 0,95,0) emit at their standard cube position, which is
-    // invisible on pure black. A small lift means dark cube entries
-    // are still readable while contrast stays high.
-    background: '#0d0d0d',
+    background: '#0a0a0a',
     foreground: '#ffffff',
-    cursor: '#ffff00',
+    cursor: '#5cc8ff',
     cursorAccent: '#000000',
-    selectionBackground: '#666600',
+    selectionBackground: '#0b4f8a',
     selectionForeground: '#ffffff',
-    black: '#000000',
-    red: '#ff5555',
-    green: '#55ff55',
-    yellow: '#ffff55',
-    blue: '#55aaff',
-    magenta: '#ff55ff',
-    cyan: '#55ffff',
-    white: '#cccccc',
-    brightBlack: '#888888',
-    brightRed: '#ff8888',
-    brightGreen: '#88ff88',
-    brightYellow: '#ffff88',
-    brightBlue: '#88bbff',
-    brightMagenta: '#ff88ff',
-    brightCyan: '#88ffff',
+    black: '#9a9a9a',
+    red: '#ff7a7a',
+    green: '#5cf25c',
+    yellow: '#ffe94d',
+    blue: '#7fb2ff',
+    magenta: '#ff8aff',
+    cyan: '#5cf2f2',
+    white: '#d9d9d9',
+    brightBlack: '#b8b8b8',
+    brightRed: '#ffa3a3',
+    brightGreen: '#99ff99',
+    brightYellow: '#ffff99',
+    brightBlue: '#a8cbff',
+    brightMagenta: '#ffb3ff',
+    brightCyan: '#a3ffff',
     brightWhite: '#ffffff',
   },
-  // Bright white has no room above body text, so the fit lowers body
-  // text to #e4e4e4 in play (Q19).
-  fitted: {
-    foreground: '#e4e4e4',
-    black: '#242424',
-    red: '#fb5252',
-    green: '#1fdc29',
-    yellow: '#f4f447',
-    cyan: '#44f3f3',
-    brightBlack: '#969696',
-    brightRed: '#ff9291',
-    brightYellow: '#feffb5',
-    brightBlue: '#97c3ff',
-    brightMagenta: '#ff8dff',
-    brightCyan: '#b9fffe',
+  fitGameColors: false,
+  chrome: {
+    raised: '#121212',
+    text: '#ffffff',
+    secondary: '#d6d6d6',
+    tertiary: '#b0b0b0',
+    title: '#d6d6d6',
+    accent: '#5cc8ff',
+    onAccent: '#000000',
+    danger: '#ff9a90',
+    dangerText: '#ff9a90',
+    warn: '#ffd75f',
+    warnText: '#ffd75f',
+    success: '#7cf29a',
+    sep: '#8a8a8a',
+    edge: '#8a8a8a',
+    keyRing: '#8a8a8a',
+    selection: '#0b4f8a',
+    selectionText: '#ffffff',
+  },
+};
+
+// ── High Contrast Light ─────────────────────────────────────────────
+// The light half of the pair (Board 14). Black on white, with the
+// terminal colors of Modus Operandi, the light Modus theme, built to
+// WCAG AAA. The chrome is pinned the way High Contrast pins it, so every
+// text tone reads 7:1 or better and the lines read 3:1.
+const highContrastLight: AppTheme = {
+  id: 'high-contrast-light',
+  label: 'High Contrast Light',
+  description: 'Black on white, every text color 7:1 or better.',
+  source: 'the Modus themes',
+  author: 'Protesilaos Stavrou',
+  license: 'GPL-3.0-or-later',
+  xterm: {
+    background: '#ffffff',
+    foreground: '#000000',
+    cursor: '#0031a9',
+    cursorAccent: '#ffffff',
+    selectionBackground: '#b5d5ff',
+    selectionForeground: '#000000',
+    black: '#000000',
+    red: '#a60000',
+    green: '#006800',
+    yellow: '#6f5500',
+    blue: '#0031a9',
+    magenta: '#721045',
+    cyan: '#005e8b',
+    white: '#3d3d3d',
+    brightBlack: '#595959',
+    brightRed: '#972500',
+    brightGreen: '#00663f',
+    brightYellow: '#884900',
+    brightBlue: '#3548cf',
+    brightMagenta: '#531ab6',
+    brightCyan: '#005f5f',
+    brightWhite: '#000000',
+  },
+  fitGameColors: false,
+  chrome: {
+    raised: '#ffffff',
+    text: '#000000',
+    secondary: '#262626',
+    tertiary: '#4d4d4d',
+    title: '#262626',
+    accent: '#0031a9',
+    onAccent: '#ffffff',
+    danger: '#a60000',
+    dangerText: '#a60000',
+    warn: '#5c4600',
+    warnText: '#5c4600',
+    success: '#005a00',
+    sep: '#6e6e6e',
+    edge: '#6e6e6e',
+    keyRing: '#6e6e6e',
+    selection: '#b5d5ff',
+    selectionText: '#000000',
   },
 };
 
@@ -1005,7 +1065,7 @@ const greenScreen: AppTheme = {
     brightWhite: '#ffffff',
   },
   // The fit lifts blue to Lc 45.1 in play. Cyan at Lc 53.8 and bright
-  // blue at 58.8 stay short (Q17).
+  // blue at 58.8 stay short.
   fitted: {
     foreground: '#8dde93',
     black: '#242424',
@@ -1061,10 +1121,10 @@ const greenScreen: AppTheme = {
 // panel and the raised surface, the value the chrome derives from red
 // itself. The light theme reads plain red and needs no pin.
 //
-// The dark theme stays out of Fit game colors (Themes review Q20). Its
-// body text reads at Lc 39.5, far under the Lc 75 the game asks, and
-// that is what Solarized is. Fitted, it would stop looking like the
-// scheme you picked.
+// The dark theme stays out of Fit game colors. Its body text reads at
+// Lc 39.5, far under the Lc 75 the game asks, and that is what
+// Solarized is. Fitted, it would stop looking like the scheme you
+// picked.
 const solarizedDark: AppTheme = {
   id: 'solarized-dark',
   label: 'Solarized Dark',
@@ -1187,7 +1247,7 @@ const srcery: AppTheme = {
     brightWhite: '#fce8c3',
   },
   // In play the fit moves 15 slots and passes 45 of 46. Red stays short
-  // at Lc 40.3 (Q1).
+  // at Lc 40.3.
   fitted: {
     foreground: '#e8d5b0',
     black: '#282625',
@@ -1216,7 +1276,7 @@ const nightfly: AppTheme = {
   id: 'nightfly',
   label: 'Nightfly',
   description:
-    'Deep navy night after Night Owl, with soft text, distinct bright colors and a violet accent.',
+    'Deep navy night after Night Owl, with soft text, distinct bright colors, and a violet accent.',
   source: 'nightfly',
   author: 'bluz71',
   license: 'MIT',
@@ -1245,7 +1305,7 @@ const nightfly: AppTheme = {
     brightWhite: '#d6deeb',
   },
   // In play the fit moves 16 slots by small steps and passes 44 of 46.
-  // Red stays short at Lc 38.1 and the yellow pair at dE 7.9 (Q1).
+  // Red stays short at Lc 38.1 and the yellow pair at dE 7.9.
   fitted: {
     foreground: '#c9cdd2',
     red: '#f24746',
@@ -1305,7 +1365,7 @@ const melangeDark: AppTheme = {
     brightWhite: '#ece1d7',
   },
   // In play the fit moves 16 slots and passes 44 of 46. Yellow stays
-  // short at Lc 58.5 and red at Lc 41.5 (Q1).
+  // short at Lc 58.5 and red at Lc 41.5.
   fitted: {
     black: '#393531',
     red: '#c08485',
@@ -1411,8 +1471,8 @@ const modusVivendi: AppTheme = {
     brightWhite: '#ffffff',
   },
   // In play the fit lowers body text to #e4e4e4, so bold white reads
-  // above it, and lifts black to the dimmed ground Modus uses itself. It
-  // moves 15 slots and passes 45 of 46, with red short at Lc 43.5 (Q1).
+  // above it, and lifts black to the dimmed ground Modus uses itself.
+  // It moves 15 slots and passes 45 of 46, with red short at Lc 43.5.
   fitted: {
     foreground: '#e4e4e4',
     black: '#1e1e1e',
@@ -1435,10 +1495,10 @@ const modusVivendi: AppTheme = {
 
 // ── Harbor Dark ─────────────────────────────────────────────────────
 // The GitHub Dark Default palette of GitHub's theme for VS Code, as
-// published, under a name of its own, since GitHub is a trademark
-// (Themes review Q6). GitHub publishes no terminal selection, so the
-// selection is its list selection, #6e768166 laid over the ground. The
-// blue cursor is the accent the review picked, and the theme pins it.
+// published, under a name of its own, since GitHub is a trademark.
+// GitHub publishes no terminal selection, so the selection is its list
+// selection, #6e768166 laid over the ground. The blue cursor is the
+// accent, and the theme pins it.
 const harborDark: AppTheme = {
   id: 'harbor-dark',
   label: 'Harbor Dark',
@@ -1491,7 +1551,7 @@ const harborDark: AppTheme = {
 // ── Iceberg Dark ────────────────────────────────────────────────────
 // The dark terminal colors of iceberg.vim, as published. Its cursor is
 // the gray of its text, so the theme pins its magenta, a soft violet,
-// as the accent the review picked.
+// as the accent.
 const icebergDark: AppTheme = {
   id: 'iceberg-dark',
   label: 'Iceberg Dark',
@@ -1563,6 +1623,7 @@ export const BUILTIN_THEMES: AppTheme[] = [
   tangoDark,
   classicVivid,
   highContrast,
+  highContrastLight,
   everforestDark,
   greenScreen,
   srcery,
@@ -1868,19 +1929,27 @@ const VISION_FITS: Readonly<Record<string, Readonly<Record<OtherVision, VisionRo
   },
   'high-contrast': {
     deuteranopia: {
-      fitted:
-        '#e4e4e4 #242424 #ed6300 #03bdff #f4f447 #888bf2 #f145f1 #44f3f3 . #969696 #f29e58 #9cff9a #feffb5 #c9aefb #ff8dff #b9fffe .',
-      published: '. . #d87900 #94d5ff . #a290f8 . . . . #f98c62 #b8ffb6 . #a6acfa #fb85fc . .',
+      published: '. . #ec763b #1abcff . #8d8de2 . #2acfcf . . #f09f58 #beffbd . #bcc2ff . . .',
     },
     protanopia: {
-      fitted:
-        '#e4e4e4 #242424 #fb5252 #83c9ff #f4f447 #53a8fd #fa4ffa #44f3f3 . #969696 #fb996c . #feffb5 #adaefc #f988f9 #b9fffe .',
-      published: '. . . #85c9ff . #9b97ff #f449f5 . . . #fb905e . . #b6adfc #fb84fb . .',
+      published: '. . #f07a3f #78b4ff . #988be0 #f984f9 . . . #ffa278 . . #afcfff #ffb8ff . .',
     },
     tritanopia: {
-      fitted:
-        '#e4e4e4 #242424 #fb5252 #1fdc29 #f4f447 #c878ce #ff63b1 #44f3f3 . #969696 #ff9291 . #feffb5 #cfa1f0 #ffb2d7 #b9fffe .',
-      published: '. . . . . #ce84df #ff63b1 . . . . . . #ce9fed #ffafcf . .',
+      published: '. . #f57172 . . #c381c7 #ff8cc1 . . . #f69a9b . . #cda0ef #ffb8df . .',
+    },
+  },
+  'high-contrast-light': {
+    deuteranopia: {
+      published:
+        '. . #a40900 #007eba #6e5400 #4917a1 #64003a #04608d . . #872700 #003c6c . #5b3bca #4b04ab . .',
+    },
+    protanopia: {
+      published:
+        '. . #990800 #007db8 #745a09 #4220a7 . #025f8c . . #620700 #003e75 . #5542d0 #4f10b0 . .',
+    },
+    tritanopia: {
+      published:
+        '. . #b11810 . #896e26 #6b007e #983663 . . . #a12f0e . #99581a #8126b1 #7c0058 . .',
     },
   },
   'everforest-dark': {
@@ -2270,6 +2339,12 @@ export function migrateCustomChrome(chrome: Record<string, string> | undefined):
   if (!legacy && (src.appearance === 'dark' || src.appearance === 'light')) {
     out.appearance = src.appearance;
   }
+  // The menu highlight became the one hover wash, so a pin on it
+  // carries over as the hover unless the map pins that too.
+  const menuHi = src.menuHi;
+  if (!legacy && out.hover === undefined && typeof menuHi === 'string' && menuHi.trim() !== '') {
+    out.hover = menuHi;
+  }
   return out as ChromeOverrides;
 }
 
@@ -2333,14 +2408,13 @@ export const THEMES: AppTheme[] = new Proxy([] as AppTheme[], {
  *  (default_theme in profile/ui.rs), and the theme Vosh falls back to.
  *  It is not the theme a new install starts on. A new install starts on
  *  Triad, which NEW_INSTALL_THEME in profile/set.rs writes to the first
- *  config (Themes review Q3). */
+ *  config. */
 export const DEFAULT_THEME_ID = 'obsidian-ember';
 
 /** Themes Vosh no longer ships, each by the id of the theme that took
- *  its place (Themes review Q13, Q14 and Q16). A saved pick keeps the
- *  retired id until you pick another theme, so an older build that still
- *  ships the theme reads it as it was, and this build shows the
- *  successor. */
+ *  its place. A saved pick keeps the retired id until you pick another
+ *  theme, so an older build that still ships the theme reads it as it
+ *  was, and this build shows the successor. */
 export const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
   ['one-dark', 'one-half-dark'],
   ['vellum', 'rubric'],
@@ -2369,10 +2443,9 @@ export function resolveThemeTerminalColors(stored: boolean | null): boolean {
 
 /** The light theme a profile that never chose one is saved with, as
  *  Rust saves it (default_light_theme in profile/ui.rs). Vosh retired
- *  Vellum for Rubric (Themes review Q14), so the id shows Rubric
- *  (RETIRED_THEMES), and Vosh 0.8.1 still reads it as Vellum. A new
- *  install starts with Rubric itself, which NEW_INSTALL_LIGHT_THEME in
- *  profile/set.rs writes (Q4). */
+ *  Vellum for Rubric, so the id shows Rubric (RETIRED_THEMES), and Vosh
+ *  0.8.1 still reads it as Vellum. A new install starts with Rubric
+ *  itself, which NEW_INSTALL_LIGHT_THEME in profile/set.rs writes. */
 export const DEFAULT_LIGHT_THEME_ID = 'vellum';
 
 /** The dark theme a profile that never saved one starts with: its
@@ -2405,7 +2478,7 @@ export function freeBuiltinThemeIds(cfg: RawUiConfig): RawUiConfig {
     return { ...t, id };
   });
   const out: RawUiConfig = { ...cfg, custom_themes };
-  for (const key of ['theme', 'light_theme', 'dark_theme'] as const) {
+  for (const key of ['theme', 'light_theme', 'dark_theme', 'day_theme', 'night_theme'] as const) {
     const id = cfg[key];
     const to = typeof id === 'string' ? moved.get(id) : undefined;
     if (to !== undefined) out[key] = to;

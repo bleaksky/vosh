@@ -44,7 +44,7 @@ export function CodesMetaLine({ meta }: { meta: CodesMeta }) {
     <>
       {meta.tone === 'warn' ? (
         <p className="st-prompt-meta is-warn" role="status">
-          <span className="st-prompt-dot" aria-hidden="true" />
+          <span className="st-warn-dot dot is-warn" aria-hidden="true" />
           <span>{meta.text}</span>
         </p>
       ) : (
@@ -85,8 +85,8 @@ interface CodesTextProps {
   meta: CodesMeta;
 }
 
-/** The codes the game sent, as text where the fields stood (D25, P12,
- *  P13). An empty fight prompt reads None set. */
+/** The codes the game sent, as text where the fields stood. An empty
+ *  fight prompt reads None set. */
 export function CodesText({ prompt, fprompt, description, meta }: CodesTextProps) {
   const labelId = useId();
   return (
@@ -286,13 +286,12 @@ interface LineRowProps {
   onForget: () => void;
 }
 
-/** The line you pointed at, for a pattern (A4's capture row): the line in
- *  the terminal face at meta size with each value Vosh reads in the
- *  selection token, then when Vosh last read it, and More with Point at
- *  it again… and Forget your game's prompt. Once no prompt has matched
- *  (P14), the not matching sentence in warn takes the place of when Vosh
- *  last read it, and Point at it again… leaves More for a button of its
- *  own before it. */
+/** The line you pointed at, for a pattern: the line in the terminal face
+ *  at meta size with each value Vosh reads in the selection token, then
+ *  when Vosh last read it, and More with Point at it again… and Forget
+ *  your game's prompt. Once no prompt has matched, the not matching
+ *  sentence in warn takes the place of when Vosh last read it, and Point
+ *  at it again… leaves More for a button of its own before it. */
 export function LineRow({
   read,
   lastRead,
@@ -317,7 +316,7 @@ export function LineRow({
         ))}
         {notMatching ? (
           <span className="st-prompt-line-meta is-warn" role="status">
-            <span className="st-prompt-dot" aria-hidden="true" />
+            <span className="st-warn-dot dot is-warn" aria-hidden="true" />
             <span>{notMatching}</span>
           </span>
         ) : (

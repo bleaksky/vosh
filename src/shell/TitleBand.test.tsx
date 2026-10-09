@@ -1,6 +1,6 @@
 import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import tauriConf from '../../src-tauri/tauri.conf.json';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/shortcuts';
@@ -10,6 +10,7 @@ import { PANEL_WIDTH_MIN, panelWidthFloor, type PaneSplit } from '../panel/paneL
 import type { Connection } from '../stores/session/useConnection';
 import frameCss from '../styles/frame.css?raw';
 import { FakeDocument, FakeElement, findAll } from '../test/fakeDom';
+import { ADD_PANE_MENU_EVENT } from '../lib/appMenu';
 import { TitleBand } from './TitleBand';
 
 // The title band's buttons at the right end: Add a pane while the panel
@@ -21,6 +22,17 @@ import { TitleBand } from './TitleBand';
 vi.mock('@tauri-apps/api/event', () => ({
   listen: async () => () => undefined,
   emit: async () => undefined,
+}));
+
+// A menu stands in for the band's own, which places itself by the
+// layout the stand in DOM below has none of.
+vi.mock('./ShellMenu', async (actual) => ({
+  ...(await actual<typeof import('./ShellMenu')>()),
+  ShellMenu: ({ label, children }: { label: string; children: ReactNode }) => (
+    <div role="menu" aria-label={label}>
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -127,19 +139,19 @@ describe('the Settings button in the title band', () => {
     // The session button comes first, centered over the terminal.
     expect(labels(draw('macos', true)).slice(1)).toEqual([
       'Add a pane',
-      'Search commands (⌘K)',
+      'Search commands',
       'Hide panel',
       'Settings',
     ]);
     expect(labels(draw('macos', false)).slice(1)).toEqual([
-      'Search commands (⌘K)',
+      'Search commands',
       'Show panel',
       'Settings',
     ]);
     for (const platform of ['windows', 'linux'] as const) {
       expect(labels(draw(platform, true)).slice(1), platform).toEqual([
         'Add a pane',
-        'Search commands (Ctrl+K)',
+        'Search commands',
         'Hide panel',
         'Settings',
         'Minimize',
@@ -147,7 +159,7 @@ describe('the Settings button in the title band', () => {
         'Close',
       ]);
       expect(labels(draw(platform, false)).slice(1), platform).toEqual([
-        'Search commands (Ctrl+K)',
+        'Search commands',
         'Show panel',
         'Settings',
         'Minimize',
@@ -155,6 +167,17 @@ describe('the Settings button in the title band', () => {
         'Close',
       ]);
     }
+  });
+
+  it('names each shortcut in aria-keyshortcuts, apart from the name', () => {
+    const keys = (platform: 'macos' | 'windows', label: string) =>
+      attr(button(draw(platform, true), label).tag, 'aria-keyshortcuts');
+    expect(keys('macos', 'Search commands')).toBe('Meta+K');
+    expect(keys('windows', 'Search commands')).toBe('Control+K');
+    expect(keys('macos', 'Hide panel')).toBe('Meta+Shift+L');
+    expect(keys('windows', 'Hide panel')).toBe('Control+Shift+L');
+    expect(keys('macos', 'Settings')).toBe('Meta+,');
+    expect(keys('windows', 'Settings')).toBe('Control+,');
   });
 
   it('keeps the tab order the order you see', () => {
@@ -290,6 +313,8 @@ describe('the title band with the Settings button', () => {
 
 type Handler = (e?: unknown) => void;
 const doc = new FakeDocument();
+/** What the band listens for on the window. */
+const heard = new Map<string, Set<(e: Event) => void>>();
 let createRoot: typeof import('react-dom/client').createRoot;
 
 /** The handlers React keeps on an element. */
@@ -312,8 +337,13 @@ function useStandInDom(): (() => Promise<void>)[] {
       document: doc,
       location: { protocol: 'about:' },
       HTMLIFrameElement: class {},
-      addEventListener() {},
-      removeEventListener() {},
+      addEventListener(type: string, fn: (e: Event) => void) {
+        if (!heard.has(type)) heard.set(type, new Set());
+        heard.get(type)?.add(fn);
+      },
+      removeEventListener(type: string, fn: (e: Event) => void) {
+        heard.get(type)?.delete(fn);
+      },
     });
     vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
     vi.stubGlobal('Element', FakeElement);
@@ -384,6 +414,23 @@ describe('pressing the Settings button', () => {
     expect(m.onMenuClosed).not.toHaveBeenCalled();
     expect(doc.activeElement).toBe(field);
   });
+
+  it('opens Add a pane when Show me asks for it', async () => {
+    await mount();
+    const add = () => {
+      const [button] = findAll(doc.body, (el) => el.getAttribute('aria-label') === 'Add a pane');
+      if (!button) throw new Error('no Add a pane button');
+      return button;
+    };
+    expect(add().getAttribute('aria-expanded')).toBe('false');
+    expect(heard.get(ADD_PANE_MENU_EVENT)?.size).toBe(1);
+    await act(async () => {
+      for (const fn of heard.get(ADD_PANE_MENU_EVENT) ?? []) fn(new Event(ADD_PANE_MENU_EVENT));
+    });
+    expect(add().getAttribute('aria-expanded')).toBe('true');
+    const menus = findAll(doc.body, (el) => el.getAttribute('role') === 'menu');
+    expect(menus.map((el) => el.getAttribute('aria-label'))).toEqual(['Add a pane']);
+  });
 });
 
 // ── Add a pane ───────────────────────────────────────────────────────
@@ -433,6 +480,11 @@ const allShown = (): PaneSplit =>
 describe('Add a pane', () => {
   const cleanups = useStandInDom();
 
+  // A test before this describe may have opened the menu and read.
+  beforeEach(() => {
+    lua.reads = 0;
+  });
+
   afterEach(() => {
     lua.panes = new Map();
     lua.rows = null;
@@ -470,12 +522,13 @@ describe('Add a pane', () => {
     const lines = findAll(
       menu,
       (el) =>
-        ['menuitem', 'separator'].includes(el.getAttribute('role') ?? '') || el.tagName === 'P',
+        ['menuitem', 'separator'].includes(el.getAttribute('role') ?? '') ||
+        el.getAttribute('class') === 'menu-note',
     ).map((el) => {
       if (el.getAttribute('role') === 'separator') return '---';
-      if (el.tagName === 'P') return el.textContent;
-      const kbd = findAll(el, (k) => k.getAttribute('class') === 'shell-menu-kbd')[0];
-      const name = findAll(el, (k) => k.getAttribute('class') === 'shell-menu-label')[0];
+      if (el.getAttribute('class') === 'menu-note') return el.textContent;
+      const kbd = findAll(el, (k) => k.getAttribute('class') === 'menu-hint')[0];
+      const name = findAll(el, (k) => k.getAttribute('class') === 'menu-label')[0];
       return kbd ? `${name.textContent} | ${kbd.textContent}` : el.textContent;
     });
     const pick = (text: string) =>

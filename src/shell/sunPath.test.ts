@@ -45,12 +45,12 @@ describe('the sun path', () => {
 });
 
 describe('sunDot', () => {
-  it('rises on the left just after 5:00', () => {
-    const dot = dotFor(at(5));
-    const { x, y } = onArc(0.5 / 15);
+  it('rises on the left just after 6:00', () => {
+    const dot = dotFor(at(6));
+    const { x, y } = onArc(0.5 / 13);
     expectUpAt(dot, x, y);
-    expect(x).toBeCloseTo(2.53, 2);
-    expect(y).toBeCloseTo(9.93, 2);
+    expect(x).toBeCloseTo(2.54, 2);
+    expect(y).toBeCloseTo(9.84, 2);
   });
 
   it('stands at the top of the arc at 12:00', () => {
@@ -59,23 +59,23 @@ describe('sunDot', () => {
   });
 
   it('sets on the right by 19:00', () => {
-    const dot = dotFor(at(19, 'set'));
-    const { x, y } = onArc(14.5 / 15);
+    const dot = dotFor(at(18, 'set'));
+    const { x, y } = onArc(12.5 / 13);
     expectUpAt(dot, x, y);
-    expect(x).toBeCloseTo(13.47, 2);
-    expect(y).toBeCloseTo(9.93, 2);
+    expect(x).toBeCloseTo(13.46, 2);
+    expect(y).toBeCloseTo(9.84, 2);
   });
 
   it('moves left to right across the day', () => {
-    const xs = Array.from({ length: 15 }, (_, i) => {
-      const dot = dotFor(at(5 + i));
+    const xs = Array.from({ length: 13 }, (_, i) => {
+      const dot = dotFor(at(6 + i));
       return dot.kind === 'up' ? dot.x : Number.NaN;
     });
     for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThan(xs[i - 1]);
   });
 
-  it('drops under the horizon as an open dot at 20:00 and at 2:00', () => {
-    expect(dotFor(at(20))).toEqual({ kind: 'down' });
+  it('drops under the horizon as an open dot at 19:00 and at 2:00', () => {
+    expect(dotFor(at(19))).toEqual({ kind: 'down' });
     expect(dotFor(at(2))).toEqual({ kind: 'down' });
     expect(dotFor(at(2, 'dark'))).toEqual({ kind: 'down' });
   });

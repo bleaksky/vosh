@@ -24,14 +24,18 @@ use crate::sessions::Session;
 use super::batch::{emit_session_output, ReadBatch};
 use super::conn::Conn;
 use super::effects::{apply_script_result, deliver_tick_step, framed_echoes, OutputSink, ScriptIo};
-use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
+use super::gmcp::{handle_gmcp, hello_subnegotiation, room_chars_ahead, supports_subnegotiation};
 use super::log_sink::LogSink;
 use super::prompt_view::{emit_prompt_state, send_prompt_vars, watching_prompt};
+use super::reader::ReaderFeed;
+use super::round_trip::ends_on_prompt;
 use super::socket::Stream;
 use super::steps::{
-    clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
+    clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, reader_wait_step,
+    LineStep,
 };
 use super::walk::{self, WalkOut};
+use super::writer::game_text::GameLine;
 use super::{emit_input_mode, GagWithoutReaderPayload, RoutedPayload};
 
 pub(super) const READ_BUFFER_BYTES: usize = 8 * 1024;
@@ -47,12 +51,45 @@ impl<R: tauri::Runtime> Conn<R> {
         self.perf.bytes_in += bytes.len() as u64;
         let events = self.parser.feed(bytes);
         let mut batch = ReadBatch::new(self.others_wrote());
-        for event in events {
+        // The text of the read, for the writer, which counts a `> ` that
+        // came alone in it.
+        let mut text = Vec::new();
+        // Whether the read brought any text, which the writer's prompt
+        // tick waits for.
+        let mut data_seen = false;
+        // The Room.Chars each event finds ahead in the read, so the people
+        // of a look whose packets follow it read their places before they
+        // show.
+        let ahead = room_chars_ahead(&events);
+        for (i, event) in events.into_iter().enumerate() {
+            batch.room_ahead = ahead.get(i).cloned().flatten();
+            if let TelnetEvent::Data(data) = &event {
+                data_seen |= !data.is_empty();
+                if self.writer.watching() {
+                    text.extend_from_slice(data);
+                }
+            }
             if let Err(e) = handle_event(self, log_sink, event, &mut batch).await {
                 warn!(error = %e, "event handling failed");
                 break;
             }
         }
+        // Where the game takes your input now, from the partial the read
+        // ended on, before the prompt step takes it.
+        let partial = self
+            .accumulator
+            .partial()
+            .map(vosh_protocol::ansi::plain_text)
+            .unwrap_or_default();
+        let text = vosh_protocol::ansi::plain_text(&text);
+        let send = self.writer.read_end(
+            &text,
+            data_seen,
+            &partial,
+            self.stream.lines_out(),
+            Instant::now(),
+        );
+        self.writer_send.extend(send);
         if let Err(e) = end_read(self, log_sink, &mut batch).await {
             warn!(error = %e, "prompt handling at the end of a read failed");
         }
@@ -114,6 +151,11 @@ async fn handle_event<R: tauri::Runtime>(
                     .walker
                     .watching()
                     .then(|| walk::answer(&plain, ended.as_deref()).to_string());
+                conn.writer.heard(&plain);
+                if conn.writer.watching() {
+                    let out = conn.stream.lines_out();
+                    conn.writer.line(&GameLine::new(&plain, &line.bytes), out);
+                }
                 let trigger_t0 = std::time::Instant::now();
                 // The tick step for a line that matches the Reset on
                 // pattern comes under the same locks as the triggers and
@@ -147,12 +189,18 @@ async fn handle_event<R: tauri::Runtime>(
                     walked(conn, out, batch).await?;
                 }
             }
+            // Text after the last line end is the game's prompt, waiting
+            // for your next command. The note editor ends on a line end
+            // and answers no line of the note, so what you write there
+            // never reads as a stall.
+            let prompted = ends_on_prompt(conn.accumulator.partial());
+            conn.stream.game_prompted(prompted);
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
             conn.perf.gmcp_packets += 1;
             batch.gmcp = true;
-            handle_gmcp(conn, &payload, batch).await?;
+            handle_gmcp(conn, log_sink.id(), &payload, batch).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
@@ -179,6 +227,8 @@ async fn handle_event<R: tauri::Runtime>(
             for step in steps {
                 deliver_line_step(conn, log_sink, batch, &open, step).await?;
             }
+            conn.stream.game_prompted(true);
+            conn.writer.marker();
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
@@ -189,6 +239,9 @@ async fn handle_event<R: tauri::Runtime>(
             let response = conn.negotiator.handle(&TelnetEvent::Will(opt));
             conn.stream.write_all(&response).await?;
             if !was_on && conn.negotiator.server_does(opt) {
+                // The game can now say when you play, so the rows before
+                // that are outside it.
+                conn.session.connection.lock().log_kinds.gmcp_on();
                 conn.stream.write_all(&hello_subnegotiation()).await?;
                 conn.stream.write_all(&supports_subnegotiation()).await?;
             }
@@ -218,6 +271,26 @@ pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     if !out.is_empty() {
         conn.seen_output = emit_session_output(&conn.app, &conn.session, &out, &mut conn.settle);
     }
+}
+
+/// Send what a screen reader reads of a partial that waited
+/// [`super::reader::PARTIAL_WAIT`].
+pub(super) async fn flush_reader_wait<R: tauri::Runtime>(conn: &mut Conn<R>) {
+    let mut reader = ReaderFeed::default();
+    hear_reader_wait(conn, &mut reader).await;
+    super::reader::emit(&conn.app, &conn.session, reader);
+}
+
+/// Read a partial that waited into `reader`, through
+/// [`reader_wait_step`], under the profile lock, which says whether a
+/// screen reader reads it.
+pub(super) async fn hear_reader_wait<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    reader: &mut ReaderFeed,
+) {
+    let p = conn.session.lock_profile().await;
+    let mut c = conn.session.connection.lock();
+    reader_wait_step(&p, &mut c, &conn.accumulator, reader);
 }
 
 /// Let go of the lines the stage holds for the rest of a prompt, through
@@ -348,10 +421,11 @@ async fn end_read<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Send what one socket read gathered: its output, the triggers that hid
+/// Send what one socket read gathered: its output, what a screen reader
+/// reads of it, the triggers that hid
 /// a prompt with nothing to draw in its place, then the prompt vars when
 /// a prompt was read or they changed, what the plugins changed in their
-/// panes, and the hidden state when it changed. Once per read, so the
+/// panes, the snoops, and the hidden state when it changed. Once per read, so the
 /// packets of one pulse never show the panes a state between them. Its frame and its log rows wait in
 /// `settle` for the end of the burst of reads. `seen_output` becomes the
 /// output count after this read's output. Returns when a clock piece in
@@ -367,21 +441,27 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         log,
         prompt_vars,
         lua_panes,
+        snoop,
         prompt,
         gag_without_reader,
         character,
         hold: _,
+        reader_wait: _,
         gmcp,
+        since_prompt: _,
+        reader,
+        room_ahead: _,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
-    let (open, vars, panes, hidden, prompt_seen, status, prompt_state, clock, rings) = {
+    let (open, vars, panes, snoops, hidden, prompt_seen, status, prompt_state, clock, rings) = {
         let p = conn.session.lock_profile().await;
         let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
         let vars = c.prompt.take_prompt_vars(prompt_vars);
         let panes = lua_panes.then(|| c.lua_panes.take_changes()).flatten();
+        let snoops = snoop.then(|| c.snoops.take_changes());
         let hidden = c.prompt.vars.take_hidden_change();
         // Low health follows what the vitals panes read once the read's
         // packets and prompt values landed, whether its alert is on or
@@ -402,6 +482,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
             p.open().clone(),
             vars,
             panes,
+            snoops,
             hidden,
             c.prompt.take_seen(),
             c.prompt.take_status_change(),
@@ -417,9 +498,10 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
                 as u64;
         conn.seen_output = emit_session_output(app, session, &out, &mut conn.settle);
     }
+    super::reader::emit(app, session, reader);
     conn.settle.queue_rows(log);
-    if let Some(character) = character {
-        log_sink.name(&character).await;
+    if let Some(named) = character.and_then(|character| log_sink.name(&character)) {
+        conn.settle.queue_name(named);
     }
     for trigger in gag_without_reader {
         session.emit(
@@ -433,6 +515,9 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     }
     if let Some(panes) = panes {
         session.emit(app, events::LUA_PANES, &panes);
+    }
+    if let Some(snoops) = snoops {
+        super::snoop::emit(app, session, snoops);
     }
     if let Some(hidden) = hidden {
         session.emit(app, events::HIDDEN, &hidden);

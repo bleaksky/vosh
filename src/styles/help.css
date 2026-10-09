@@ -1,8 +1,8 @@
-/* Help window (the approved Help boards). It wears the Settings frame
-   from settings.css (.st-app, the sidebar, the search, the nav rows, the
-   band and its breadcrumb) and adds the hp- rules below, which read only
-   the One Window tokens and the --st- fills, so light themes follow
-   through the same variables. */
+/* Help window. It wears the Settings frame from settings.css
+   (.st-app, the sidebar, the search, the nav rows, the band and its
+   breadcrumb) and adds the hp- rules below, which read only the
+   shared tokens and the --st- fills, so light themes follow through
+   the same variables. */
 
 /* The sidebar is 280 wide, so the longest topic title sits on one line
    under its section. */
@@ -112,6 +112,15 @@
   padding: 0 0 0 20px;
 }
 
+/* A button row, 16 under the text above it, such as
+   Open Get started. */
+.hp-actions {
+  display: flex;
+  gap: 8px;
+  max-width: 528px;
+  margin: 16px 0 0;
+}
+
 /* An outline row scrolls its item 48 under the band, and a pick
    flashes it with the selected row fill. */
 .hp-article li {
@@ -148,17 +157,9 @@
   white-space: nowrap;
 }
 
-/* A key you press, as Settings keycaps 4 apart. */
-.hp-keys {
-  display: inline-flex;
-  gap: 4px;
-  font: inherit;
-  white-space: nowrap;
-}
-
 /* A search match, ANSI yellow at 28% the way the find bar and the
-   session logs page mark one, and a 1 px ring on the match you are on.
-   HelpWindow sets both colors from the theme. */
+   session logs page mark one, and the match you are on at 60%.
+   HelpWindow sets both fills from the theme. */
 .hp-mark {
   padding: 0;
   background: var(--hp-mark, transparent);
@@ -166,7 +167,7 @@
 }
 
 .hp-mark[data-current] {
-  box-shadow: 0 0 0 1px var(--hp-mark-ring, currentColor);
+  background: var(--hp-mark-current, transparent);
 }
 
 /* A table is a Settings card: radius 12 on the input band, a 12/600

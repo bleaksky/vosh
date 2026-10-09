@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FIT_ALL, NAME_MIN, statusLineFit, type StatusLineWidths } from './statusLineFit';
 
-// Widths near what the 12 px panel face draws on board 4: Health, Mana
+// Widths near what the 12 px panel face draws: Health, Mana
 // and Moves with `1020 / 1020`, `800 / 800` and `930 / 930`, 54% held
 // at 100%, and the tick, the time and three moons.
 const LINE: StatusLineWidths = {
@@ -15,6 +15,8 @@ const LINE: StatusLineWidths = {
   foe: 29,
   fighting: false,
   target: 0,
+  roundTrip: 0,
+  slow: false,
   tick: 22,
   time: 28,
   moons: 50,
@@ -68,10 +70,52 @@ describe('statusLineFit', () => {
       labels: false,
       current: true,
       moons: false,
+      roundTrip: true,
       time: true,
     });
     expect(statusLineFit({ ...LINE, room: moons - 1 }).time).toBe(false);
     expect(statusLineFit({ ...LINE, room: time }).time).toBe(false);
+  });
+
+  // The round trip measured at 999ms, about 40 px, 20 px before the
+  // tick.
+  const RTT = { ...LINE, roundTrip: 40 };
+  const MOONS_GONE =
+    FULL + 20 + 40 - (38 + 6 + 32 + 6 + 36 + 6) - (64 - 28 + 56 - 21 + 56 - 21) - 58;
+
+  it('lets a fine round trip go after the moons and before the time', () => {
+    expect(statusLineFit({ ...RTT, room: FULL + 60 })).toEqual(FIT_ALL);
+    expect(statusLineFit({ ...RTT, room: FULL + 59 }).labels).toBe(false);
+    expect(statusLineFit({ ...RTT, room: MOONS_GONE })).toEqual({
+      names: false,
+      labels: false,
+      current: true,
+      moons: false,
+      roundTrip: true,
+      time: true,
+    });
+    expect(statusLineFit({ ...RTT, room: MOONS_GONE - 1 })).toEqual({
+      names: false,
+      labels: false,
+      current: true,
+      moons: false,
+      roundTrip: false,
+      time: true,
+    });
+    expect(statusLineFit({ ...RTT, room: MOONS_GONE - 60 - 1 }).time).toBe(false);
+  });
+
+  it('never lets a slow round trip go, and the time goes for it', () => {
+    const slow = { ...RTT, slow: true };
+    expect(statusLineFit({ ...slow, room: MOONS_GONE - 1 })).toEqual({
+      names: false,
+      labels: false,
+      current: true,
+      moons: false,
+      roundTrip: true,
+      time: false,
+    });
+    expect(statusLineFit({ ...slow, room: 10 }).roundTrip).toBe(true);
   });
 
   it('keeps the tick and ends at the last step when nothing fits', () => {
@@ -80,6 +124,7 @@ describe('statusLineFit', () => {
       labels: false,
       current: true,
       moons: false,
+      roundTrip: false,
       time: false,
     });
   });

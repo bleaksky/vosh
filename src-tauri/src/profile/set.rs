@@ -24,7 +24,7 @@
 //! - Else create an empty index with one "default" profile entry (its
 //!   file is created on the first save). A folder that holds nothing of
 //!   yours is a new install, which also gets a global.toml that starts it
-//!   on Triad.
+//!   on Triad and a profiles/default.toml with every preset off.
 
 use std::path::{Path, PathBuf};
 
@@ -34,6 +34,7 @@ use thiserror::Error;
 use crate::app::state::SharedState;
 use crate::disk::paths;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
+use crate::loadouts::presets::PRESETS_OFF;
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::shared::{GlobalConfig, ScopeConfig};
@@ -117,12 +118,58 @@ pub(crate) struct ProfilesIndex {
     /// restore. Left out with `selected` while they say nothing `active`
     /// does not, see [`SessionEntry::list`]. An older build drops both on
     /// its next save, and the launch after it opens one session on
-    /// `active` (D14).
+    /// `active`.
     #[serde(default, rename = "session", skip_serializing_if = "Vec::is_empty")]
     pub sessions: Vec<SessionEntry>,
     /// The session that was selected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected: Option<SessionId>,
+    /// Where you are in Get started. Only a new install writes it, so an
+    /// index with none never opens the card at launch. An older build
+    /// drops it on its next save.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub get_started: Option<GetStarted>,
+    /// Keep logs for, in days, once for the whole install, since every
+    /// profile shares logs.sqlite. None keeps logs forever and
+    /// stays out of the file. An older build drops it on its next save.
+    /// A hand edit outside [`KEEP_DAYS`] reads as forever.
+    #[serde(
+        default,
+        deserialize_with = "lenient_keep_logs_days",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub keep_logs_days: Option<u32>,
+}
+
+/// The spans Keep logs for offers besides forever, in days.
+pub(crate) const KEEP_DAYS: [u32; 3] = [365, 90, 30];
+
+/// Read Keep logs for as one of [`KEEP_DAYS`], or forever for anything
+/// else a hand edit left, such as 0, 45 or "90", so it never deletes
+/// every log or loses the rest of profiles.toml. The next save drops it.
+fn lenient_keep_logs_days<'de, D>(deser: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = toml::Value::deserialize(deser)?;
+    let days = raw
+        .as_integer()
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|d| KEEP_DAYS.contains(d));
+    if days.is_none() {
+        tracing::warn!(value = %raw, "keep_logs_days is not a span Vosh offers, keeping logs forever");
+    }
+    Ok(days)
+}
+
+/// Get started as profiles.toml keeps it, once for the whole install.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GetStarted {
+    /// The card opens at launch.
+    pub at_launch: bool,
+    /// The steps you finished, by id.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub done: Vec<String>,
 }
 
 /// A session as profiles.toml keeps it for the next launch: its id, which
@@ -173,9 +220,9 @@ impl SessionEntry {
 
 pub(crate) const DEFAULT_PROFILE_NAME: &str = "default";
 
-/// The theme a new install starts on, and its light theme (Themes review
-/// Q3 and Q4). `UiConfig` keeps Obsidian Ember and Vellum as its
-/// defaults, which a file without these keys still reads.
+/// The theme a new install starts on, and its light theme. `UiConfig`
+/// keeps Obsidian Ember and Vellum as its defaults, which a file without
+/// these keys still reads.
 const NEW_INSTALL_THEME: &str = "triad";
 const NEW_INSTALL_LIGHT_THEME: &str = "rubric";
 
@@ -214,9 +261,9 @@ fn read_saved(path: &Path) -> Result<SavedFile, ConfigError> {
 impl ProfileSet {
     /// Load (or migrate-and-load) the profile set rooted at the given
     /// app data directory. Always returns a valid set; on a fresh
-    /// install it returns a single-entry "default" set whose
-    /// profile file does not exist yet, beside a global.toml that holds
-    /// the theme a new install starts on.
+    /// install it returns a single-entry "default" set whose profile
+    /// file has every preset off, beside a global.toml that holds the
+    /// theme a new install starts on.
     pub(crate) fn load_or_migrate(root: PathBuf) -> Result<Self, ProfileSetError> {
         let index_path = paths::profiles_index_path(&root);
 
@@ -249,18 +296,12 @@ impl ProfileSet {
             let target = paths::profile_path(&root, DEFAULT_PROFILE_NAME);
             std::fs::rename(&legacy, &target)?;
         }
-        // global.toml holds the new install's theme before the index
-        // names a profile, so a crash before the first save keeps it,
-        // and a global.toml that does not save leaves the folder new for
-        // the next launch.
+        // global.toml holds the new install's theme and profiles/default.toml
+        // its presets, all off, before the index names a profile, so a
+        // crash before the first save keeps both. When either does not
+        // save, the folder stays new for the next launch.
         if new_install {
-            let global = GlobalConfig {
-                theme: Some(NEW_INSTALL_THEME.to_string()),
-                light_theme: Some(NEW_INSTALL_LIGHT_THEME.to_string()),
-                ..GlobalConfig::default()
-            };
-            let body = toml::to_string_pretty(&global)?;
-            crate::disk::atomic::write_with_backup(&paths::global_path(&root), &body)?;
+            write_new_install(&root)?;
         }
 
         let index = ProfilesIndex {
@@ -275,6 +316,11 @@ impl ProfileSet {
             notices: Vec::new(),
             sessions: Vec::new(),
             selected: None,
+            get_started: new_install.then_some(GetStarted {
+                at_launch: true,
+                done: Vec::new(),
+            }),
+            keep_logs_days: None,
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -611,6 +657,45 @@ impl ProfileSet {
         notices
     }
 
+    /// Where you are in Get started, or None when it never opened.
+    pub(crate) fn get_started(&self) -> Option<&GetStarted> {
+        self.index.get_started.as_ref()
+    }
+
+    /// Keep where you are in Get started and save the index. An index
+    /// that does not save keeps what it held.
+    pub(crate) fn set_get_started(
+        &mut self,
+        at_launch: bool,
+        done: Vec<String>,
+    ) -> Result<(), ProfileSetError> {
+        let before = self
+            .index
+            .get_started
+            .replace(GetStarted { at_launch, done });
+        if let Err(e) = self.save_index() {
+            self.index.get_started = before;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// How many days Vosh keeps a log, or None to keep it forever.
+    pub(crate) fn keep_logs_days(&self) -> Option<u32> {
+        self.index.keep_logs_days
+    }
+
+    /// Keep logs for `days`, or forever with None, and save the index.
+    /// An index that does not save keeps what it held.
+    pub(crate) fn set_keep_logs_days(&mut self, days: Option<u32>) -> Result<(), ProfileSetError> {
+        let before = std::mem::replace(&mut self.index.keep_logs_days, days);
+        if let Err(e) = self.save_index() {
+            self.index.keep_logs_days = before;
+            return Err(e);
+        }
+        Ok(())
+    }
+
     /// Read the per-category scope map.
     pub(crate) fn scope(&self) -> &ScopeConfig {
         &self.index.scope
@@ -625,6 +710,30 @@ impl ProfileSet {
         self.save_index()?;
         Ok(())
     }
+}
+
+/// Write what a new install starts with in the app data folder `root`:
+/// global.toml on Triad, and profiles/default.toml with every preset off.
+/// When the profile file does not save, global.toml goes too, so the
+/// folder still holds nothing of yours.
+fn write_new_install(root: &Path) -> Result<(), ProfileSetError> {
+    let global = GlobalConfig {
+        theme: Some(NEW_INSTALL_THEME.to_string()),
+        light_theme: Some(NEW_INSTALL_LIGHT_THEME.to_string()),
+        ..GlobalConfig::default()
+    };
+    let mut profile = ProfileConfig::fresh();
+    profile.ui.enabled_presets = vec![PRESETS_OFF.to_string()];
+    let global_body = toml::to_string_pretty(&global)?;
+    let profile_body = toml::to_string_pretty(&profile)?;
+    let global_path = paths::global_path(root);
+    crate::disk::atomic::write_with_backup(&global_path, &global_body)?;
+    let profile_path = paths::profile_path(root, DEFAULT_PROFILE_NAME);
+    if let Err(e) = crate::disk::atomic::write_with_backup(&profile_path, &profile_body) {
+        let _ = std::fs::remove_file(&global_path);
+        return Err(e.into());
+    }
+    Ok(())
 }
 
 /// True when the app data folder `root` holds no profiles.toml, no root
@@ -867,6 +976,58 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn an_empty_folder_starts_with_every_preset_off() {
+        let dir = tempdir().unwrap();
+        ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let path = paths::profile_path(dir.path(), DEFAULT_PROFILE_NAME);
+        let config = ProfileConfig::load(&path).unwrap();
+        assert_eq!(config.ui.enabled_presets, [PRESETS_OFF]);
+        // Get started opens at launch, and the next launch reads it.
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let open = GetStarted {
+            at_launch: true,
+            done: Vec::new(),
+        };
+        assert_eq!(set.get_started(), Some(&open));
+    }
+
+    #[test]
+    fn get_started_keeps_the_steps_you_finished() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.set_get_started(false, vec!["connect".into()]).unwrap();
+        let text = std::fs::read_to_string(paths::profiles_index_path(dir.path())).unwrap();
+        assert!(
+            text.ends_with("[get_started]\nat_launch = false\ndone = [\"connect\"]\n"),
+            "{text}"
+        );
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let get_started = set.get_started().unwrap();
+        assert!(!get_started.at_launch);
+        assert_eq!(get_started.done, ["connect"]);
+    }
+
+    #[test]
+    fn a_folder_with_a_profile_keeps_its_presets_and_get_started_shut() {
+        // Bug 5 recovery leaves the profile files, and the oldest builds
+        // kept one profile.toml at the root, which moves to default.toml.
+        for (kept, default_text) in [
+            ("profiles/foo.toml", None),
+            ("profile.toml", Some("marker = 1\n")),
+        ] {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join(kept);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "marker = 1\n").unwrap();
+            let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+            let default = paths::profile_path(dir.path(), DEFAULT_PROFILE_NAME);
+            let text = std::fs::read_to_string(default).ok();
+            assert_eq!(text.as_deref(), default_text, "{kept}");
+            assert_eq!(set.get_started(), None, "{kept}");
+        }
+    }
+
+    #[test]
     fn a_notice_a_session_leaves_shows_once_at_the_next_launch() {
         let dir = tempdir().unwrap();
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
@@ -1086,6 +1247,28 @@ pub(crate) mod tests {
         assert!(set.get("Other").is_none());
     }
 
+    /// New profile copies the profile you play, your preset edits with
+    /// the list of presets that are on.
+    #[tokio::test]
+    async fn a_new_profile_copies_the_preset_edits_with_the_list() {
+        use crate::loadouts::preset_edits::lilac_line;
+        let dir = tempdir().unwrap();
+        let state: SharedState = std::sync::Arc::new(crate::app::state::AppState::default());
+        state.set_profiles(james_like_set(dir.path())).await;
+        {
+            let mut p = state.selected_profile().await;
+            p.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+            p.preset_edits = lilac_line();
+        }
+        create_profile(&state, "Orla", Some(DEFAULT_PROFILE_NAME), None)
+            .await
+            .unwrap();
+        let set = state.loaded_profile_set().await.unwrap();
+        let copy = ProfileConfig::load(&set.profile_path("Orla")).unwrap();
+        assert_eq!(copy.ui.enabled_presets, ["disarm_buff_fade"]);
+        assert_eq!(copy.preset_edits, lilac_line());
+    }
+
     #[test]
     fn duplicate_copies_per_profile_file() {
         let dir = tempdir().unwrap();
@@ -1132,5 +1315,27 @@ pub(crate) mod tests {
         assert!(set.create("").is_err());
         assert!(set.create("    ").is_err());
         assert!(set.create("with:colon").is_err());
+    }
+
+    #[test]
+    fn a_hand_edited_keep_logs_days_reads_as_forever() {
+        let load = |days: &str| {
+            let dir = tempdir().unwrap();
+            std::fs::write(
+                paths::profiles_index_path(dir.path()),
+                format!(
+                    "active = \"Healer\"\nkeep_logs_days = {days}\n\n[[profile]]\nname = \"default\"\n\n[[profile]]\nname = \"Healer\"\n"
+                ),
+            )
+            .unwrap();
+            ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap()
+        };
+        for days in ["0", "45", "\"90\"", "-1"] {
+            let set = load(days);
+            assert_eq!(set.keep_logs_days(), None, "{days}");
+            assert_eq!(set.active_name(), "Healer", "{days}");
+            assert_eq!(set.list().len(), 2, "{days}");
+        }
+        assert_eq!(load("30").keep_logs_days(), Some(30));
     }
 }

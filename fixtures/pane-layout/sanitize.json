@@ -449,6 +449,35 @@
           ]
         }
       }
+    },
+    {
+      "name": "the writing pane stays once where the card pinned it",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            { "id": "map", "pane": "map", "weight": 2 },
+            { "id": "writing", "pane": "writing", "weight": 1 },
+            { "id": "w2", "pane": "Writing", "weight": 5 },
+            { "id": "affects", "pane": "affects", "weight": 1 }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.5 },
+            { "id": "writing", "pane": "writing", "weight": 0.25 },
+            { "id": "affects", "pane": "affects", "weight": 0.25 }
+          ]
+        }
+      }
     }
   ]
 }

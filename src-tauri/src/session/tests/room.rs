@@ -1,11 +1,12 @@
-//! Room triggers and the Room, time and weather colors preset, played
+//! Room triggers and the Room, time, and weather colors preset, played
 //! through the session's own steps.
 //!
 //! Inside `session`, so it drives the same private steps the socket
 //! loop runs: the GMCP step, the Line pass and the GA step. The looks and
 //! lines come from fixtures/room-colors, each one the way the Aabahran
-//! server prints it, with its Room.Chars and Room.Items packets first
-//! where the server sends them. The preset's triggers come from
+//! server prints it, with its Room.Info, Room.Chars and Room.Items
+//! packets where the server sends them, before the text up to d50e4a24
+//! and after the people since. The preset's triggers come from
 //! preset.json, which presets.test.ts holds to src/automation/presets.ts.
 
 use super::*;
@@ -24,7 +25,7 @@ enum LookEvent {
         /// The line of the person the case targets.
         #[serde(default)]
         target: bool,
-        /// The color the Room, time and weather colors preset gives a line
+        /// The color the Room, time, and weather colors preset gives a line
         /// that is not a room line, if any.
         #[serde(default)]
         preset: Option<String>,
@@ -79,7 +80,7 @@ fn preset_lines() -> Vec<PresetLine> {
         .lines
 }
 
-/// The triggers of the Room, time and weather colors preset, from preset.json.
+/// The triggers of the Room, time, and weather colors preset, from preset.json.
 fn preset_triggers() -> Vec<vosh_automation::trigger::Trigger> {
     #[derive(serde::Deserialize)]
     struct PresetFile {
@@ -91,7 +92,7 @@ fn preset_triggers() -> Vec<vosh_automation::trigger::Trigger> {
         .triggers
 }
 
-/// A profile with the Room, time and weather colors preset installed.
+/// A profile with the Room, time, and weather colors preset installed.
 fn preset_profile() -> Profile {
     let mut p = Profile::default();
     for trigger in preset_triggers() {
@@ -131,34 +132,106 @@ fn wire(events: &[LookEvent]) -> Vec<u8> {
     bytes
 }
 
-/// One socket read of `data` through the steps the session runs for each
-/// event, then the end of the read, with your target, the room list and
-/// the room look in `c`. Returns what the terminal gets.
-fn read(p: &mut Profile, c: &mut Connection, data: &[u8]) -> String {
-    let mut parser = Parser::new();
-    let mut acc = LineAccumulator::new();
-    let mut batch = ReadBatch::new(false);
-    let now = Instant::now();
-    for event in parser.feed(data) {
-        match event {
-            TelnetEvent::Data(bytes) => {
-                for line in acc.feed(&bytes) {
-                    let plain = vosh_protocol::ansi::plain_text(&line.bytes);
-                    let _ = line_step(p, c, &mut batch, line, plain, now, None);
+/// The socket reads of one connection, each through the steps the
+/// session runs for each event, with the Room.Chars each event finds ahead
+/// in its read, then the end of the read.
+#[derive(Default)]
+struct Reads {
+    parser: Parser,
+    acc: LineAccumulator,
+}
+
+impl Reads {
+    /// One read of `data`, with your target, the room list and the room
+    /// look in `c`. Returns what the read writes to the terminal.
+    fn read(&mut self, p: &mut Profile, c: &mut Connection, data: &[u8]) -> Output {
+        let mut batch = ReadBatch::new(false);
+        let now = Instant::now();
+        let events = self.parser.feed(data);
+        let ahead = room_chars_ahead(&events);
+        for (i, event) in events.into_iter().enumerate() {
+            batch.room_ahead = ahead.get(i).cloned().flatten();
+            match event {
+                TelnetEvent::Data(bytes) => {
+                    for line in self.acc.feed(&bytes) {
+                        let plain = vosh_protocol::ansi::plain_text(&line.bytes);
+                        let _ = line_step(p, c, &mut batch, line, plain, now, None);
+                    }
                 }
+                TelnetEvent::Subnegotiation { option, payload }
+                    if option == telnet_option::GMCP =>
+                {
+                    let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
+                    let _ = gmcp_step(p, c, &msg, now);
+                    if msg.package == "Room.Chars" {
+                        let _ = recolor_target(p, c, &mut batch.out);
+                    }
+                }
+                TelnetEvent::Command(byte)
+                    if byte == telnet_codes::GA || byte == telnet_codes::EOR =>
+                {
+                    let _ = marker_step(p, c, &mut self.acc, &mut batch, now, None);
+                }
+                _ => {}
             }
-            TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
-                let msg = vosh_protocol::gmcp::parse(&payload).expect("every packet parses");
-                let _ = gmcp_step(p, c, &msg, now);
-            }
-            TelnetEvent::Command(byte) if byte == telnet_codes::GA || byte == telnet_codes::EOR => {
-                let _ = marker_step(p, c, &mut acc, &mut batch, now, None);
-            }
-            _ => {}
         }
+        let _ = partial_step(p, c, &mut self.acc, &mut batch, now, None);
+        c.prompt.stage.finish(&mut batch.out);
+        batch.out
     }
-    let _ = partial_step(p, c, &mut acc, &mut batch, now, None);
-    String::from_utf8(batch.out.bytes).expect("the output is text")
+}
+
+/// One socket read of `data` on a new connection. Returns what the
+/// terminal gets.
+fn read(p: &mut Profile, c: &mut Connection, data: &[u8]) -> String {
+    let out = Reads::default().read(p, c, data);
+    assert!(out.replace.is_none());
+    String::from_utf8(out.bytes).expect("the output is text")
+}
+
+/// The screen after `outs`, each a read's output: a replace writes over
+/// its region from the region's mark on, as a renderer does while nothing
+/// came after the region, and the marks show nothing.
+fn screen(outs: &[Output]) -> String {
+    let mut screen = String::new();
+    for out in outs {
+        if let Some(replace) = &out.replace {
+            let mark = String::from_utf8(vosh_prompt::stage::mark(replace.gen)).unwrap();
+            let at = screen.rfind(&mark).expect("the region the replace writes");
+            assert!(
+                !screen[at + mark.len()..].contains("\x1b]7717;"),
+                "no region after the one replaced"
+            );
+            screen.truncate(at);
+            screen.push_str(std::str::from_utf8(&replace.bytes).unwrap());
+        }
+        screen.push_str(std::str::from_utf8(&out.bytes).unwrap());
+    }
+    while let Some(at) = screen.find("\x1b]7717;") {
+        let end = at + screen[at..].find('\x07').expect("a mark ends") + 1;
+        screen.replace_range(at..end, "");
+    }
+    screen
+}
+
+/// `events` in one read for each run of lines that a look's packets
+/// follow and one for the rest, so the packets come a read later than
+/// the people they place.
+fn reads_apart(events: &[LookEvent]) -> Vec<Vec<u8>> {
+    let mut reads = vec![Vec::new()];
+    let mut after_line = false;
+    for event in events {
+        let gmcp = matches!(event, LookEvent::Gmcp { .. });
+        if gmcp && after_line {
+            reads.push(Vec::new());
+        }
+        after_line = matches!(event, LookEvent::Line { .. });
+        reads
+            .last_mut()
+            .expect("a read")
+            .extend(wire(std::slice::from_ref(event)));
+    }
+    reads
 }
 
 /// What the terminal shows for `events`, each line as `shows` gives it
@@ -409,19 +482,119 @@ fn the_preset_colors_each_look_as_the_mockups_draw_it() {
         let mut p = preset_profile();
         let mut c = targeting(case);
         let shown = read(&mut p, &mut c, &wire(&case.events));
-        let want = expected(
-            &case.events,
-            &|line, listed, preset| match (listed, preset) {
-                // Your target in bright red over the room yellow.
-                (Listed::Target, _) => based(open_for("bright_red"), line),
-                (Listed::Room, _) => based(open_for("yellow"), line),
-                (Listed::No, Some("green")) => based(open_for("green"), line),
-                (Listed::No, Some(color)) => wrapped(open_for(color), line),
-                (Listed::No, None) => line.to_string(),
-            },
-        );
-        assert_eq!(shown, want, "{}", case.name);
+        // Your target in bright red over the room yellow.
+        assert_eq!(shown, preset_expected(&case.events), "{}", case.name);
     }
+}
+
+/// What the preset shows for `events`, as looks.json marks each line.
+fn preset_expected(events: &[LookEvent]) -> String {
+    expected(events, &|line, listed, preset| match (listed, preset) {
+        (Listed::Target, _) => based(open_for("bright_red"), line),
+        (Listed::Room, _) => based(open_for("yellow"), line),
+        (Listed::No, Some("green")) => based(open_for("green"), line),
+        (Listed::No, Some(color)) => wrapped(open_for(color), line),
+        (Listed::No, None) => line.to_string(),
+    })
+}
+
+/// Whether the game sends the packets of `case` after the text, as it
+/// does since d50e4a24.
+fn packets_follow(case: &LookCase) -> bool {
+    case.events
+        .windows(2)
+        .any(|pair| matches!(pair, [LookEvent::Line { .. }, LookEvent::Gmcp { .. }]))
+}
+
+#[test]
+fn a_walk_and_a_goto_color_your_target_on_the_first_look_where_the_packets_follow() {
+    for name in [
+        "a move west into a full room after packets that follow",
+        "an immortal's goto from the bank to the crossroads after packets that follow",
+    ] {
+        let case = looks()
+            .into_iter()
+            .find(|c| c.name.starts_with(name))
+            .expect("the case");
+        assert!(packets_follow(&case));
+        let target = case
+            .events
+            .iter()
+            .filter(|e| matches!(e, LookEvent::Line { target: true, .. }))
+            .count();
+        assert_eq!(target, 1, "{name} marks your target once");
+        let mut p = preset_profile();
+        let mut c = targeting(&case);
+        let shown = read(&mut p, &mut c, &wire(&case.events));
+        assert_eq!(shown, preset_expected(&case.events), "{name}");
+    }
+}
+
+#[test]
+fn packets_a_read_after_the_people_color_your_target_again_in_place() {
+    let mut split = 0;
+    for case in &looks() {
+        let mut p = preset_profile();
+        let mut c = targeting(case);
+        let mut reads = Reads::default();
+        let outs: Vec<Output> = reads_apart(&case.events)
+            .iter()
+            .map(|data| reads.read(&mut p, &mut c, data))
+            .collect();
+        split += usize::from(outs.len() > 1);
+        assert_eq!(
+            screen(&outs),
+            preset_expected(&case.events),
+            "{}",
+            case.name
+        );
+        // A replace comes only for a target whose line showed in the
+        // read before its packet.
+        let replaced = outs.iter().filter(|out| out.replace.is_some()).count();
+        let late = packets_follow(case)
+            && case
+                .events
+                .iter()
+                .any(|e| matches!(e, LookEvent::Line { target: true, .. }));
+        assert_eq!(replaced > 0, late, "{}", case.name);
+    }
+    assert!(split >= 4);
+}
+
+#[test]
+fn where_the_packets_come_first_no_row_waits_to_be_colored_again() {
+    for case in looks().iter().filter(|c| !packets_follow(c)) {
+        let mut p = preset_profile();
+        let mut c = targeting(case);
+        let out = Reads::default().read(&mut p, &mut c, &wire(&case.events));
+        let text = String::from_utf8(out.bytes).unwrap();
+        assert!(!text.contains("\x1b]7717;"), "{}", case.name);
+    }
+}
+
+#[test]
+fn the_ring_keeps_your_target_as_the_screen_shows_it_after_the_packet() {
+    let mut ring = crate::logs::Scrollback::default();
+    ring.push(b"A young werebeast stands here, leaning on his spear.".to_vec());
+    ring.push(b"Tolliver is resting here.".to_vec());
+    ring.recolor(&vosh_prompt::stage::Recolored {
+        was: Some(b"A young werebeast stands here, leaning on his spear.".to_vec()),
+        now: Some(b"\x1b[91mA young werebeast stands here, leaning on his spear.\x1b[0m".to_vec()),
+        after: 1,
+    });
+    // A line that no longer reads as it showed stays.
+    ring.recolor(&vosh_prompt::stage::Recolored {
+        was: Some(b"Maren is resting here.".to_vec()),
+        now: Some(b"\x1b[91mMaren is resting here.\x1b[0m".to_vec()),
+        after: 0,
+    });
+    assert_eq!(
+        ring.lines().collect::<Vec<_>>(),
+        [
+            &b"\x1b[91mA young werebeast stands here, leaning on his spear.\x1b[0m"[..],
+            &b"Tolliver is resting here."[..],
+        ]
+    );
 }
 
 /// The `WiZNET` tag as `act_wiz.c` sends it after the bold white of its
@@ -497,5 +670,34 @@ fn your_own_highlight_on_a_name_draws_over_the_room_color() {
         shown,
         "\x1b[32m[Exits: south]\x1b[0m\r\n\
          \x1b[33m\x1b[36mTolliver\x1b[0m\x1b[33m is resting here.\x1b[0m\r\n"
+    );
+}
+
+#[test]
+fn a_line_finds_the_next_room_chars_of_its_read_and_none_past_a_ga() {
+    let chars = b"\xff\xfa\xc9Room.Chars [{\"name\":\"Maren\",\"npc\":false}]\xff\xf0";
+    let mut data =
+        b"<1020hp 800m 930mv> \xff\xf9[Exits: south]\n\rMaren is resting here.\n\r".to_vec();
+    data.extend_from_slice(chars);
+    data.extend_from_slice(b"\n\r<1020hp 800m 930mv> \xff\xf9Orla arrives from the south.\n\r");
+    let events = Parser::new().feed(&data);
+    let ahead = room_chars_ahead(&events);
+    let names: Vec<Option<Vec<String>>> = ahead
+        .iter()
+        .map(|chars| {
+            chars
+                .as_ref()
+                .map(|c| c.iter().map(|ch| ch.name.clone()).collect())
+        })
+        .collect();
+    let maren = Some(vec!["Maren".to_string()]);
+    // The prompt, its GA, the look, the packet, the prompt after it, its
+    // GA and the arrival. The prompt before the GA finds none.
+    assert_eq!(names.len(), 7, "{events:?}");
+    assert_eq!(names, [None, maren.clone(), maren, None, None, None, None]);
+    // A read with no Room.Chars looks ahead for nothing.
+    assert_eq!(
+        room_chars_ahead(&Parser::new().feed(b"Orla arrives.\n\r")),
+        [None; 0]
     );
 }

@@ -12,14 +12,22 @@
 // needs no theme catalog, and a custom theme paints as early as a built
 // in one. While the theme follows the system appearance it holds both
 // sides, and the window picks the side the OS shows now, so an OS flip
-// while Vosh was closed still opens on the right side.
+// while Vosh was closed still opens on the right side. It also holds the
+// high contrast pair macOS Increase contrast shows (Q24), so turning that
+// on or off while Vosh was closed opens on the right side too. While it follows
+// the game it holds both sides and the day or night last shown, so a
+// drop or a relaunch opens on what you saw until World.Time comes
+// again.
 //
 // This module stays free of the theme catalog and the Tauri API so the
 // startup paint costs next to nothing. theme/theme.ts writes the cache.
 
+import type { Daylight } from '../ipc/tick';
+
 export const THEME_PAINT_KEY = 'vosh.cache.themePaint';
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
+const CONTRAST_QUERY = '(prefers-contrast: more)';
 
 /** What one theme paints on the document root. */
 export interface ThemePaintSide {
@@ -32,11 +40,21 @@ export interface ThemePaintSide {
   vars: Record<string, string>;
 }
 
+/** The light and dark side of a pair. */
+export interface PaintPair {
+  light: ThemePaintSide;
+  dark: ThemePaintSide;
+}
+
 /** The cached paint. `manual` while the theme is your pick, the light
- *  and dark pair while it follows the system appearance. */
+ *  and dark pair while it follows the system appearance, with the pair
+ *  Increase contrast shows as `more`, and the day and night pair with
+ *  the phase last shown while it follows the game. A cache from before
+ *  `more` has none. */
 export type ThemePaint =
   | { v: 1; follow: false; manual: ThemePaintSide }
-  | { v: 1; follow: true; light: ThemePaintSide; dark: ThemePaintSide };
+  | { v: 1; follow: true; light: ThemePaintSide; dark: ThemePaintSide; more?: PaintPair }
+  | { v: 1; follow: 'game'; day: ThemePaintSide; night: ThemePaintSide; phase: Daylight };
 
 /** The slice of Storage the cache uses. */
 export interface PaintStorage {
@@ -50,10 +68,18 @@ export interface PaintRoot {
   style: { setProperty(name: string, value: string): void };
 }
 
-/** The side to paint: the manual pick, or the side the OS shows. */
-export function pickPaintSide(paint: ThemePaint, systemDark: boolean): ThemePaintSide {
+/** The side to paint: the manual pick, the side the OS shows, or the
+ *  side of the day or night last shown. While it follows the system,
+ *  `moreContrast` is asked only when the paint holds the contrast pair. */
+export function pickPaintSide(
+  paint: ThemePaint,
+  systemDark: boolean,
+  moreContrast: () => boolean = () => false,
+): ThemePaintSide {
+  if (paint.follow === 'game') return paint[paint.phase];
   if (!paint.follow) return paint.manual;
-  return systemDark ? paint.dark : paint.light;
+  const pair = paint.more && moreContrast() ? paint.more : paint;
+  return systemDark ? pair.dark : pair.light;
 }
 
 /** Write a side's attributes and custom properties on the root. */
@@ -102,7 +128,18 @@ export function parseThemePaint(raw: string | null): ThemePaint | null {
   if (v.follow === true) {
     const light = asSide(v.light);
     const dark = asSide(v.dark);
-    return light && dark ? { v: 1, follow: true, light, dark } : null;
+    if (!light || !dark) return null;
+    if (v.more === undefined) return { v: 1, follow: true, light, dark };
+    const more = v.more as Record<string, unknown> | null;
+    const moreLight = asSide(more?.light);
+    const moreDark = asSide(more?.dark);
+    if (!moreLight || !moreDark) return null;
+    return { v: 1, follow: true, light, dark, more: { light: moreLight, dark: moreDark } };
+  }
+  if (v.follow === 'game' && (v.phase === 'day' || v.phase === 'night')) {
+    const day = asSide(v.day);
+    const night = asSide(v.night);
+    return day && night ? { v: 1, follow: 'game', day, night, phase: v.phase } : null;
   }
   return null;
 }
@@ -149,19 +186,32 @@ export function osPrefersDark(): boolean {
   }
 }
 
+/** Whether the OS asks for more contrast. False outside a browser. */
+export function osPrefersMoreContrast(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.matchMedia(CONTRAST_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
 export interface PrepaintEnv {
   storage: () => PaintStorage | null;
   systemDark: () => boolean;
+  /** Whether the OS asks for more contrast. None reads as no. */
+  moreContrast?: () => boolean;
   root: () => PaintRoot;
 }
 
 const pageEnv: PrepaintEnv = {
   storage: pageStorage,
   systemDark: osPrefersDark,
+  moreContrast: osPrefersMoreContrast,
   root: () => document.documentElement,
 };
 
 let bootSide: ThemePaintSide | null = null;
+let bootPhase: Daylight | null = null;
 
 /** Paint the cached theme on the root. Synchronous, so it lands before
  *  React renders and before any await. Returns the side it painted, or
@@ -169,12 +219,14 @@ let bootSide: ThemePaintSide | null = null;
  *  stand. Never throws. */
 export function prepaintTheme(env: PrepaintEnv = pageEnv): ThemePaintSide | null {
   bootSide = null;
+  bootPhase = null;
   try {
     const paint = readThemePaint(env.storage());
     if (!paint) return null;
-    const side = pickPaintSide(paint, env.systemDark());
+    const side = pickPaintSide(paint, env.systemDark(), env.moreContrast);
     paintRoot(env.root(), side);
     bootSide = side;
+    if (paint.follow === 'game') bootPhase = paint.phase;
     return side;
   } catch {
     return null;
@@ -184,6 +236,12 @@ export function prepaintTheme(env: PrepaintEnv = pageEnv): ThemePaintSide | null
 /** The side prepaintTheme painted at startup, or null. */
 export function bootPaintSide(): ThemePaintSide | null {
   return bootSide;
+}
+
+/** The day or night the startup paint showed while the theme followed
+ *  the game, or null. */
+export function bootPaintPhase(): Daylight | null {
+  return bootPhase;
 }
 
 /** Whether two sides paint the same thing. */

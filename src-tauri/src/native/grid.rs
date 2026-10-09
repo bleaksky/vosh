@@ -1,4 +1,4 @@
-//! Tier 3 native terminal renderer, M2b (see docs/native-renderer.md).
+//! The native terminal renderer (see docs/renderer.md).
 //!
 //! Wraps `alacritty_terminal`'s `Term` so the post-telnet byte stream
 //! (the same bytes Vosh hands xterm) builds a real cell grid: characters,
@@ -140,6 +140,10 @@ pub(crate) struct TermGrid {
     /// (`Output::id`), 0 before the first. Text the webview writes lands
     /// after it, which the session reads to tell what the text follows.
     taken: u64,
+    /// The bytes of the mark your echo starts with (`crate::input::echo_mark`),
+    /// empty while it is off, which the grid leaves out after a prompt
+    /// that ends in `>`.
+    echo_mark: Vec<u8>,
 }
 
 impl TermGrid {
@@ -160,7 +164,24 @@ impl TermGrid {
             lift_tracks: Vec::new(),
             pin_row: false,
             taken: 0,
+            echo_mark: crate::input::echo_mark(&crate::profile::ui::UiConfig::default())
+                .into_bytes(),
         }
+    }
+
+    /// Leave out `mark` from your echo after a prompt that ends in `>`,
+    /// as the mark you picked draws it.
+    pub(crate) fn set_echo_mark(&mut self, mark: Vec<u8>) {
+        self.echo_mark = mark;
+    }
+
+    /// Keep `lines` of history above the screen, dropping the oldest
+    /// past it, as Scrollback size sets it.
+    pub(crate) fn set_history(&mut self, lines: usize) {
+        self.term.set_options(Config {
+            scrolling_history: lines,
+            ..Config::default()
+        });
     }
 
     /// Note that the grid took output `id` of the prompt stage.
@@ -381,6 +402,12 @@ pub(crate) struct SessionGrid {
     /// Your prompt shows lifted in this session, so each lift draws on a
     /// band.
     prompt_bands: bool,
+    /// The history Scrollback size keeps, None for the grid's own 10,000
+    /// until the session says.
+    history: Option<usize>,
+    /// The bytes of the mark your echo starts with, None for the chevron
+    /// until the session says.
+    echo_mark: Option<Vec<u8>>,
 }
 
 impl SessionGrid {
@@ -404,13 +431,29 @@ impl SessionGrid {
     fn size(&mut self, columns: usize, screen_lines: usize) {
         match self.term.as_mut() {
             Some(grid) => grid.resize(columns, screen_lines),
-            None => self.term = Some(TermGrid::new(columns, screen_lines)),
+            None => self.term = Some(self.made(columns, screen_lines)),
         }
     }
 
     /// The grid a write lands in, made at 80 by 24 when no size came yet.
     fn written(&mut self) -> &mut TermGrid {
-        self.term.get_or_insert_with(|| TermGrid::new(80, 24))
+        if self.term.is_none() {
+            self.term = Some(self.made(80, 24));
+        }
+        self.term.as_mut().expect("made above")
+    }
+
+    /// A new grid that keeps the history Scrollback size set and the mark
+    /// the session said.
+    fn made(&self, columns: usize, screen_lines: usize) -> TermGrid {
+        let mut grid = TermGrid::new(columns, screen_lines);
+        if let Some(lines) = self.history {
+            grid.set_history(lines);
+        }
+        if let Some(mark) = &self.echo_mark {
+            grid.set_echo_mark(mark.clone());
+        }
+        grid
     }
 }
 
@@ -461,6 +504,28 @@ pub(crate) fn show(session: SessionId) {
     if let Ok(mut grids) = GRIDS.lock() {
         grids.shown = session;
     }
+}
+
+/// Keep `lines` of history in the grid of `session`, now and in a grid
+/// it makes later.
+pub(crate) fn set_history(session: SessionId, lines: usize) {
+    with_session(session, |held| {
+        held.history = Some(lines);
+        if let Some(grid) = held.term.as_mut() {
+            grid.set_history(lines);
+        }
+    });
+}
+
+/// Leave out `mark` from your echo after a prompt that ends in `>` in the
+/// grid of `session`, now and in a grid it makes later.
+pub(crate) fn set_echo_mark(session: SessionId, mark: Vec<u8>) {
+    with_session(session, |held| {
+        if let Some(grid) = held.term.as_mut() {
+            grid.set_echo_mark(mark.clone());
+        }
+        held.echo_mark = Some(mark);
+    });
 }
 
 /// Drop the grid of `session`, which closed, with its find and its bands.
@@ -573,11 +638,36 @@ pub(crate) fn scroll(session: SessionId, delta: i32) {
     with_grid_mut(session, |grid| grid.scroll(delta));
 }
 
-/// Page the grid of `session` up or down (PageUp/PageDown).
-pub(crate) fn scroll_page(session: SessionId, up: bool) {
+/// The fewest screen rows that open the scrollback split. A shorter
+/// grid scrolls back as one full view.
+pub(crate) const SPLIT_MIN_ROWS: usize = 6;
+
+/// How many lines one page up or down moves on a grid of `rows`
+/// screen rows with the divider at `split_ratio` of the height. That is
+/// the whole history rows the split shows above the divider less one, so
+/// the row you read last stays in view. A grid too short to split pages
+/// by its rows less one. Never 0.
+// Row counts are far inside f32 range, and the product is never negative.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+pub(crate) fn page_lines(rows: usize, split_ratio: f32) -> usize {
+    let shown = if rows >= SPLIT_MIN_ROWS {
+        ((split_ratio * rows as f32).floor() as usize).clamp(1, rows - 1)
+    } else {
+        rows
+    };
+    shown.saturating_sub(1).max(1)
+}
+
+/// Page the grid of `session` up or down by [`page_lines`], with the
+/// divider at `split_ratio`. A page up from the live tail opens the split.
+pub(crate) fn scroll_page(session: SessionId, up: bool, split_ratio: f32) {
     with_grid_mut(session, |grid| {
-        grid.term
-            .scroll_display(if up { Scroll::PageUp } else { Scroll::PageDown });
+        let lines = i32::try_from(page_lines(grid.screen_lines(), split_ratio)).unwrap_or(i32::MAX);
+        grid.scroll(if up { lines } else { -lines });
     });
 }
 

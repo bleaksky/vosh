@@ -1,6 +1,7 @@
 //! Tests for the password wipe. This file holds the made up secrets and
 //! the session rows the replay tests and the store tests share.
 
+mod export;
 mod replay;
 mod wipe;
 

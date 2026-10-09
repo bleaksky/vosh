@@ -1,7 +1,6 @@
-// How Help draws a backticked span (the Help boards, G5 monospace
-// policy). MUD text, commands, codes and files are mono chips. A label
-// you see in Vosh, like Edit as text, is SF 600. A key you press, like
-// Shift+Enter, is a row of keycaps.
+// How Help draws a backticked span. MUD text, commands, codes and files
+// are mono chips. A label you see in Vosh, like Edit as text, is SF
+// 600. A key you press, like Shift+Enter, is a row of keycaps.
 
 export type InlineKind = 'code' | 'label' | 'key';
 

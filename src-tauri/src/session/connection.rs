@@ -62,6 +62,13 @@ pub(crate) struct Connection {
     /// that named one, and cleared by the prompt, GA or EOR that ends the
     /// pulse, and on a disconnect.
     pub(crate) fight_tail: bool,
+    /// The round that started your fight came before the Char.Combat that
+    /// names your opponent. A server that sends its prompt tick after the
+    /// text of the pulse sends the first round of a fight while Char.Combat
+    /// still names no one, so an attack line of yours starts the fight's
+    /// lines until the prompt, GA or EOR that ends the pulse. Cleared with
+    /// [`Connection::fight_tail`].
+    pub(crate) fight_head: bool,
     /// The tick's running count. The profile keeps the tick settings,
     /// which each of its methods takes. The session starts the count as
     /// it connects and stops it as it ends.
@@ -111,6 +118,11 @@ pub(crate) struct Connection {
     /// [`crate::session::reconnect::LinkWatch`]. The loop takes it as the
     /// connection ends.
     pub(crate) link: super::reconnect::LinkWatch,
+    /// What tells the rows the session logs apart, the Comm.Channel
+    /// packets waiting for their line among it. See
+    /// [`crate::session::log_kinds::LogKinds`]. It starts over at each
+    /// connect.
+    pub(crate) log_kinds: super::log_kinds::LogKinds,
     /// The newest `[lua]` lines the session printed and the lines you
     /// typed in the Scripts console, which the Scripts page shows. A
     /// disconnect keeps them, so the lines plugins print at launch and
@@ -120,6 +132,19 @@ pub(crate) struct Connection {
     /// aliases they make. A disconnect keeps them, since only the plugin
     /// that draws a pane changes or removes it.
     pub(crate) lua_panes: crate::script::panes::LuaPanes,
+    /// The round trip to the game and the stalls since you connected,
+    /// which the loop records every two seconds and `#lag` prints. See
+    /// [`crate::session::round_trip`].
+    pub(crate) round_trip: super::round_trip::RoundTrip,
+    /// The players the session snoops, one tab each with its text. A
+    /// link that ends marks them ended and keeps them, so only the
+    /// session that closes drops them.
+    pub(crate) snoops: super::snoop::Snoops,
+    /// The plain text of the partial the end of a read painted raw while
+    /// a screen reader reads the session, which the reader already read,
+    /// so the line that completes it reads only the rest. The only thing
+    /// the reader keeps between reads. A send or a disconnect drops it.
+    pub(crate) reader_heard: Option<String>,
 }
 
 impl Connection {
@@ -134,7 +159,9 @@ impl Connection {
         self.room_chars.clear();
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
+        self.fight_head = false;
         self.preset_watch.reset();
+        self.reader_heard = None;
         had
     }
 
@@ -151,8 +178,8 @@ impl Connection {
 /// commands share. The loop takes it for every line the game sends, right
 /// after the profile lock, and an async mutex there costs each line a
 /// poll and a share of the task's cooperative budget, about 3 percent of
-/// P2. No step holds it across an await, and a task's guard cannot cross
-/// one, so a plain mutex fits.
+/// the output throughput test. No step holds it across an await, and a
+/// task's guard cannot cross one, so a plain mutex fits.
 ///
 /// The price is that a waiter blocks its runtime thread instead of
 /// yielding, for as long as the holder keeps the guard. A line the game
@@ -260,6 +287,7 @@ mod tests {
         c.room_block.room_chars(1);
         assert_ne!(c.room_block, RoomBlock::default());
         c.fight_tail = true;
+        c.fight_head = true;
         c.vars.set("target", "goblin");
         assert!(c.clear_on_disconnect(), "a target was set");
         assert_eq!(c.vars.get("target"), None);
@@ -269,6 +297,7 @@ mod tests {
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(c.room_block, RoomBlock::default());
         assert!(!c.fight_tail);
+        assert!(!c.fight_head);
         assert_eq!(c.target.quick_keys, [gg]);
         assert!(!c.clear_on_disconnect(), "no target is left");
     }

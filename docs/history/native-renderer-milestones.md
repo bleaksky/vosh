@@ -1,70 +1,8 @@
-# Native terminal renderer (Tier 3)
+# Native renderer milestones
 
-Goal: render the terminal pane on a native GPU surface so byte-to-pixel
-matches a native terminal (Ghostty-class), while the rest of the app
-stays in the Tauri webview. xterm.js inside WKWebView has a hard latency
-and smoothness ceiling we cannot tune past; this removes it for the one
-pane that matters.
-
-## The simplification that makes this tractable
-
-In Vosh the terminal pane is **output only**. You type into a separate
-HTML input row, not into xterm. So the native surface never has to own
-keyboard input or drive a PTY. It only needs to:
-
-1. Render the server-output grid (text, colors, styles, cursor).
-2. Handle mouse: wheel scroll through scrollback, drag to select, copy.
-
-That cuts out the hardest parts of a native terminal (keymaps, IME, PTY
-write path). Keystrokes stay where they are.
-
-## Architecture: native overlay subview + webview chrome
-
-The webview keeps rendering everything except the terminal grid: top bar,
-input row, panels, map, settings. A **native child surface** is layered
-into the same window, positioned over the terminal region, and draws the
-grid with wgpu.
-
-```
-NSWindow / HWND / GtkWindow
-├─ WKWebView (transparent)        chrome, panels, input, status — unchanged
-└─ native child view (wgpu)       the terminal grid, on top, clipped to the pane
-```
-
-- **On top, not behind.** A child view positioned over the terminal
-  region gets its own mouse events directly, which avoids the painful
-  "transparent hole + input passthrough" routing. The frontend reports
-  the pane's bounds (and dpr) over IPC; the backend keeps the surface
-  aligned on every resize / layout change.
-- **wgpu** is the renderer: Metal on macOS, D3D12 on Windows, Vulkan on
-  Linux — one renderer, all three CI targets. No per-platform graphics
-  code beyond creating the surface.
-
-## Components
-
-1. **Grid model + VTE parser.** Use `alacritty_terminal` (its `Term` +
-   grid + scrollback + battle-tested VTE parser). Vosh's telnet layer
-   already strips IAC negotiation; feed the resulting data stream to the
-   `Term`, which maintains the grid. We keep `vosh-ansi` only for the
-   trigger/highlight pipeline, which operates on lines, not the screen.
-
-2. **wgpu cell renderer.** Instanced quads: one pass for cell
-   backgrounds, one for glyphs from a rasterized atlas (`swash` or
-   `fontdue` for rasterization, dynamic atlas). Cursor and selection are
-   extra quads. This is the Alacritty/WezTerm renderer shape, not a
-   general text layout engine.
-
-3. **Native surface plumbing.** Create a child view on the Tauri window
-   via `raw-window-handle` + a little `objc2`/`windows`/`gtk` glue, hand
-   it to wgpu as a surface. Position + size + clip driven by pane bounds
-   from the frontend.
-
-4. **Mouse.** Wheel → scroll the grid viewport. Drag → cell selection →
-   clipboard. Hover/URL detection later.
-
-5. **Bridge.** Backend already owns the byte stream. It feeds the `Term`,
-   then signals "frame dirty"; the renderer redraws. No new IPC for
-   output — it never crosses into JS anymore, which is the whole point.
+The build diary of the native terminal renderer, kept as it stood when the
+milestones closed. docs/renderer.md describes the renderer as it works now.
+This log names files and choices that have since moved or changed.
 
 ## Open decisions to confirm before coding
 
@@ -135,8 +73,10 @@ NSWindow / HWND / GtkWindow
     and orientation (the y-flip) need eyes. No styles/scroll yet.
 - **M3 — scroll + selection. DONE.** The wheel scrolls through scrollback
   (fractional accumulator so trackpad deltas are not rounded away),
-  PageUp/PageDown page the grid and Escape snaps to the live tail, drag
-  selects cells (highlighted with the theme selection color), and the
+  PageUp/PageDown page the grid by the history rows you can see less one,
+  so the first PageUp opens the split and pages, and Escape snaps to the
+  live tail, drag selects cells (highlighted with the theme selection
+  color), and the
   selection copies on release and on Cmd+C / Ctrl+C via NSPasteboard.
   Native NAWS sizes the grid to the pane so output fills the width.
 - **M5 — split-scrollback, native. DONE (shipped with M3).** Scrolling up

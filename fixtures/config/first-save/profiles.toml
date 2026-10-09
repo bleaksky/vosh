@@ -14,3 +14,6 @@ font = "global"
 dock_layout = "global"
 keep_last_command = "global"
 auto_update = "global"
+
+[get_started]
+at_launch = true

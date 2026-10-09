@@ -11,7 +11,7 @@ const MEASURE: MeasureText = (text, px) => {
   return Math.ceil(em * px);
 };
 
-// Board 1's labels and maxes, with the guard at 100 percent.
+// The labels and maxes of a full footer, with the guard at 100 percent.
 const LABELS = ['Health', 'Mana', 'Moves'];
 const VALUES = ['1020 / 1020', '800 / 800', '930 / 930', '100%'];
 

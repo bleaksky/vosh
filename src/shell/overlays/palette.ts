@@ -1,11 +1,15 @@
 import { resetPanelLayout } from '../../panel/panelReset';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
+import { appShortcut, type SettingsShortcutId } from '../../lib/appMenu';
 import { exportAliases } from '../../ipc/automation';
 import { type PromptShow } from '../../ipc/prompt';
+import type { WritingKind } from '../../ipc/writing';
+import { KINDS } from '../../writing/kinds';
 import { sendInput, type SessionRow } from '../../ipc/session';
+import type { SnoopTab } from '../../ipc/snoop';
 import { sessionLabel } from '../../lib/sessionLabel';
 import { setUiTheme } from '../../ipc/uiConfig';
-import type { PaneType } from '../../panel/paneLayout';
+import type { OfferedPaneType } from '../../panel/paneLayout';
 import {
   applyAndBroadcastTheme,
   applyThemePrefs,
@@ -26,14 +30,14 @@ import { BUILTIN_THEMES, THEMES, themeShownBy, type AppTheme } from '../../theme
 // ── Registry ─────────────────────────────────────────────────────────
 
 /** Home sections, in the order the palette lists them. With nothing
- *  typed the palette shows Recent, View, and Session (SPEC 7), so
+ *  typed the palette shows Recent, View, and Session, so
  *  Disconnect is the final row. Aliases, settings, help, find and the
  *  sessions to go to surface as you type or through Recent. */
 export type PaletteSection = 'input' | 'view' | 'aliases' | 'session' | 'goto';
 
 /** Input holds the prompt card's rows, which show only as you type, so
- *  the palette still opens on View and Session. Go to follows Session,
- *  as board 4 of the Sessions review draws it. */
+ *  the palette still opens on View and Session. Go to follows Session.
+ *  */
 export const SECTION_ORDER: PaletteSection[] = ['input', 'view', 'aliases', 'session', 'goto'];
 
 export const SECTION_LABELS: Record<PaletteSection | 'recent', string> = {
@@ -78,15 +82,32 @@ export interface PaletteSessions {
   /** Every open session, in the sidebar's order. */
   rows: readonly SessionRow[];
   selected: number;
-  /** Whether you keep the sidebar showing them, though a narrow window
-   *  can fold it. */
+  /** Whether the sidebar shows them, in its column or over the
+   *  terminal in a narrow window. */
   shown: boolean;
   /** Bring a session to the front. */
   goTo: (session: number) => void;
   /** Bring the next session to the front, or the one before with -1. */
   step: (step: 1 | -1) => void;
-  /** Hide the sidebar in this window, or show it again. */
+  /** Hide the sidebar in this window, or show it again, as the sessions
+   *  toggle does. */
   toggleShown: () => void;
+}
+
+/** The selected session's snoops, for the rows that reach them. */
+export interface PaletteSnoops {
+  /** Every tab, live or ended, in the order they started. */
+  tabs: readonly SnoopTab[];
+  /** Put the caret in the tab in front, as Cmd J does. */
+  goTo: () => void;
+  /** Step to the next tab and put the caret there. */
+  next: () => void;
+  /** Send `snoop stop` with `name`, or alone to stop every snoop. */
+  stop: (name?: string) => void;
+  /** Move the tabs into a window of their own, or bring it forward. */
+  openWindow: () => void;
+  /** Close every ended tab. */
+  closeEnded: () => void;
 }
 
 export interface PaletteDeps {
@@ -107,10 +128,13 @@ export interface PaletteDeps {
   splitOpen?: boolean;
   toggleSplit?: () => void;
   /** Pane types that get a Show row, in order. */
-  paneTypes: readonly PaneType[];
-  paneVisible: (pane: PaneType) => boolean;
-  togglePane: (pane: PaneType) => void;
+  paneTypes: readonly OfferedPaneType[];
+  paneVisible: (pane: OfferedPaneType) => boolean;
+  togglePane: (pane: OfferedPaneType) => void;
   openHelp: () => void;
+  /** Open Get started on its list. The row appears when the shell
+   *  passes it. */
+  openGetStarted?: () => void;
   openFind: () => void;
   /** Open Settings on its last tab. Falls back to the General tab. */
   openSettings?: () => void;
@@ -128,6 +152,9 @@ export interface PaletteDeps {
   /** The open sessions. With two or more, Next session, Previous session,
    *  Hide sessions and a Go to row for each appear. */
   sessions?: PaletteSessions;
+  /** The selected session's snoops. The snoop rows appear while it has
+   *  one, the way Show staff queues waits for Imm.Queues. */
+  snoops?: PaletteSnoops;
   disconnect: () => void;
   /** Put text into the input row and focus it (for parameterized
    *  aliases the user finishes typing). */
@@ -138,10 +165,17 @@ export interface PaletteDeps {
   /** Open the prompt card, or Edit as text with `text`. The Input rows
    *  appear when the shell passes it. */
   openPromptCard?: (view?: 'text') => void;
+  /** Read your prompt aloud, as the prompt key does. The row appears
+   *  while the screen reader is on, so the shell passes it then. */
+  readPrompt?: (() => void) | undefined;
   /** Whether the profile draws its prompt, or null while it reads none,
    *  which leaves Draw your prompt out. */
   promptDraw?: boolean | null;
   setPromptDraw?: (on: boolean) => void;
+  /** The writing card: the boards you write on, whether you have a beast
+   *  to describe, and how to open it on a kind. The Input rows for each
+   *  kind appear when the shell passes it. */
+  writing?: { kinds: WritingKind[]; beast: boolean; open: (kind: WritingKind) => void };
 }
 
 const PROMPT_SHOW_ROWS: { show: PromptShow; title: string }[] = [
@@ -150,7 +184,7 @@ const PROMPT_SHOW_ROWS: { show: PromptShow; title: string }[] = [
   { show: 'pinned', title: 'Pin your prompt above the command line' },
 ];
 
-const PANE_TITLES: Record<PaneType, string> = {
+const PANE_TITLES: Record<OfferedPaneType, string> = {
   map: 'Show map',
   affects: 'Show affects',
   group: 'Show group',
@@ -158,54 +192,101 @@ const PANE_TITLES: Record<PaneType, string> = {
   imm: 'Show staff queues',
 };
 
-// Each id is a Settings deep link (src/lib/settingsNav.ts) and, as
-// `settings-<id>`, a palette Recent id, so the old tab ids stay. The
-// vitals row is gone because Settings no longer has vitals settings.
-// Its id still resolves, to Layout.
-const SETTINGS_TABS: { id: string; title: string; keywords: string }[] = [
+// Each id is the Settings deep link the row opens (src/lib/settingsNav.ts)
+// and, as `settings-<id>`, its palette Recent id. RECENT_RENAMES maps
+// the old tab ids these rows used before to the links they open now.
+// The four Automation pages carry the Settings keys, Cmd+Option+1 to 4
+// on macOS and Ctrl+Shift+1 to 4 elsewhere, read for the platform as
+// the palette builds.
+const SETTINGS_TABS: {
+  id: string;
+  title: string;
+  keywords: string;
+  shortcut?: SettingsShortcutId;
+}[] = [
   {
-    id: 'themes',
+    id: 'appearance:theme',
     title: 'Open theme settings',
     keywords: 'appearance catalog editor terminal palette colors',
   },
   {
-    id: 'typography',
+    id: 'appearance:text',
     title: 'Open terminal text settings',
     keywords: 'appearance font face size typography',
   },
-  { id: 'tick', title: 'Open tick settings', keywords: 'automation timer warn' },
-  { id: 'panels', title: 'Open panel layout settings', keywords: 'characters panes layout' },
-  { id: 'general', title: 'Open general settings', keywords: 'updates scope logs' },
+  { id: 'automation:timers#tick', title: 'Open tick settings', keywords: 'automation timer warn' },
+  {
+    id: 'characters#layout',
+    title: 'Open panel layout settings',
+    keywords: 'characters panes layout',
+  },
+  { id: 'general', title: 'Open general settings', keywords: 'updates scope' },
+  {
+    id: 'accessibility',
+    title: 'Open accessibility settings',
+    keywords: 'color vision blind contrast readable highlights blinking motion',
+  },
+  {
+    id: 'vitals',
+    title: 'Open vitals settings',
+    keywords: 'health mana moves gauges meter style customize',
+  },
+  {
+    id: 'prompt',
+    title: 'Open prompt settings',
+    keywords: 'prompt codes draw pinned preview',
+  },
   {
     id: 'input',
     title: 'Open input settings',
-    keywords: 'command line caret cursor prompt spell check paste history',
+    keywords: 'command line caret cursor spell check paste history writing card',
   },
   {
-    id: 'profiles',
+    id: 'characters',
     title: 'Open character settings',
     keywords: 'profiles characters hosts login tracked affects',
   },
-  { id: 'triggers', title: 'Open trigger settings', keywords: 'automation patterns actions' },
-  { id: 'aliases', title: 'Open alias settings', keywords: 'automation command shortcuts' },
-  { id: 'macros', title: 'Open macro settings', keywords: 'automation key bindings' },
   {
-    id: 'timers',
-    title: 'Open timer settings',
-    keywords: 'automation recurring commands interval',
+    id: 'automation:triggers',
+    title: 'Open trigger settings',
+    keywords: 'automation patterns actions',
+    shortcut: 'settings-automation:triggers',
   },
   {
-    id: 'import',
+    id: 'automation:aliases',
+    title: 'Open alias settings',
+    keywords: 'automation command shortcuts',
+    shortcut: 'settings-automation:aliases',
+  },
+  {
+    id: 'automation:macros',
+    title: 'Open macro settings',
+    keywords: 'automation key bindings',
+    shortcut: 'settings-automation:macros',
+  },
+  {
+    id: 'automation:timers',
+    title: 'Open timer settings',
+    keywords: 'automation recurring commands interval',
+    shortcut: 'settings-automation:timers',
+  },
+  {
+    id: 'automation#import',
     title: 'Import from another client…',
     keywords: 'automation tintin mushclient mudlet gmud cmud zmud',
   },
-  { id: 'logs', title: 'Open session logs', keywords: 'history search' },
+  { id: 'logs:search', title: 'Search logs', keywords: 'history search session' },
+  {
+    id: 'logs:session-logs',
+    title: 'Open log settings',
+    keywords: 'session logs keep scrollback scene',
+  },
 ];
 
 export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   const entries: PaletteEntry[] = [];
 
-  // The prompt card's rows (P0's palette specimen), found as you type.
+  // The prompt card's rows, found as you type.
   if (deps.openPromptCard) {
     const open = deps.openPromptCard;
     entries.push({
@@ -237,6 +318,24 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       searchOnly: true,
       run: () => open('text'),
     });
+  }
+
+  // The writing card's rows, one for each kind, named for what you do,
+  // so bug finds Report a bug….
+  if (deps.writing) {
+    const { kinds, beast, open } = deps.writing;
+    const shown: WritingKind[] = [...kinds, 'description', 'history', 'personality', 'purpose'];
+    if (beast) shown.push('beast');
+    for (const kind of shown) {
+      entries.push({
+        id: `write-${kind}`,
+        section: 'input',
+        title: KINDS[kind].palette,
+        keywords: `write ${KINDS[kind].keywords}`,
+        searchOnly: true,
+        run: () => open(kind),
+      });
+    }
   }
 
   if (deps.togglePanel) {
@@ -300,6 +399,17 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       });
     }
   }
+  if (deps.readPrompt) {
+    entries.push({
+      id: 'read-prompt',
+      section: 'view',
+      title: 'Read your prompt',
+      keywords: 'screen reader voiceover narrator speak aloud prompt',
+      keys: APP_SHORTCUTS['read-prompt'],
+      searchOnly: true,
+      run: deps.readPrompt,
+    });
+  }
   entries.push({
     id: 'panel-reset',
     section: 'view',
@@ -327,6 +437,16 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     searchOnly: true,
     run: deps.openHelp,
   });
+  if (deps.openGetStarted) {
+    entries.push({
+      id: 'get-started',
+      section: 'view',
+      title: 'Get started',
+      keywords: 'walkthrough welcome suggestions presets',
+      searchOnly: true,
+      run: deps.openGetStarted,
+    });
+  }
   entries.push({
     id: 'settings',
     section: 'view',
@@ -342,13 +462,14 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       section: 'view',
       title: tab.title,
       keywords: `settings preferences ${tab.keywords}`,
+      ...(tab.shortcut ? { keys: appShortcut(tab.shortcut) } : {}),
       searchOnly: true,
       run: () => deps.openSettingsTab(tab.id),
     });
   }
 
   // The rows that move between sessions wait for a second session, as
-  // the sidebar does (Q12, Q17).
+  // the sidebar does.
   const sessions = deps.sessions && deps.sessions.rows.length >= 2 ? deps.sessions : null;
   if (deps.newSession) {
     entries.push({
@@ -410,6 +531,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       section: 'session',
       title: sessions.shown ? 'Hide sessions' : 'Show sessions',
       keywords: 'sidebar list tabs',
+      keys: appShortcut('sessions-sidebar'),
       searchOnly: true,
       run: sessions.toggleShown,
     });
@@ -430,6 +552,70 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
         run: () => sessions.goTo(row.id),
       });
     });
+  }
+  // The snoop rows, while the session has a snoop open. Next
+  // snoop waits for a second tab, Stop for a live one and Close ended
+  // snoops for an ended one.
+  const snoops = deps.snoops && deps.snoops.tabs.length > 0 ? deps.snoops : null;
+  if (snoops) {
+    const live = snoops.tabs.filter((tab) => tab.live);
+    entries.push({
+      id: 'snoop',
+      section: 'session',
+      title: 'Go to snoop',
+      keywords: 'watch player split tab',
+      keys: APP_SHORTCUTS.snoop,
+      searchOnly: true,
+      run: snoops.goTo,
+    });
+    if (snoops.tabs.length >= 2) {
+      entries.push({
+        id: 'snoop-next',
+        section: 'session',
+        title: 'Next snoop',
+        keywords: 'watch player step tab',
+        searchOnly: true,
+        run: snoops.next,
+      });
+    }
+    for (const tab of live) {
+      entries.push({
+        id: `snoop-stop-${tab.name}`,
+        section: 'session',
+        title: `Stop snooping ${tab.name}`,
+        keywords: 'snoop stop end watch player',
+        searchOnly: true,
+        run: () => snoops.stop(tab.name),
+      });
+    }
+    if (live.length > 0) {
+      entries.push({
+        id: 'snoop-stop-all',
+        section: 'session',
+        title: 'Stop every snoop',
+        keywords: 'snoop stop end all watch',
+        searchOnly: true,
+        run: () => snoops.stop(),
+      });
+    }
+    entries.push({
+      id: 'snoop-window',
+      section: 'session',
+      title: 'Open snoop in a window',
+      keywords: 'watch player separate pop out',
+      searchOnly: true,
+      run: snoops.openWindow,
+    });
+    if (live.length < snoops.tabs.length) {
+      entries.push({
+        id: 'snoop-close-ended',
+        section: 'session',
+        title: 'Close ended snoops',
+        keywords: 'snoop close ended tabs',
+        searchOnly: true,
+        run: snoops.closeEnded,
+      });
+    }
   }
   entries.push({
     id: 'profile-save',
@@ -587,10 +773,43 @@ const RECENT_KEY = 'vosh.palette.recent';
 const RECENT_KEEP = 8;
 export const RECENT_SHOWN = 3;
 
+// The Settings rows once carried the old Settings tab ids, so Recent
+// may still hold them. readRecent renames them once to the links the
+// rows open now and marks the list with RECENT_VERSION.
+const RECENT_VERSION_KEY = 'vosh.palette.recentVersion';
+const RECENT_VERSION = '2';
+const RECENT_RENAMES: Readonly<Record<string, string>> = {
+  'settings-themes': 'settings-appearance:theme',
+  'settings-typography': 'settings-appearance:text',
+  'settings-tick': 'settings-automation:timers#tick',
+  'settings-panels': 'settings-characters#layout',
+  'settings-profiles': 'settings-characters',
+  'settings-triggers': 'settings-automation:triggers',
+  'settings-aliases': 'settings-automation:aliases',
+  'settings-macros': 'settings-automation:macros',
+  'settings-timers': 'settings-automation:timers',
+  'settings-import': 'settings-automation#import',
+  'settings-logs': 'settings-logs:search',
+};
+
+function storedRecent(): string[] {
+  const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+  return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function renameOldRecent(): void {
+  if (localStorage.getItem(RECENT_VERSION_KEY) === RECENT_VERSION) return;
+  const before = storedRecent();
+  const after = [...new Set(before.map((id) => RECENT_RENAMES[id] ?? id))];
+  const next = JSON.stringify(after);
+  if (next !== JSON.stringify(before)) localStorage.setItem(RECENT_KEY, next);
+  localStorage.setItem(RECENT_VERSION_KEY, RECENT_VERSION);
+}
+
 export function readRecent(): string[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+    renameOldRecent();
+    return storedRecent();
   } catch {
     return [];
   }

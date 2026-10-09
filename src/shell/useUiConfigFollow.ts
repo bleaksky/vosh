@@ -1,19 +1,29 @@
 // The main window's UI config: the fonts, the sizes, the theme and the
 // terminal settings it reads at launch, then every change a profile
 // switch or a Settings save sends. It shows the window once the launch
-// read applies, and brings the preset triggers in line with it. The
+// read applies, and brings the preset triggers in line with each profile
+// that opens. The
 // fonts, sizes and line height it caches let the next load paint in them
 // from the first frame.
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { installLaunchPresets } from '../automation/automationRecords';
+import { runPresetPlan } from '../automation/presetPlan';
+import { showPresetFix } from '../stores/presetFixStore';
 import { nativeSurfaceSetBrightBold, nativeSurfaceSetDividerColor } from '../ipc/nativeSurface';
+import { subscribeProfileSwitched } from '../ipc/profiles';
 import { subscribeCustomThemesChanged } from '../ipc/theme';
 import {
   getUiConfig,
+  DEFAULT_SCROLLBACK_LINES,
+  normalizeTerminalLineHeight,
+  type TerminalLineHeight,
+  type UiConfig,
+} from '../ipc/uiConfig';
+import {
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
+  subscribeScrollbackLinesChanged,
   subscribeReadableHighlightsChanged,
   subscribeColorVisionChanged,
   subscribeFitGameColorsChanged,
@@ -22,10 +32,7 @@ import {
   subscribeTerminalLineHeightChanged,
   subscribeFontChanged,
   subscribeThemeTerminalColorsChanged,
-  normalizeTerminalLineHeight,
-  type TerminalLineHeight,
-  type UiConfig,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigEvents';
 import { followReplacedUiConfig } from '../ipc/uiConfigBroadcast';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { resolveBlinkText, useReduceMotion } from '../lib/blink';
@@ -69,7 +76,9 @@ function sendBrightBold(on: boolean): void {
   }
 }
 
-const DEFAULT_FONT_FAMILY = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
+/** The terminal face before the config says otherwise. */
+export const DEFAULT_FONT_FAMILY =
+  '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
 interface UiConfigFollow {
   /** The terminal font as saved. */
@@ -84,6 +93,8 @@ interface UiConfigFollow {
   brightBold: boolean;
   /** Whether blinking text blinks now. */
   blinkText: boolean;
+  /** Scrollback size, the lines xterm keeps above the screen. */
+  scrollbackLines: number;
 }
 
 /** Read the UI config at launch and follow it. `onThemesChanged` runs
@@ -147,6 +158,7 @@ export function useUiConfigFollow({
     }
   });
   const [themeTerminalColors, setThemeTerminalColors] = useState(false);
+  const [scrollbackLines, setScrollbackLines] = useState(DEFAULT_SCROLLBACK_LINES);
   // Bright bold, which the native grid and the pinned band over it follow.
   const [brightBold, setBrightBold] = useState(false);
   // Blinking text: your choice, undefined until the config loads, and
@@ -173,6 +185,7 @@ export function useUiConfigFollow({
     setBrightBold(cfg.bright_bold);
     sendBrightBold(cfg.bright_bold);
     setBlinkChoice(cfg.blink_text);
+    setScrollbackLines(cfg.scrollback_lines);
     setFitGameColors(cfg.fit_game_colors);
     setColorVision(cfg.color_vision);
     fitThemesInPlay(cfg);
@@ -202,8 +215,10 @@ export function useUiConfigFollow({
         // reach the Terminal and every other window.
         applyConfig(cfg, { broadcast: true, broadcastFlips: true });
 
-        // Bring the preset triggers in line with the presets that are on.
-        await installLaunchPresets(cfg.enabled_presets);
+        // Bring the preset triggers in line with the presets that are on
+        // and your edits to them, and say when a fix changed a row you
+        // edited.
+        showPresetFix(await runPresetPlan());
       })
       .catch(() => void applyAndBroadcastTheme('system'))
       .finally(() => showAfterThemePaint(reveal));
@@ -226,8 +241,17 @@ export function useUiConfigFollow({
         (e) => console.error('[app] reading the replaced config failed', e),
         { broadcast: true },
       ),
-    (cfg: UiConfig) => applyConfig(cfg, { broadcast: true }),
+    (cfg: UiConfig) => {
+      applyConfig(cfg, { broadcast: true });
+      // The profile in front changed, or #profile load or an import
+      // brought it other presets and edits.
+      void runPresetPlan().then(showPresetFix);
+    },
   );
+
+  // A switch opens another profile, whose stored preset triggers may be
+  // stale or carry another profile's edits until the plan runs for it.
+  useTauriEvent(subscribeProfileSwitched, (name) => void runPresetPlan(name).then(showPresetFix));
 
   useEffect(() => {
     const root = document.documentElement;
@@ -310,6 +334,9 @@ export function useUiConfigFollow({
   // Settings save broadcasts the Blinking text choice.
   useTauriEvent(subscribeBlinkTextChanged, (value) => setBlinkChoice(value));
 
+  // Settings save broadcasts Scrollback size.
+  useTauriEvent(subscribeScrollbackLinesChanged, setScrollbackLines);
+
   // Settings save broadcasts Fit game colors. The terminal, the prompt
   // band and the panes draw from it at once.
   useTauriEvent(subscribeFitGameColorsChanged, setFitGameColors);
@@ -366,5 +393,6 @@ export function useUiConfigFollow({
     themeTerminalColors,
     brightBold,
     blinkText,
+    scrollbackLines,
   };
 }

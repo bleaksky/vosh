@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import { PaneTextSizeContext } from './paneTextSize';
@@ -13,7 +13,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// Board 1: Tolliver worn at 765 of 1020 and low at 159, and a
+// A fight: Tolliver worn at 765 of 1020 and low at 159, and a
 // Blackwatch guard at 54 percent.
 const FIGHT: Vitals = {
   hp: 765,

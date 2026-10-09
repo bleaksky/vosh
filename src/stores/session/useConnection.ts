@@ -34,7 +34,7 @@ export const DEFAULT_TARGET: ConnectionTarget = {
 
 // The saved world, the last target you saved or dialed from a form, in
 // browser storage on this machine. Each session keeps its own target in
-// its row, which the app keeps for the next launch (board 7). The saved
+// its row, which the app keeps for the next launch. The saved
 // world is where a New session form starts, and where a session dials
 // before it has a target of its own. The session popover and Settings ›
 // General › Connection save both, and every window follows the saved
@@ -179,8 +179,8 @@ export async function connectTo(target: ConnectionTarget, session: number): Prom
 
 /** Connect `session` to `target`, or while a redial of it waits to dial
  *  that same target, dial that try now, as Reconnect now on the notice
- *  does. A connect to another world ends the series (board 7). Cmd+R,
- *  the session menu's Connect to row and the palette reach it. */
+ *  does. A connect to another world ends the series. Cmd+R, the session
+ *  menu's Connect to row and the palette reach it. */
 export async function connectOrRedial(target: ConnectionTarget, session: number): Promise<void> {
   const waits = waitingTarget(session);
   const same =
@@ -193,9 +193,9 @@ export async function connectOrRedial(target: ConnectionTarget, session: number)
 }
 
 /** Dial a session its New session form opened, on the profile the form
- *  chose, so no profile match runs first (board 9). The target becomes
- *  the saved world the next form starts from, and the session keeps it
- *  as its own as it dials. */
+ *  chose, so no profile match runs first. The target becomes the saved
+ *  world the next form starts from, and the session keeps it as its own
+ *  as it dials. */
 export async function connectOpened(target: ConnectionTarget, session: number): Promise<void> {
   saveConnectionTarget(target);
   await connectSession(target.host, target.port, target.tls, session);

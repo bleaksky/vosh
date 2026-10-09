@@ -113,7 +113,8 @@ mod tests {
 
         fn leave(&mut self, bytes: &[u8], masked: bool) {
             let rows = vosh_log::sent_rows(bytes, self.echo.hides(masked));
-            let entries: Vec<_> = vosh_log::sent_entries(self.id, 1, rows).collect();
+            let entries: Vec<_> =
+                vosh_log::sent_entries(self.id, 1, rows, vosh_log::LineKind::Sent).collect();
             self.store.append_batch(&entries).expect("the rows go in");
         }
 

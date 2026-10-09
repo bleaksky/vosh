@@ -10,7 +10,7 @@ use tauri::{AppHandle, State};
 use crate::app::state::SharedState;
 use crate::sessions::SessionId;
 
-/// Tier 3 native renderer (macOS). The frontend reports the terminal
+/// Native renderer (macOS). The frontend reports the terminal
 /// pane's screen rectangle (CSS pixels, top-left origin, relative to the
 /// window) and device pixel ratio so the native wgpu surface can track
 /// it. NSView/Metal must be touched on the main thread, so the work is
@@ -42,7 +42,7 @@ pub(crate) fn native_surface_set_bounds(
     }
 }
 
-/// Tier 3 native renderer, underlay mode (macOS). The webview sits above
+/// Native renderer, underlay mode (macOS). The webview sits above
 /// the surface and receives every click, so the page forwards pointer
 /// events over the terminal here. `x` and `y` are CSS px from the pane's
 /// top-left corner. `kind` is "down", "drag", "up", "move", "leave", or
@@ -62,7 +62,7 @@ pub(crate) fn native_surface_pointer(app: AppHandle, kind: String, x: f64, y: f6
     }
 }
 
-/// Tier 3 native renderer: true once the surface installed and its GPU came
+/// Native renderer: true once the surface installed and its GPU came
 /// up. The page leaves the terminal pane transparent only after this, so a
 /// failed install falls back to xterm. False elsewhere.
 #[tauri::command]
@@ -77,7 +77,7 @@ pub(crate) fn native_surface_ready() -> bool {
     }
 }
 
-/// Tier 3 native renderer, underlay mode (macOS): a wheel delta forwarded
+/// Native renderer, underlay mode (macOS): a wheel delta forwarded
 /// from the page. Positive reveals older lines. A no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
@@ -93,7 +93,7 @@ pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
     }
 }
 
-/// Tier 3 native renderer (macOS): copy the current selection to the
+/// Native renderer (macOS): copy the current selection to the
 /// clipboard. Used by the Cmd+C / Ctrl+C path; a no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_copy(
@@ -108,7 +108,7 @@ pub(crate) fn native_surface_copy(
     Ok(())
 }
 
-/// Tier 3 native renderer: select everything in the grid, scrollback
+/// Native renderer: select everything in the grid, scrollback
 /// included, for the terminal menu's Select all and Cmd+A on an empty
 /// command line. Repaints; a no-op elsewhere.
 #[tauri::command]
@@ -141,7 +141,7 @@ fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
     ))
 }
 
-/// Tier 3 native renderer (macOS): set the surface theme colors so the
+/// Native renderer (macOS): set the surface theme colors so the
 /// background, foreground, and selection follow the active Vosh theme.
 /// Colors are `#rrggbb`. A no-op elsewhere.
 #[tauri::command]
@@ -172,7 +172,7 @@ pub(crate) fn native_surface_set_theme(
     }
 }
 
-/// Tier 3 native renderer: apply the split divider color setting to the
+/// Native renderer: apply the split divider color setting to the
 /// surface renderer (hex or `rgb()`/`rgba()`; None restores the default).
 #[tauri::command]
 pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
@@ -188,7 +188,7 @@ pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
     }
 }
 
-/// Tier 3 native renderer: the chrome colors the page derives with its
+/// Native renderer: the chrome colors the page derives with its
 /// theme tokens, as CSS colors (hex, or `rgb()`/`rgba()` with alpha). The
 /// split divider, the selection and its text, every find match, the
 /// current match, a hovered link, the scrollbar thumb, and the selected
@@ -242,7 +242,7 @@ pub(crate) fn native_surface_set_tokens(
     }
 }
 
-/// Tier 3 native renderer: draw a band under each lifted prompt of the
+/// Native renderer: draw a band under each lifted prompt of the
 /// session while your prompt shows lifted there. The grid tags a lift's
 /// cells either way.
 #[tauri::command]
@@ -264,7 +264,7 @@ pub(crate) fn native_surface_set_prompt_bands(
     Ok(())
 }
 
-/// Tier 3 native renderer: widen the band under the open row by `px` CSS
+/// Native renderer: widen the band under the open row by `px` CSS
 /// px, so it holds the prompt card's line break mark and caret past the
 /// row's last glyph. 0 while the card is closed.
 #[tauri::command]
@@ -281,7 +281,7 @@ pub(crate) fn native_surface_set_prompt_reach(px: f64) {
     }
 }
 
-/// Tier 3 native renderer (macOS): toggle drawing bright (ANSI 8-15) colored
+/// Native renderer (macOS): toggle drawing bright (ANSI 8-15) colored
 /// text with the bold font weight. A no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_set_bright_bold(on: bool) {
@@ -296,7 +296,7 @@ pub(crate) fn native_surface_set_bright_bold(on: bool) {
     }
 }
 
-/// Tier 3 native renderer: turn blinking text on or off, from the Blinking
+/// Native renderer: turn blinking text on or off, from the Blinking
 /// text setting and the system's reduce motion setting. Off, every
 /// blinking cell draws steady. A no-op without the native surface.
 #[tauri::command]
@@ -312,7 +312,7 @@ pub(crate) fn native_surface_set_blink_text(on: bool) {
     }
 }
 
-/// Tier 3 native renderer (macOS): report xterm's device cell size so the
+/// Native renderer (macOS): report xterm's device cell size so the
 /// surface grid matches the webview's spacing exactly instead of deriving it
 /// from font metrics. `char_height` is xterm's device glyph box, which it
 /// centers in a cell taller than the box, so the surface can put its
@@ -327,7 +327,7 @@ pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32, char_heig
     }
 }
 
-/// Tier 3 native renderer (macOS): search the grid and step to the next (or
+/// Native renderer (macOS): search the grid and step to the next (or
 /// previous) match, scrolling it into view and highlighting all matches.
 /// Returns `[current, total]` (1-based; `[0, 0]` when no match). A no-op
 /// returning `[0, 0]` elsewhere.
@@ -362,7 +362,7 @@ pub(crate) fn native_surface_find(
     }
 }
 
-/// Tier 3 native renderer (macOS): clear the find highlight. A no-op
+/// Native renderer (macOS): clear the find highlight. A no-op
 /// elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_find_clear(
@@ -380,7 +380,7 @@ pub(crate) fn native_surface_find_clear(
     Ok(())
 }
 
-/// Tier 3 native renderer (macOS): rebuild the surface atlas at a new font
+/// Native renderer (macOS): rebuild the surface atlas at a new font
 /// list and size (CSS px) so it matches the configured Vosh font. `family`
 /// is the CSS font list xterm draws with. A no-op elsewhere.
 #[tauri::command]
@@ -393,7 +393,7 @@ pub(crate) fn native_surface_set_font(family: String, size: u32) {
     }
 }
 
-/// Tier 3 native renderer (macOS): keyboard scroll. `kind` is "pageup",
+/// Native renderer (macOS): keyboard scroll. `kind` is "pageup",
 /// "pagedown", "bottom", or "toggle". Toggle opens or closes the split
 /// the way a middle click does: scrolled back it snaps to the live
 /// tail, at the tail it pages up into scrollback. Scrolls the grid and
@@ -408,16 +408,17 @@ pub(crate) fn native_surface_scroll(
     #[cfg(native_surface)]
     {
         use crate::native::grid::{scroll_metrics, scroll_page, scroll_to_bottom};
+        use crate::native::surface::pointer::split_ratio;
         match kind.as_str() {
-            "pageup" => scroll_page(session, true),
-            "pagedown" => scroll_page(session, false),
+            "pageup" => scroll_page(session, true, split_ratio()),
+            "pagedown" => scroll_page(session, false, split_ratio()),
             "bottom" => scroll_to_bottom(session),
             "toggle" => {
                 let (offset, _) = scroll_metrics(session);
                 if offset > 0 {
                     scroll_to_bottom(session);
                 } else {
-                    scroll_page(session, true);
+                    scroll_page(session, true, split_ratio());
                 }
             }
             _ => {}

@@ -1,4 +1,4 @@
-//! Tiny `TinTin++` script importer. Phase 9.
+//! Tiny `TinTin++` script importer.
 //!
 //! Pulls `#alias` and `#variable` definitions out of a `.tin` file and
 //! reports anything else as unsupported. The grammar is just enough to

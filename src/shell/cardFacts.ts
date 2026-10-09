@@ -4,10 +4,9 @@ import { sessionLabel } from '../lib/sessionLabel';
 import { rowLook, waitingWords } from '../stores/session/sessionRowStore';
 import { howLong, useSessionView, type SessionView } from './sessionLine';
 
-// What the card beside a session's row says, S6 of the Sessions Sidebar
-// review, which SessionCard draws and the row reads to a screen reader
-// as its description. Each fact drops out while the session has nothing
-// for it.
+// What the card beside a session's row says, which SessionCard draws
+// and the row reads to a screen reader as its description. Each fact
+// drops out while the session has nothing for it.
 
 /** What the foot of every card says. */
 export const CARD_FOOT = 'Double click the name to rename';

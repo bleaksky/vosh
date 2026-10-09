@@ -6,7 +6,7 @@ Every window builds from the primitives in `src/ui`. Settings, Help and the prom
 import { Section, Row, Toggle, Select } from '../../ui';
 ```
 
-The control styles live in `src/styles/controls.css`, and the section, card and row styles in `src/styles/settings.css`. Every class starts with `st-` and reads only the One Window tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the interim rules in `migration.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
+The control styles live in `src/styles/controls.css`, and the section, card and row styles in `src/styles/settings.css`. Every class starts with `st-` and reads only the shared tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). Do not add a `settings-` class to new markup.
 
 Use monospace only for MUD text. That means patterns, sent commands, macro keys, host, and port. Everything else uses the UI font with tabular numbers, which the root already sets.
 
@@ -59,7 +59,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `FieldArea` is a `Field` for text where a newline means something, like the commands a trigger or timer sends. At one line it looks exactly like `Field`, and it grows a line at a time. It takes `value`, `onChange`, `width`, and `mono` like `Field` and forwards its ref. A plain `Field` drops newlines, so use this one for any value that can hold them.
 
-`ColorField` is a color setting in a row or a grid, like `Sent command color` on Input, `Divider color` on Layout, and the custom theme colors on Appearance. A 16 px swatch at the left opens the system color picker, and the color reads as text in the UI font on the field fill. The hex rules live in `src/ui/colorText.ts`.
+`ColorField` is a color setting in a row or a grid, like `Command color` on Input, `Divider color` on Layout, and the custom theme colors on Appearance. A 16 px swatch at the left opens the system color picker, and the color reads as text in the UI font on the field fill. The hex rules live in `src/ui/colorText.ts`.
 
 - `value` is CSS color text, or an empty string for none. `onChange(value)` runs with each color the field reads. A hex saves as lowercase `#rrggbb` once it has six digits, or three when you press Enter or leave the field. A hex with alpha or any other CSS color saves as typed once the page can draw it. Text that does not read as a color yet stays in the field. Leaving the field puts the saved color back, and Escape does the same while you stay in it.
 - `allowEmpty` lets you clear the text, which runs `onChange('')`, for a color that falls back to the theme. `placeholder` names that fallback, like `Theme default`, and `emptySwatch` is the color the swatch shows meanwhile, var() included. The picker then opens on that color.
@@ -74,7 +74,8 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `Button` forwards its ref.
 
-- `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, no fill).
+- `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, the ring kept).
+- `small` makes it 24 tall at 12/500 with 10 side padding, like the prompt card foot.
 - `icon` adds a leading 16 px icon in the secondary color, like `New profile`.
 
 `IconButton` is a 28×24 button that shows only a 16 px icon, the one the window controls use. It forwards its ref.
@@ -82,7 +83,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `label` is its accessible name, like `Ilsabet options` or `Move Haste up`. It is required, since the button shows no text.
 - `icon` is the icon.
 
-`Keycap` draws one key. Build the keys with `shortcutKeys` from `src/lib/shortcuts.ts` so macOS reads ⌘ and the other systems read Ctrl.
+`Keycap` draws one key. Set a row of them in a `keys` wrapper, a `<kbd>` or a `<span>`, which spaces them 4 apart, and put the margin on a class of its own. Build the keys with `shortcutKeys` from `src/lib/shortcuts.ts` so macOS reads ⌘ and the other systems read Ctrl.
 
 `Chip` is a pill with an optional close button.
 
@@ -109,7 +110,9 @@ A row whose content sits under its label line at full width, like the prompt tem
 
 `ConfirmDialog` is the 320 wide card that asks before a choice, imported by path. Pass `title`, `body`, `confirmLabel`, `onConfirm` and `onCancel`. `tone` is `danger` by default and `primary` for a choice that makes something. `cancelLabel` names the other button, `Cancel` by default, like the banner ask's `Not now`.
 
-`VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
+`CoachRing` is Show me's ring, mounted once in each window. `showCoach({ find, line })` rings what `find` returns once it draws, 2 px out in the accent with one pulse, moves focus to the first of them and sets `line` beside it on the toast recipe. The pick, Esc, a press anywhere or a target that leaves the page clears it. `menuRows(menu, labels)` finds rows of an open menu by their labels. A Settings anchor with `data-st-coach` rings the same way when a deep link reaches it.
+
+`VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off. It renders a span with the `visually-hidden` class from base.css. A label, a legend, a live paragraph or a span that hides only in some styles wears the class by name.
 
 `useRowIds` returns the ids of the enclosing `Row` for a custom control.
 
@@ -123,7 +126,7 @@ A few classes in `settings.css` and `controls.css` cover small shapes that are n
 
 ## Icons
 
-`src/ui/icons.tsx` holds the SPEC 6 set, the icon set every window draws from. `GearIcon`, `ToothedGearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `CodeIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `PlayIcon`, `MoreIcon`, `GripIcon`, `MinimizeIcon`, and `MaximizeIcon`, with `PlugIcon`, `TerminalIcon`, `TickIcon`, `LifebuoyIcon`, and `BookIcon` for the Help sections. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
+`src/ui/icons.tsx` holds the icon set every window draws from. `GearIcon`, `ToothedGearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `CodeIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `PlayIcon`, `MoreIcon`, `GripIcon`, `MinimizeIcon`, and `MaximizeIcon`, with `PlugIcon`, `TerminalIcon`, `TickIcon`, `LifebuoyIcon`, and `BookIcon` for the Help sections. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
 
 `GearIcon` is the spoked gear beside General in Settings. `ToothedGearIcon` is the six tooth gear on the title band's Settings button, since the spoked one reads as a sun at that spot.
 

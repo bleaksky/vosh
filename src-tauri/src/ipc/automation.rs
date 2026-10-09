@@ -14,15 +14,16 @@ use tauri::{AppHandle, State};
 use vosh_automation::trigger::Trigger;
 
 use crate::app::events::{
-    broadcast, broadcast_list_changes, ListChanges, ListRevisions, MACROS_CHANGED, TIMERS_CHANGED,
+    broadcast, broadcast_list_changes, ListChanges, ListRevisions, PresetsChanged, MACROS_CHANGED,
+    PRESETS_CHANGED, TIMERS_CHANGED,
 };
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
-use crate::import::ImportFormat;
+use crate::import::{merge_triggers, ImportFormat};
 use crate::loadouts::gating::{loadout_hold, LoadoutHold};
 use crate::loadouts::presets::{
     delete_macro, import_macros, install_preset_macros, install_preset_triggers,
-    remove_preset_macros, set_macro,
+    remove_preset_macros, retag_returned_macros, set_macro, switch_presets, PresetSwitch,
 };
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::live::{Macro, Profile, Timer};
@@ -239,8 +240,9 @@ pub(crate) struct GroupSwitchState {
     pub name: String,
     /// Whether the group is on now.
     pub enabled: bool,
-    /// Set while the loadouts decide the group, so the switch waits and
-    /// its note names the loadouts that decide.
+    /// Set while the loadouts decide the group, so its note names the
+    /// loadouts that decide. The switch still turns the group, and the
+    /// next launch, profile switch or Loadouts save puts their state back.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub loadouts: Option<LoadoutHold>,
 }
@@ -265,11 +267,11 @@ fn group_switches(p: &Profile, set: Option<&LoadoutSet>, list: GroupList) -> Vec
 
 /// Turn the group `group` of `list` on or off by its own name, as `#group`
 /// turns each group it finds. The per list off lists are where the switch
-/// lasts in both modes. A group the loadouts decide stays as they set it,
-/// since the next switch or launch would put it back.
+/// lasts in both modes. A group the loadouts decide turns too, as `#group`
+/// and Lua turn it, and the next launch, profile switch or Loadouts save
+/// puts the loadouts state back.
 fn switch_group(
     p: &mut Profile,
-    set: Option<&LoadoutSet>,
     list: GroupList,
     group: &str,
     enabled: bool,
@@ -277,14 +279,6 @@ fn switch_group(
     let group = group.trim();
     if !list_groups(p, list).iter().any(|(g, _)| g == group) {
         return Err(format!("Vosh has no group named “{group}” there now."));
-    }
-    let held = set
-        .filter(|_| list.in_catalog())
-        .is_some_and(|set| loadout_hold(set, group).is_some());
-    if held {
-        return Err(format!(
-            "Your loadouts decide the group “{group}”. Change it under Loadouts."
-        ));
     }
     set_list_group(p, list, group, enabled);
     Ok(())
@@ -322,7 +316,7 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
         let mut p = edited.lock().await;
         let set = set.as_ref().map(|set| set.for_profile(p.name.as_deref()));
         let before = ListRevisions::of_lists(&p);
-        switch_group(&mut p, set.as_deref(), list, &group, enabled)?;
+        switch_group(&mut p, list, &group, enabled)?;
         (
             p.open().clone(),
             group_switches(&p, set.as_deref(), list),
@@ -447,27 +441,45 @@ pub(crate) async fn timers_delete(
     Ok(updated)
 }
 
-/// Install the triggers and macros of the presets you turned on. Each
-/// one should already have its `preset` field set to the preset id; this
-/// command validates and inserts them so the engine starts matching and
-/// the keys start sending at once. Returns the number installed.
+/// What a preset install did: the number of triggers and macros it
+/// installed, and the names of the stored triggers of those presets it
+/// took out because the presets no longer build them.
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetsInstalled {
+    pub(crate) installed: usize,
+    pub(crate) removed: Vec<String>,
+}
+
+/// Install the triggers and macros of the presets that are on. Each one
+/// should already have its `preset` field set to the preset id, and each
+/// preset comes whole, so a stored trigger of it the set does not name
+/// comes out. This command validates and inserts them so the engine
+/// starts matching and the keys start sending at once.
 #[tauri::command]
-pub(crate) async fn presets_install(
-    app: AppHandle,
+pub(crate) async fn presets_install<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     triggers: Vec<Trigger>,
     macros: Vec<Macro>,
     profile: Option<String>,
-) -> Result<usize, String> {
+) -> Result<PresetsInstalled, String> {
     let (triggers_came, macros_came) = (!triggers.is_empty(), !macros.is_empty());
-    let (open, installed, macros) = {
+    let (open, done, macros) = {
         let mut p = state.lock_named(profile).await?;
+        let installed = triggers.len() + macros.len();
         // The macros go first, since they refuse before they change
-        // anything.
-        let mut installed = install_preset_macros(&mut p, macros)?;
-        installed += install_preset_triggers(&mut p, triggers)?;
+        // anything. Macros that came back through 0.8.1 take their
+        // preset back first, so copies of them hold none off, and only
+        // when the install takes every macro, so a refusal changes
+        // nothing.
+        if macros.iter().all(|m| m.preset.is_some()) {
+            retag_returned_macros(&mut p, &macros);
+        }
+        install_preset_macros(&mut p, macros)?;
+        let removed = install_preset_triggers(&mut p, triggers)?;
         let macros = macros_came.then(|| p.macros.clone());
-        (p.open().clone(), installed, macros)
+        let done = PresetsInstalled { installed, removed };
+        (p.open().clone(), done, macros)
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
@@ -477,7 +489,51 @@ pub(crate) async fn presets_install(
     if let Some(macros) = macros.filter(|_| state.in_front(&open)) {
         broadcast(&app, MACROS_CHANGED, &macros);
     }
-    Ok(installed)
+    Ok(done)
+}
+
+/// Turn presets on and off in one step, for First Run's Get started and
+/// the Presets page. Each preset `changes`
+/// turns off loses its triggers and macros, and `triggers` and `macros`,
+/// which the page built for the presets it turns on, install as
+/// [`presets_install`] installs them. Then the switches land on the
+/// `enabled_presets` list as it stands now, see [`switch_presets`], and
+/// nothing else of the page's settings is written. Saves once and tells
+/// every window.
+#[tauri::command]
+pub(crate) async fn presets_enabled_set<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    changes: Vec<PresetSwitch>,
+    triggers: Vec<Trigger>,
+    macros: Vec<Macro>,
+    profile: Option<String>,
+) -> Result<PresetsInstalled, String> {
+    let (open, done, lists, macros) = {
+        let mut p = state.lock_named(profile).await?;
+        let lists_before = ListRevisions::of_lists(&p);
+        let macros_before = p.macros.clone();
+        let installed = triggers.len() + macros.len();
+        install_preset_macros(&mut p, macros)?;
+        for off in changes.iter().filter(|c| !c.on) {
+            p.triggers.remove_by_preset(&off.id);
+            remove_preset_macros(&mut p, &off.id);
+        }
+        let removed = install_preset_triggers(&mut p, triggers)?;
+        p.ui.enabled_presets = switch_presets(&p.ui.enabled_presets, &changes);
+        let lists = ListChanges::between(lists_before, ListRevisions::of_lists(&p));
+        let macros = (p.macros != macros_before).then(|| p.macros.clone());
+        let done = PresetsInstalled { installed, removed };
+        (p.open().clone(), done, lists, macros)
+    };
+    persist_profile(state.inner(), &open).await;
+    broadcast_list_changes(&app, &open, lists);
+    if let Some(macros) = macros.filter(|_| state.in_front(&open)) {
+        broadcast(&app, MACROS_CHANGED, &macros);
+    }
+    let profile = open.name();
+    broadcast(&app, PRESETS_CHANGED, &PresetsChanged { profile });
+    Ok(done)
 }
 
 /// Remove every trigger and macro tagged with the given preset id.
@@ -524,20 +580,26 @@ pub(crate) struct ImportSummary {
     pub unsupported: Vec<(String, String)>,
     pub unparsed: Vec<String>,
     pub rejected: Vec<String>,
+    /// The triggers that take the name of a preset trigger, which stay
+    /// out so the preset's keeps running.
+    pub clashes: Vec<crate::import::vosh::Clash>,
 }
 
 /// Parse + apply an import file to the live profile. The format
 /// string is an [`ImportFormat`] name such as `mudlet`; pass an
 /// empty string to auto-detect. Aliases / triggers / macros / vars
-/// merge into the existing stores (overwrite on name collision).
-/// Returns a summary so the UI can report what landed and what
-/// did not.
+/// merge into the existing stores (overwrite on name collision). A
+/// trigger that takes a name of `preset_triggers`, the trigger names
+/// of the page's preset library, joins the clash list instead, see
+/// [`merge_triggers`]. Returns a summary so the UI can report what
+/// landed and what did not.
 #[tauri::command]
 pub(crate) async fn import_apply<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
     format: String,
     text: String,
+    preset_triggers: Vec<String>,
     profile: Option<String>,
 ) -> Result<ImportSummary, String> {
     let fmt = if format.is_empty() {
@@ -548,21 +610,17 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
             .map_err(|_| format!("unknown import format: {format}"))?
     };
     let report = crate::import::parse(fmt, &text);
-    let mut rejected: Vec<String> = Vec::new();
     let macros_changed = !report.macros.is_empty();
     let macros_snapshot: Vec<Macro>;
     let lists;
+    let merged;
     let open = {
         let mut p = state.lock_named(profile).await?;
         let lists_before = ListRevisions::of_lists(&p);
         for alias in &report.aliases {
             p.aliases.set(alias.clone());
         }
-        for trigger in &report.triggers {
-            if let Err(e) = p.triggers.set(trigger.clone()) {
-                rejected.push(format!("trigger `{}` rejected: {e}", trigger.name));
-            }
-        }
+        merged = merge_triggers(&mut p.triggers, &report.triggers, &preset_triggers);
         if macros_changed {
             import_macros(&mut p, &report.macros);
         }
@@ -581,12 +639,13 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     broadcast_list_changes(&app, &open, lists);
     Ok(ImportSummary {
         aliases: report.aliases.len(),
-        triggers: report.triggers.len() - rejected.len(),
+        triggers: report.triggers.len() - merged.rejected.len() - merged.clashes.len(),
         macros: report.macros.len(),
         vars: report.vars.len(),
         unsupported: report.unsupported,
         unparsed: report.unparsed,
-        rejected,
+        rejected: merged.rejected,
+        clashes: merged.clashes,
     })
 }
 
@@ -675,7 +734,7 @@ mod tests {
     fn a_switch_turns_one_list_and_agrees_with_group() {
         let mut p = grouped();
         for list in GroupList::ALL {
-            switch_group(&mut p, None, list, "combat", false).unwrap();
+            switch_group(&mut p, list, "combat", false).unwrap();
             assert_eq!(
                 group_switches(&p, None, list)[0],
                 switch("combat", false),
@@ -706,7 +765,7 @@ mod tests {
     #[test]
     fn a_switch_keeps_off_through_a_save_of_the_list() {
         let mut p = grouped();
-        switch_group(&mut p, None, GroupList::Triggers, "loot", false).unwrap();
+        switch_group(&mut p, GroupList::Triggers, "loot", false).unwrap();
         let json = p.triggers.export_json().unwrap();
         p.triggers.import_json(&json).unwrap();
         assert_eq!(
@@ -725,7 +784,7 @@ mod tests {
     #[test]
     fn a_switch_refuses_a_group_no_item_is_in() {
         let mut p = grouped();
-        let err = switch_group(&mut p, None, GroupList::Aliases, "loot", false).unwrap_err();
+        let err = switch_group(&mut p, GroupList::Aliases, "loot", false).unwrap_err();
         assert_eq!(err, "Vosh has no group named “loot” there now.");
         let leftover = &p.aliases.disabled_groups();
         assert!(leftover.is_empty(), "{leftover:?}");
@@ -748,31 +807,74 @@ mod tests {
     }
 
     #[test]
-    fn a_group_the_loadouts_decide_shows_who_and_waits() {
-        let mut p = grouped();
-        let set = healer_on(false);
+    fn a_switch_turns_a_group_the_loadouts_decide_until_they_turn_it_back() {
+        use crate::loadouts::gating::apply_effective_state;
         let held = |on, by: &[&str]| {
             Some(LoadoutHold {
                 on,
                 by: by.iter().map(|n| (*n).to_string()).collect(),
             })
         };
+        let mut p = grouped();
+        let set = healer_on(false);
+        apply_effective_state(&set, &mut p);
         let switches = group_switches(&p, Some(&set), GroupList::Triggers);
         assert_eq!(switches[0].loadouts, held(true, &["Healer"]));
         assert_eq!(switches[1].loadouts, held(false, &["Healer"]));
-        let err = switch_group(&mut p, Some(&set), GroupList::Triggers, "loot", true).unwrap_err();
-        assert_eq!(
-            err,
-            "Your loadouts decide the group “loot”. Change it under Loadouts."
-        );
+        assert!(!switches[1].enabled);
+        // The switch turns loot on under Healer, and the note stays.
+        switch_group(&mut p, GroupList::Triggers, "loot", true).unwrap();
+        let switches = group_switches(&p, Some(&set), GroupList::Triggers);
+        assert!(switches[1].enabled);
+        assert_eq!(switches[1].loadouts, held(false, &["Healer"]));
+        // The next apply puts the loadouts state back.
+        apply_effective_state(&set, &mut p);
+        assert!(!group_switches(&p, Some(&set), GroupList::Triggers)[1].enabled);
         // Timers stay in the profile file, so no loadout decides them.
         let timers = group_switches(&p, Some(&set), GroupList::Timers);
         assert_eq!(timers, [switch("combat", true)]);
-        switch_group(&mut p, Some(&set), GroupList::Timers, "combat", false).unwrap();
-        // Dormant holds every catalog group off, with no loadout to name.
+        switch_group(&mut p, GroupList::Timers, "combat", false).unwrap();
+        assert!(!group_switches(&p, Some(&set), GroupList::Timers)[0].enabled);
+    }
+
+    #[test]
+    fn a_switch_turns_an_alias_group_the_dormant_catalog_holds_off() {
+        use crate::loadouts::gating::apply_effective_state;
+        let held_off = Some(LoadoutHold {
+            on: false,
+            by: Vec::new(),
+        });
+        let mut p = grouped();
         let dormant = healer_on(true);
+        apply_effective_state(&dormant, &mut p);
         let macros = group_switches(&p, Some(&dormant), GroupList::Macros);
-        assert_eq!(macros[0].loadouts, held(false, &[]));
+        assert_eq!(macros[0].loadouts, held_off);
+        assert!(!group_switches(&p, Some(&dormant), GroupList::Aliases)[0].enabled);
+        switch_group(&mut p, GroupList::Aliases, "combat", true).unwrap();
+        let switches = group_switches(&p, Some(&dormant), GroupList::Aliases);
+        assert!(switches[0].enabled);
+        assert_eq!(switches[0].loadouts, held_off);
+        apply_effective_state(&dormant, &mut p);
+        assert!(!group_switches(&p, Some(&dormant), GroupList::Aliases)[0].enabled);
+    }
+
+    #[test]
+    fn on_a_plain_profile_a_switch_turns_triggers_aliases_and_timers() {
+        let mut p = grouped();
+        for list in [GroupList::Triggers, GroupList::Aliases, GroupList::Timers] {
+            switch_group(&mut p, list, "combat", false).unwrap();
+            assert_eq!(
+                group_switches(&p, None, list)[0],
+                switch("combat", false),
+                "{list:?}"
+            );
+            switch_group(&mut p, list, "combat", true).unwrap();
+            assert_eq!(
+                group_switches(&p, None, list)[0],
+                switch("combat", true),
+                "{list:?}"
+            );
+        }
     }
 
     #[test]
@@ -824,7 +926,7 @@ mod tests {
             group_switches(&p, Some(&set), GroupList::Aliases),
             [switch("combat", true)]
         );
-        switch_group(&mut p, Some(&set), GroupList::Aliases, "combat", false).unwrap();
+        switch_group(&mut p, GroupList::Aliases, "combat", false).unwrap();
         assert!(!p.aliases.is_group_enabled("combat"));
     }
 
@@ -839,7 +941,7 @@ mod tests {
                 { "name": "combat", "enabled": true, "loadouts": { "on": true, "by": ["Healer"] } }
             ])
         );
-        switch_group(&mut p, None, GroupList::Timers, "combat", false).unwrap();
+        switch_group(&mut p, GroupList::Timers, "combat", false).unwrap();
         let sent = serde_json::to_value(group_switches(&p, None, GroupList::Timers)).unwrap();
         assert_eq!(
             sent,
@@ -980,6 +1082,7 @@ mod tests {
                 app.state::<SharedState>(),
                 "bogus".to_string(),
                 gmud.to_string(),
+                Vec::new(),
                 None,
             )
             .await;
@@ -989,6 +1092,7 @@ mod tests {
                 app.state::<SharedState>(),
                 String::new(),
                 "look\n".to_string(),
+                Vec::new(),
                 None,
             )
             .await;
@@ -997,5 +1101,86 @@ mod tests {
                 Some("could not detect import format")
             );
         });
+    }
+
+    #[tokio::test]
+    async fn a_switch_turns_presets_on_and_off_saves_the_list_alone_and_tells_every_window() {
+        use std::sync::{Arc, Mutex};
+
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::{Listener, Manager};
+        use vosh_automation::trigger::{Trigger, TriggerAction};
+
+        use super::{presets_enabled_set, PresetsInstalled};
+        use crate::app::events::PRESETS_CHANGED;
+        use crate::app::state::{AppState, SharedState};
+        use crate::loadouts::presets::PresetSwitch;
+
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let into = heard.clone();
+        app.listen_any(PRESETS_CHANGED, move |event| {
+            into.lock().unwrap().push(event.payload().to_string());
+        });
+        let trigger = |preset: &str, name: &str| Trigger {
+            preset: Some(preset.into()),
+            ..Trigger::new(name, "You quaff", TriggerAction::Gag)
+        };
+        let state = app.state::<SharedState>();
+        {
+            let mut p = state.selected_profile().await;
+            p.ui.enabled_presets = vec![
+                "sent_tells".into(),
+                "later_preset".into(),
+                "potion_labels".into(),
+            ];
+            p.ui.theme = "vellum".into();
+            p.triggers
+                .set(trigger("potion_labels", "potion.quaff"))
+                .unwrap();
+        }
+        let switch = |id: &str, on| PresetSwitch { id: id.into(), on };
+        let done = presets_enabled_set(
+            app.handle().clone(),
+            app.state(),
+            vec![switch("potion_labels", false), switch("herb_labels", true)],
+            vec![trigger("herb_labels", "herb.eat")],
+            Vec::new(),
+            None,
+        )
+        .await;
+        assert_eq!(
+            done,
+            Ok(PresetsInstalled {
+                installed: 1,
+                removed: Vec::new()
+            })
+        );
+        {
+            let p = state.selected_profile().await;
+            assert_eq!(
+                p.ui.enabled_presets,
+                ["sent_tells", "later_preset", "herb_labels"]
+            );
+            assert_eq!(p.ui.theme, "vellum", "the rest of the settings stay");
+            let names: Vec<String> = p.triggers.list().into_iter().map(|t| t.name).collect();
+            assert_eq!(names, ["herb.eat"]);
+        }
+        let off = ["sent_tells", "later_preset", "herb_labels"].map(|id| switch(id, false));
+        let done = presets_enabled_set(
+            app.handle().clone(),
+            app.state(),
+            off.to_vec(),
+            Vec::new(),
+            Vec::new(),
+            None,
+        )
+        .await;
+        assert_eq!(done.map(|d| d.installed), Ok(0));
+        let p = state.selected_profile().await;
+        assert_eq!(p.ui.enabled_presets, ["none"]);
+        assert!(p.triggers.is_empty());
+        assert_eq!(heard.lock().unwrap().len(), 2);
     }
 }

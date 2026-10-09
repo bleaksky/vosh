@@ -9,8 +9,8 @@ import { CheckIcon } from '../../ui/icons';
 // box's bottom right corner that shows while you point at the map or
 // tab to it, and opens a menu of map styles, zoom, and the rows of the
 // style you picked, the tileset in Tileset and the floors, sprites and
-// view in 3D. At rest the pane shows only the drawing, as in the
-// approved boards.
+// view in 3D. At rest the pane shows only the drawing, so nothing
+// covers the rooms.
 
 const MAP_STYLE_LABELS: Record<MapStyle, string> = {
   squares: 'Squares',
@@ -73,7 +73,7 @@ export function MapPaneControls(props: Props) {
       {open && anchor && rect && (
         <MenuSurface
           label="Map style and zoom"
-          className="pane-menu-narrow"
+          className="menu-narrow"
           anchor={anchor}
           at={{ x: rect.left, y: rect.bottom + 8, flipX: rect.right, flipY: rect.top - 8 }}
           onClose={close}
@@ -82,7 +82,7 @@ export function MapPaneControls(props: Props) {
             <MenuItem
               key={s}
               onSelect={run(() => props.onStyle(s))}
-              trailing={s === style ? <CheckIcon className="pane-menu-check" /> : null}
+              trailing={s === style ? <CheckIcon className="menu-check" /> : null}
             >
               {MAP_STYLE_LABELS[s]}
             </MenuItem>
@@ -118,7 +118,7 @@ export function MapPaneControls(props: Props) {
                 <MenuItem
                   key={f}
                   onSelect={run(() => props.onView3d({ ...view3d, floors: f }))}
-                  trailing={f === view3d.floors ? <CheckIcon className="pane-menu-check" /> : null}
+                  trailing={f === view3d.floors ? <CheckIcon className="menu-check" /> : null}
                 >
                   {FLOOR_LABELS[f]}
                 </MenuItem>
@@ -126,7 +126,7 @@ export function MapPaneControls(props: Props) {
               <MenuSeparator />
               <MenuItem
                 onSelect={run(() => props.onView3d({ ...view3d, sprites: !view3d.sprites }))}
-                trailing={view3d.sprites ? <CheckIcon className="pane-menu-check" /> : null}
+                trailing={view3d.sprites ? <CheckIcon className="menu-check" /> : null}
               >
                 Terrain sprites
               </MenuItem>

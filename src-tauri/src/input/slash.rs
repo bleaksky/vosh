@@ -21,6 +21,45 @@ use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
 
+/// Every `#` command Vosh runs, so the page can color what you type
+/// without guessing. `#walk` runs before the match below, so it goes
+/// in by hand. Two tests keep this list and the match in step.
+pub(crate) const SLASH_COMMANDS: &[&str] = &[
+    "alias",
+    "unalias",
+    "aliases",
+    "var",
+    "unvar",
+    "vars",
+    "trigger",
+    "untrigger",
+    "triggers",
+    "prompt",
+    "unprompt",
+    "group",
+    "groups",
+    "tick",
+    "lag",
+    "script",
+    "scripts",
+    "lua",
+    "echo",
+    "showme",
+    "profile",
+    "import-tintin",
+    "logs",
+    "record",
+    "endrec",
+    "target",
+    "tarn",
+    "tarp",
+    "tarclear",
+    "qkey",
+    "qkeys",
+    "help",
+    "walk",
+];
+
 pub(super) fn handle_slash(
     state: &AppState,
     profile: &mut Profile,
@@ -49,6 +88,7 @@ pub(super) fn handle_slash(
         "group" => slash_group(profile, args),
         "groups" => slash_groups_list(profile),
         "tick" => slash_tick(profile, c, args),
+        "lag" => InputResult::echo_lines(c.round_trip.report(tokio::time::Instant::now())),
         "script" => slash_script(state, profile, c, args, lua),
         "scripts" => slash_scripts_list(c),
         "lua" => slash_lua(profile, c, args, lua),
@@ -114,6 +154,9 @@ slash commands:
   #tick warn message <text>            customize the warning text
   #tick warn color <name>              color the warning (red, bright-red, ...)
   #tick warn off                       disable the warning
+  #lag                                 show the round trip to the game now,
+                                       as usual, and each stall since you
+                                       connected
   #script load <name>                  load <name>.lua from the scripts dir
   #script reload                       read every loaded script again and run it
   #scripts                             list loaded scripts and Lua triggers

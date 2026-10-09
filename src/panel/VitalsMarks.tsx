@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { VitalsOpponent } from '../ipc/uiConfig';
+import type { VitalsOpponent } from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import {
   opponentHealth,
@@ -48,19 +48,37 @@ export function VitalsMarks({
       {place === 'top' && foe}
       {waiting && <p className="panel-vitals-empty">Vitals appear when you log in.</p>}
       {rows.map((row) => (
-        <div key={row.key} {...toneProps(row.tone, inks[row.key], 'vitals-mark-row')}>
-          <span className="vitals-mark-label">{VITAL_LABELS[row.key]}</span>
+        <MarkRow key={row.key} row={row} ink={inks[row.key]}>
           {mark(row)}
-          <MarkValue value={row.value} widest={row.widest} />
-        </div>
+        </MarkRow>
       ))}
       {place === 'bottom' && foe}
     </div>
   );
 }
 
+/** One vital's row: its label, `children` for its mark, and its value.
+ *  Every row style draws its vitals with it. */
+export function MarkRow({
+  row,
+  ink,
+  children,
+}: {
+  row: ShownVital;
+  ink: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div {...toneProps(row.tone, ink, 'vitals-mark-row')}>
+      <span className="vitals-mark-label">{VITAL_LABELS[row.key]}</span>
+      {children}
+      <MarkValue value={row.value} widest={row.widest} />
+    </div>
+  );
+}
+
 /** A value over its widest form, which holds the column. */
-function MarkValue({ value, widest }: { value: string; widest: string }) {
+export function MarkValue({ value, widest }: { value: string; widest: string }) {
   return (
     <span className="vitals-mark-value">
       <span className="vitals-mark-widest" aria-hidden="true">

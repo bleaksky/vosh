@@ -1,12 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../terminal/bandCells';
 import { parseSgrCells } from '../terminal/sgrCells';
 import frameCss from '../styles/frame.css?raw';
-import { StatusVitals, type LineText, type StatusVitalsProps } from './StatusLine';
+import { RoundTripItem, StatusVitals, type LineText, type StatusVitalsProps } from './StatusLine';
 import { FIT_ALL, type StatusLineFit } from './statusLineFit';
 
 // The stores behind StatusLine reach the Tauri bridge. StatusVitals,
@@ -17,8 +17,8 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// Board 4 of the Vitals Styles review: Tolliver at 765 of 1020 with a
-// Blackwatch guard at 54, and low at 159 on a walk.
+// Tolliver at 765 of 1020 with a Blackwatch guard at 54, and low at 159
+// on a walk.
 const FULL: Vitals = {
   hp: 765,
   maxhp: 1020,
@@ -216,14 +216,14 @@ describe('StatusVitals', () => {
     it('hides the name and drops a Target item on another mob', () => {
       const html = at({ names: false });
       expect(html).toContain(
-        '<span class="shell-status-foe"><span class="shell-sr">a Blackwatch guard</span><span class="shell-status-value is-warn is-bare">54%</span>',
+        '<span class="shell-status-foe"><span class="visually-hidden">a Blackwatch guard</span><span class="shell-status-value is-warn is-bare">54%</span>',
       );
       expect(html).not.toContain('Target');
     });
 
     it('keeps each label for a screen reader once it goes', () => {
       expect(at({ labels: false })).toContain(
-        '<span class="shell-status-vital"><span class="shell-sr">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
+        '<span class="shell-status-vital"><span class="visually-hidden">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
       );
     });
 
@@ -317,5 +317,29 @@ describe('the status line in frame.css', () => {
   it('sets the warn and hidden tones', () => {
     expect(rule('.shell-statusline .is-warn')).toContain('color: var(--warn)');
     expect(rule('.shell-status-value.is-hidden')).toContain('color: var(--tertiary)');
+  });
+});
+
+describe('the round trip on the status line', () => {
+  const html = (ms: number) => renderToStaticMarkup(<RoundTripItem ms={ms} />);
+  const rule = (selector: string) => {
+    const at = frameCss.indexOf(`${selector} {`);
+    return at < 0 ? '' : frameCss.slice(at, frameCss.indexOf('}', at));
+  };
+
+  it('reads fine in tertiary, slow in warn and a stall in danger, titled', () => {
+    expect(html(38)).toBe(
+      '<span class="shell-status-rtt" title="Round trip to the game">38ms</span>',
+    );
+    expect(html(412)).toContain('class="shell-status-rtt is-warn"');
+    expect(html(412)).toContain('>412ms<');
+    expect(html(1400)).toContain('class="shell-status-rtt is-danger"');
+    expect(html(1400)).toContain('>1.4s<');
+  });
+
+  it('changes the text color alone', () => {
+    expect(rule('.shell-status-rtt.is-danger')).toContain('color: var(--danger-text)');
+    expect(rule('.shell-status-rtt.is-danger')).not.toContain('background');
+    expect(rule('.shell-statusline .is-warn')).not.toContain('background');
   });
 });

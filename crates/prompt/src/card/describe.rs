@@ -1,7 +1,7 @@
-//! What the prompt card shows about a design (section 7, steps 6, 7, 9 and
-//! 10 of the build spec).
+//! What the prompt card shows about a design.
 //!
-//! The card never parses a template itself (D2). For each piece of the
+//! The card never parses a template itself, so a design never reads
+//! two ways. For each piece of the
 //! design it reads here what the piece is, the field it shows and how,
 //! when it shows, the color and style its rows check, and what it reads
 //! now. For Edit as text it reads each token with the piece it belongs
@@ -267,9 +267,8 @@ fn form(
 
 /// Each form a kind of field takes, its name, and whether Show as offers
 /// it. A gauge's max changes what the piece reads, so only the picker
-/// offers it. A gauge takes the five forms of P6 and flow 6a, and the
-/// percent the game works out. Grouped, short and thousands are a
-/// number's forms (section 1.4).
+/// offers it. A gauge takes five forms and the percent the game works
+/// out. Grouped, short and thousands are a number's forms.
 fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] {
     use FormatName as F;
     let Some(kind) = kind else {

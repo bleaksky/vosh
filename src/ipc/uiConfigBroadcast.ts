@@ -3,13 +3,15 @@
 // replaced.
 
 import { emit, type UnlistenFn } from '@tauri-apps/api/event';
-import { resolveActiveTheme, systemPrefersDark, themePrefsOf } from '../theme/theme';
+import { activeThemeFor, themePrefsOf } from '../theme/theme';
 import { resolveThemeTerminalColors } from '../theme/themes';
 import { affectsDisplayOf } from './affects';
 import {
   AFFECTS_DISPLAY_CHANGED,
   BASE_ANSI_CHANGED,
   BLINK_TEXT_CHANGED,
+  SCROLLBACK_LINES_CHANGED,
+  SCREEN_READER_CHANGED,
   BRIGHT_BOLD_CHANGED,
   CHIP_STYLE_CHANGED,
   COLOR_VISION_CHANGED,
@@ -19,12 +21,17 @@ import {
   FONT_CHANGED,
   GAME_TIME_CHANGED,
   INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
+  INPUT_ECHO_MARK_CHANGED,
+  INPUT_LINE_LOOK_CHANGED,
+  INPUT_LINE_MARK_CHANGED,
+  INPUT_TYPE_COLORS_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
   SPELLCHECK_PROMPT_CHANGED,
+  WRITING_OFFER_CHANGED,
+  WRITING_ASK_POST_CHANGED,
   SPLIT_DIVIDER_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
   THEME_CHANGED,
@@ -35,16 +42,16 @@ import {
   VITALS_OPTIONS_CHANGED,
   VITALS_TEXT_CHANGED,
 } from './events';
+import { screenReaderOf } from './screenReader';
+import { fetchUiConfig, subscribeUiConfigReplaced, type UiConfig } from './uiConfig';
+import { type FontChange } from './uiConfigEvents';
+import { echoMarkOptionsOf, lineLookOf, typeColorsOf } from './uiConfigInput';
 import {
-  fetchUiConfig,
-  subscribeUiConfigReplaced,
   vitalsOptionsOf,
   vitalsTextOf,
-  type FontChange,
-  type UiConfig,
   type VitalsOptions,
   type VitalsTextChange,
-} from './uiConfig';
+} from './uiConfigVitals';
 
 function fontChangeOf(config: UiConfig): FontChange {
   return {
@@ -87,15 +94,14 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   // Custom themes go out first so any other window's theme registry is
   // current by the time `theme-changed` points at a custom theme id.
   await emitChanged(CUSTOM_THEMES_CHANGED, config.custom_themes, before?.custom_themes, deepEqual);
-  // The four theme fields go out whole so Settings and the palette keep
+  // The seven theme fields go out whole so Settings and the palette keep
   // current copies. theme-changed carries the id they resolve to, which
   // is `theme` unless follow is on.
   const prefs = themePrefsOf(config);
   const prevPrefs = before ? themePrefsOf(before) : undefined;
   await emitChanged(THEME_PREFS_CHANGED, prefs, prevPrefs, deepEqual);
-  const systemDark = systemPrefersDark();
-  const shown = resolveActiveTheme(config, systemDark);
-  const prevShown = before ? resolveActiveTheme(before, systemDark) : undefined;
+  const shown = activeThemeFor(config);
+  const prevShown = before ? activeThemeFor(before) : undefined;
   await emitChanged(THEME_CHANGED, shown, prevShown);
   await emitChanged<FontChange>(
     FONT_CHANGED,
@@ -126,12 +132,21 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   // Your choice as you made it. Each window reads its own system's
   // reduce motion setting to resolve none.
   await emitChanged(BLINK_TEXT_CHANGED, config.blink_text, before?.blink_text);
+  await emitChanged(SCROLLBACK_LINES_CHANGED, config.scrollback_lines, before?.scrollback_lines);
   await emitChanged(FIT_GAME_COLORS_CHANGED, config.fit_game_colors, before?.fit_game_colors);
   await emitChanged(COLOR_VISION_CHANGED, config.color_vision, before?.color_vision);
   await emitChanged(
     READABLE_HIGHLIGHTS_CHANGED,
     config.readable_highlights,
     before?.readable_highlights,
+  );
+  // The four reader choices go out as one, so the page reads lines,
+  // the prompt and the burst by the same choices.
+  await emitChanged(
+    SCREEN_READER_CHANGED,
+    screenReaderOf(config),
+    before ? screenReaderOf(before) : undefined,
+    deepEqual,
   );
   await emitChanged(
     BASE_ANSI_CHANGED,
@@ -142,13 +157,37 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   await emitChanged(SPLIT_DIVIDER_CHANGED, config.split_divider_color, before?.split_divider_color);
   await emitChanged(INPUT_ECHO_COLOR_CHANGED, config.input_echo_color, before?.input_echo_color);
   await emitChanged(ECHO_MACROS_CHANGED, config.echo_macros, before?.echo_macros);
-  await emitChanged(INPUT_ECHO_CARET_CHANGED, config.input_echo_caret, before?.input_echo_caret);
+  // The mark, its text, its color and Dim go out as one, so an echo
+  // never mixes an old mark with a new color.
+  await emitChanged(
+    INPUT_ECHO_MARK_CHANGED,
+    echoMarkOptionsOf(config),
+    before ? echoMarkOptionsOf(before) : undefined,
+    deepEqual,
+  );
+  await emitChanged(INPUT_LINE_MARK_CHANGED, config.input_line_mark, before?.input_line_mark);
+  // The look and the coloring each go out as one, so the command line
+  // never draws an old caret color over a new background.
+  await emitChanged(
+    INPUT_LINE_LOOK_CHANGED,
+    lineLookOf(config),
+    before ? lineLookOf(before) : undefined,
+    deepEqual,
+  );
+  await emitChanged(
+    INPUT_TYPE_COLORS_CHANGED,
+    typeColorsOf(config),
+    before ? typeColorsOf(before) : undefined,
+    deepEqual,
+  );
   await emitChanged(
     PASTE_LINE_DELAY_CHANGED,
     config.paste_line_delay_ms,
     before?.paste_line_delay_ms,
   );
   await emitChanged(SPELLCHECK_PROMPT_CHANGED, config.spellcheck_prompt, before?.spellcheck_prompt);
+  await emitChanged(WRITING_OFFER_CHANGED, config.writing_offer, before?.writing_offer);
+  await emitChanged(WRITING_ASK_POST_CHANGED, config.writing_ask_post, before?.writing_ask_post);
   await emitChanged(
     INPUT_CURSOR_STYLE_CHANGED,
     config.input_cursor_style,

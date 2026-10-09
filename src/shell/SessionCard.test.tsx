@@ -12,10 +12,9 @@ import { SessionCard } from './SessionCard';
 import type { SessionView } from './sessionLine';
 import { CARD_DELAY, useHoverCard } from './useHoverCard';
 
-// The card beside a session's row, S6 of the Sessions Sidebar review,
-// boards 03 and 07. What it says comes from the session's view, with
-// the room and the fight from the game's own GMCP fixtures. When it
-// shows runs on fake timers against the fake DOM.
+// The card beside a session's row. What it says comes from the
+// session's view, with the room and the fight from the game's own GMCP
+// fixtures. When it shows runs on fake timers against the fake DOM.
 
 const PLAY = 'play.theforsakenlands.com';
 const NOW = 10_000_000;

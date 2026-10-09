@@ -1,5 +1,5 @@
 // What the prompt card edits and where it saves it: your prompt's
-// `[prompt]` table, or your vitals text (Vitals Styles Q10), which the
+// `[prompt]` table, or your vitals text, which the
 // card titled Your vitals text edits as a design of its own.
 
 import type { UnlistenFn } from '@tauri-apps/api/event';
@@ -11,13 +11,12 @@ import {
   subscribePromptConfigChanged,
   type PromptConfig,
 } from '../ipc/prompt';
+import { fetchUiConfig, setUiFields } from '../ipc/uiConfig';
 import {
-  fetchUiConfig,
   normalizeVitalsTextPrevious,
-  setUiFields,
   subscribeVitalsTextChanged,
   type VitalsTextChange,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigVitals';
 import { broadcastVitalsText } from '../ipc/uiConfigBroadcast';
 import { startVitalsText } from '../ipc/vitals';
 

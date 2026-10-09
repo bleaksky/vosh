@@ -113,7 +113,7 @@ describe('StatusClock', () => {
     expect(draw('caption_value', null, null, SKY)).toContain('<span>Moons</span>');
     for (const style of ['value_only', 'icon_value'] as const) {
       const html = draw(style, null, null, SKY);
-      expect(html).toContain('<span class="shell-sr">Moons</span>');
+      expect(html).toContain('<span class="visually-hidden">Moons</span>');
       expect(moonLabels(html)).toHaveLength(3);
     }
   });
@@ -149,9 +149,9 @@ describe('StatusClock Value and Caption styles', () => {
   it('shows each value alone in the Value style, with no icon', () => {
     expect(draw('value_only', tick, time)).toBe(
       '<span class="shell-status-clock">' +
-        '<span class="shell-status-part"><span class="shell-sr">Tick</span>' +
+        '<span class="shell-status-part"><span class="visually-hidden">Tick</span>' +
         '<span class="shell-status-value">14s</span></span>' +
-        '<span class="shell-status-part"><span class="shell-sr">Time</span>' +
+        '<span class="shell-status-part"><span class="visually-hidden">Time</span>' +
         '<span class="shell-status-value" style="color:#ebcb8b">8:42</span></span>' +
         '</span>',
     );
@@ -204,8 +204,12 @@ describe('StatusClock tick ring', () => {
     expect(glyph(html, 0)).toBe(
       `${GLYPH_OPEN}${TICK_TRACK}<path d="M8 2.25A5.75 5.75 0 0 1 13.75 8"></path></svg>`,
     );
-    expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('<span class="shell-sr">Tick</span>'));
-    expect(html.indexOf('<span class="shell-sr">Tick</span>')).toBeLessThan(html.indexOf('15s'));
+    expect(html.indexOf('<svg')).toBeLessThan(
+      html.indexOf('<span class="visually-hidden">Tick</span>'),
+    );
+    expect(html.indexOf('<span class="visually-hidden">Tick</span>')).toBeLessThan(
+      html.indexOf('15s'),
+    );
   });
 
   it('fills the ring against the interval you set', () => {
@@ -259,7 +263,7 @@ describe('StatusClock tick ring', () => {
 
   it('keeps the caption for a screen reader', () => {
     const html = draw('icon_value', { secs: 3, warn: false, interval: 30 }, null);
-    expect(html).toContain('<span class="shell-sr">Tick</span>');
+    expect(html).toContain('<span class="visually-hidden">Tick</span>');
     expect(html).toContain('aria-hidden="true"');
   });
 });
@@ -283,11 +287,11 @@ describe('StatusClock sun path', () => {
   });
 
   it('sets the sun on the arc for the game hour', () => {
-    expect(sun({ text: '5:00', tint: null, daytime: true, hour: 5 })).toContain(
-      '<circle cx="2.53" cy="9.93" r="1.75" fill="currentColor" stroke="none"></circle>',
+    expect(sun({ text: '6:00', tint: null, daytime: true, hour: 6 })).toContain(
+      '<circle cx="2.54" cy="9.84" r="1.75" fill="currentColor" stroke="none"></circle>',
     );
-    expect(sun({ text: '19:00', tint: null, daytime: true, hour: 19 })).toContain(
-      '<circle cx="13.47" cy="9.93" r="1.75" fill="currentColor" stroke="none"></circle>',
+    expect(sun({ text: '18:00', tint: null, daytime: true, hour: 18 })).toContain(
+      '<circle cx="13.46" cy="9.84" r="1.75" fill="currentColor" stroke="none"></circle>',
     );
   });
 
@@ -329,7 +333,7 @@ describe('StatusClock sun path', () => {
     });
     expect(html).toMatch(/^<span class="shell-status-clock"><span class="shell-status-part"><svg /);
     expect(html).toContain('<span class="shell-status-value" style="color:#ebcb8b">12:00</span>');
-    expect(html).toContain('<span class="shell-sr">Time</span>');
+    expect(html).toContain('<span class="visually-hidden">Time</span>');
   });
 
   it('draws the tick ring, then the sun path, each before its value', () => {
@@ -391,7 +395,7 @@ describe('StatusClock tick counts', () => {
     const html = tickAt('down_past_zero', -5, { warn: true, overdue: true });
     expect(html).toContain(
       '<span class="shell-status-value"><span aria-hidden="true">−5s</span>' +
-        '<span class="shell-sr">minus 5s</span></span>',
+        '<span class="visually-hidden">minus 5s</span></span>',
     );
     expect(tickAt('down_past_zero', 12)).toContain('<span class="shell-status-value">12s</span>');
   });

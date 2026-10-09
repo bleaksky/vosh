@@ -1,0 +1,766 @@
+/* The writing card. It is the prompt card's recipe in prompt.css,
+   pc-card, its header 46, a hairline, the body, a hairline, the footer
+   52, with the text box on the terminal ground. The box is 80 columns
+   of your terminal face wide beside a two digit gutter, with the guide
+   a hairline at the right edge of the width the card keeps. WritingCard
+   writes --wr-px and --wr-lh, the face's size and row, --wr-family, and
+   --wr-fg and --wr-ground, the terminal's text and ground. */
+
+.pc-card.wr-card {
+  width: auto;
+}
+
+.wr-card.is-folded .pc-head {
+  cursor: default;
+}
+
+/* The card draws into a box of its own, which moves between the window
+   and the Writing pane's slot, and adds nothing to the layout. */
+.wr-host {
+  display: contents;
+}
+
+/* You drag the card by its header. Its words never select, and while it
+   moves the pointer grabs. */
+.wr-head.is-movable {
+  user-select: none;
+}
+
+.wr-card.is-moving,
+.wr-card.is-moving .pc-head {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* The grip on the edge that moves: a 6 px strip with the resize cursor,
+   and a short bar that shows on hover and while you drag. */
+.wr-grip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  height: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.wr-grip.is-foot {
+  bottom: 0;
+}
+
+.wr-grip.is-top {
+  top: 0;
+}
+
+.wr-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 36px;
+  height: 3px;
+  margin-left: -18px;
+  border-radius: 2px;
+  background: var(--tertiary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.wr-grip.is-foot::after {
+  bottom: 2px;
+}
+
+.wr-grip.is-top::after {
+  top: 2px;
+}
+
+.wr-grip:hover::after,
+.wr-grip:active::after {
+  opacity: 0.6;
+}
+
+/* Pinned to the panel, the card fills the Writing pane edge to edge on
+   the panel's own ground. The line about the draft moves under the
+   title, the header wraps in a narrow panel, and the text and guide
+   scroll inside the pane both ways. */
+.wr-pane-slot {
+  position: absolute;
+  inset: 0;
+}
+
+.pc-card.wr-card.is-pinned {
+  position: absolute;
+  inset: 0;
+  z-index: auto;
+  max-height: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.wr-card.is-pinned .pc-head {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  height: auto;
+  min-height: 46px;
+  padding: 7px 8px 7px 12px;
+}
+
+.wr-card.is-pinned .wr-kind {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.wr-card.is-pinned .wr-kind .pc-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wr-card.is-pinned .pc-spacer {
+  display: none;
+}
+
+.wr-card.is-pinned .wr-switch,
+.wr-card.is-pinned .pc-saved {
+  order: 1;
+}
+
+.wr-card.is-pinned .pc-saved {
+  flex: 1 0 100%;
+  margin-left: 0;
+}
+
+.wr-card.is-pinned .wr-main {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.wr-card.is-pinned .pc-body.wr-body {
+  padding: 12px;
+}
+
+/* The kind in the title, a button that opens what you can write. The
+   title keeps the prompt card's 15 px, and the chevron the title band's
+   12 px in the tertiary tone. */
+.wr-kind {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin: 0 0 0 -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.wr-kind > svg {
+  flex: none;
+  color: var(--tertiary);
+}
+
+.wr-kind:hover,
+.wr-kind.is-open {
+  background: var(--hover);
+}
+
+.wr-kind:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.wr-kind + .pc-saved {
+  margin-left: 4px;
+}
+
+.pc-head .wr-switch {
+  margin: 0 8px 0 6px;
+}
+
+.pc-head .wr-switch + .pc-saved {
+  margin-left: 0;
+}
+
+.btn.is-pressed {
+  background: var(--hover);
+}
+
+.wr-main {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pc-body.wr-body {
+  flex: none;
+  padding: 12px 16px 16px;
+}
+
+/* To and Subject over the text, one block on the terminal ground with
+   the box's hairline ring. Each row is 28 px with a hairline between,
+   and 11 px under the block, so the fields add four rows of 17. */
+.wr-fields {
+  width: calc(32px + (var(--wr-cols, 80) + 2) * 1ch);
+  margin: 0 0 11px;
+  border-radius: var(--r-row);
+  background: var(--wr-ground, var(--bg));
+  box-shadow: inset 0 0 0 1px var(--sep);
+  font: 400 var(--wr-px, 13px) / var(--wr-lh, 17px) var(--wr-family, var(--font-mud));
+  color: var(--wr-fg, var(--text));
+  overflow: hidden;
+}
+
+.wr-fields.has-three {
+  margin-bottom: 16px;
+}
+
+.wr-f {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 28px;
+}
+
+.wr-f + .wr-f {
+  height: 29px;
+  box-shadow: inset 0 1px 0 var(--sep);
+}
+
+.wr-f-l {
+  flex: none;
+  width: 84px;
+  padding-left: 12px;
+  box-sizing: border-box;
+  font: 400 12px/16px var(--font-ui);
+  color: var(--tertiary);
+}
+
+.wr-f.is-bad .wr-f-l {
+  color: var(--danger-text);
+}
+
+.wr-f-v {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--wr-lh, 17px);
+  margin: 0 12px 0 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.wr-f-v.is-fixed {
+  color: var(--secondary);
+}
+
+.wr-f-v::placeholder {
+  font: 400 12px/17px var(--font-ui);
+  color: var(--tertiary);
+}
+
+.wr-f-end {
+  flex: none;
+  padding: 0 12px 0 8px;
+  font: 400 11px/16px var(--font-ui);
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+/* The text box, 80 columns until you size it by its corner. The gutter
+   is two columns of numbers and 12 px, and the guide a 1 px hairline at
+   the right edge of the width the card keeps, drawn on the box's ground
+   under the text. A line longer than the box scrolls the text sideways
+   and the gutter stays put on the box's ground over it, so no text ever
+   shows under a number. The ring draws over both. */
+.wr-box {
+  --wr-guide-at: calc(22px + 2ch + var(--wr-width, 75) * 1ch);
+  position: relative;
+  width: calc(32px + (var(--wr-cols, 80) + 2) * 1ch);
+  border-radius: var(--r-row);
+  background: var(--wr-ground, var(--bg));
+  font: 400 var(--wr-px, 13px) / var(--wr-lh, 17px) var(--wr-family, var(--font-mud));
+  color: var(--wr-fg, var(--text));
+  overflow: hidden;
+}
+
+.wr-box::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 201;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--sep);
+  pointer-events: none;
+}
+
+/* The grip in the box's corner: two short diagonals, as a text area
+   draws them, in a 14 px square with the resize cursor. */
+.wr-box-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 202;
+  display: flex;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+  color: var(--tertiary);
+}
+
+.wr-box-grip:hover,
+.wr-box-grip:active {
+  color: var(--secondary);
+}
+
+.wr-box[data-width='70'] {
+  --wr-width: 70;
+}
+
+.wr-box .cm-editor {
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.wr-box .cm-editor.cm-focused {
+  outline: none;
+}
+
+.wr-box .cm-scroller {
+  min-height: calc(var(--wr-min-rows) * var(--wr-lh, 17px) + 10px);
+  max-height: calc(var(--wr-rows) * var(--wr-lh, 17px) + 10px);
+  padding: 6px 0 4px;
+  box-sizing: border-box;
+  font: inherit;
+  line-height: var(--wr-lh, 17px);
+  overflow: auto;
+  background-image: linear-gradient(var(--sep), var(--sep));
+  background-size: 1px 100%;
+  background-position: var(--wr-guide-at) 0;
+  background-repeat: no-repeat;
+  background-attachment: local;
+}
+
+.wr-box .cm-gutters {
+  border: 0;
+  background: var(--wr-ground, var(--bg));
+  color: var(--tertiary);
+}
+
+.wr-box .cm-gutter.wr-gutter {
+  width: calc(10px + 2ch + 12px);
+}
+
+.wr-box .cm-gutterElement {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: var(--wr-lh, 17px);
+  padding: 0 12px 0 10px;
+  box-sizing: border-box;
+}
+
+.wr-num {
+  font-variant-numeric: tabular-nums;
+  color: var(--tertiary);
+  user-select: none;
+}
+
+.wr-num.is-over,
+.wr-num.is-cut {
+  color: var(--danger-text);
+}
+
+.wr-num.is-soft {
+  color: var(--warn-text);
+}
+
+.wr-num.is-current {
+  color: var(--accent);
+}
+
+/* The line on its way: a 2 px bar at the gutter's left. */
+.wr-num.is-current::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.wr-num.is-sent {
+  display: flex;
+  color: var(--success);
+}
+
+.wr-box .cm-content {
+  padding: 0 10px 0 0;
+  caret-color: var(--cursor, var(--accent));
+  white-space: pre;
+}
+
+.wr-box .cm-line {
+  position: relative;
+  padding: 0;
+}
+
+.wr-box .cm-line.is-waiting {
+  color: var(--secondary);
+}
+
+.wr-box .cm-line.is-cut {
+  color: var(--danger-text);
+}
+
+.wr-box .cm-cursor {
+  border-left: 2px solid var(--cursor, var(--accent));
+}
+
+/* The selection on the theme's selection fill, focused or not, and the
+   selected text in the theme's selected text color, held to 4.5:1 on
+   that fill (boxInks.ts). The selectors outrank CodeMirror's own
+   lavender for a focused editor. A code's color and a mark's wash give
+   way inside the selection. */
+.wr-box .cm-editor > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.wr-box .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.wr-box .cm-content ::selection {
+  background: var(--selection);
+}
+
+.wr-box .cm-line .wr-sel,
+.wr-box .cm-line .wr-sel * {
+  color: var(--wr-ink-selected, var(--selection-text)) !important;
+}
+
+.wr-box .cm-line .wr-sel {
+  border-radius: 0;
+  background: var(--selection);
+}
+
+.wr-box .cm-line .wr-sel .wr-over,
+.wr-box .cm-line .wr-sel .wr-soft,
+.wr-box .cm-line .wr-sel .wr-warn,
+.wr-box .cm-line .wr-sel .wr-struck {
+  background: transparent;
+}
+
+/* What runs past a width a help sets, in danger text on a danger wash,
+   and past the width only Vosh keeps, in warn. Each text color is the
+   status text held to 4.5:1 on its wash (boxInks.ts, which mirrors the
+   18 percent). */
+.wr-over {
+  color: var(--wr-ink-danger, var(--danger-text));
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  border-radius: 2px;
+}
+
+.wr-soft,
+.wr-warn {
+  color: var(--wr-ink-warn, var(--warn-text));
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  border-radius: 2px;
+}
+
+.wr-struck {
+  color: var(--wr-ink-warn, var(--warn-text));
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  border-radius: 2px;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* A code at a line's start: an 8 px dot in its color at the gutter's
+   left, so the text keeps its columns, drawn by the gutter so it stays
+   put while the text scrolls. A code inside a line an immortal keeps: a
+   dot of no width under the gap where it sits. */
+.wr-code {
+  display: inline-block;
+  width: 0;
+}
+
+.wr-code-dot {
+  --dot: var(--wr-code);
+  position: absolute;
+  left: 2px;
+  top: calc(var(--wr-lh, 17px) / 2 - 4px);
+}
+
+.wr-code-inner {
+  position: relative;
+  display: inline-block;
+  width: 0;
+}
+
+.wr-code-inner::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  bottom: -1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--wr-code);
+}
+
+/* An empty beast description: what lookers see in the text's place. */
+.wr-empty {
+  position: absolute;
+  z-index: 1;
+  left: calc(22px + 2ch);
+  top: 6px;
+  right: 12px;
+  margin: 0;
+  font: 400 12px / var(--wr-lh, 17px) var(--font-ui);
+  color: var(--tertiary);
+  pointer-events: none;
+}
+
+.wr-empty code {
+  display: block;
+  font: 400 var(--wr-px, 13px) / var(--wr-lh, 17px) var(--wr-family, var(--font-mud));
+  color: var(--secondary);
+}
+
+/* The text as readers get it: no gutter and no guide. */
+.wr-preview {
+  box-sizing: border-box;
+  padding: 6px 14px 4px;
+  border-radius: var(--r-row);
+  background: var(--wr-ground, var(--bg));
+  box-shadow: inset 0 0 0 1px var(--sep);
+  font: 400 var(--wr-px, 13px) / var(--wr-lh, 17px) var(--wr-family, var(--font-mud));
+  color: var(--wr-fg, var(--text));
+  white-space: pre;
+  overflow: hidden;
+}
+
+/* The guide beside the text. 248 wide, a hairline at its left, the pane
+   label caps over its rows, 12 px rows. */
+.wr-guide {
+  flex: none;
+  width: 248px;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  box-sizing: border-box;
+  box-shadow: inset 1px 0 0 var(--divider);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.wr-guide-h {
+  margin: 0;
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+}
+
+.wr-guide-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wr-guide-row {
+  padding: 4px 0;
+  color: var(--text);
+  text-wrap: pretty;
+}
+
+.wr-guide-head {
+  display: block;
+  color: var(--text);
+}
+
+.wr-guide-sub {
+  display: block;
+  margin-top: 1px;
+  color: var(--secondary);
+}
+
+.wr-guide-words {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  box-shadow: inset 0 1px 0 var(--divider);
+  color: var(--secondary);
+  text-wrap: pretty;
+}
+
+.wr-guide .wr-guide-help {
+  margin-top: 14px;
+}
+
+/* The footer: the count, or what is wrong with the caret's line, or
+   what a send left, then the fix and the main button. */
+.wr-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.wr-c-n {
+  color: var(--secondary);
+}
+
+.wr-c-of {
+  color: var(--tertiary);
+}
+
+.wr-c-bad {
+  color: var(--danger-text);
+}
+
+.wr-c-warn {
+  color: var(--warn-text);
+}
+
+.wr-c-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--secondary);
+}
+
+.wr-c-ok svg {
+  color: var(--success);
+}
+
+.wr-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.wr-note-dot {
+  margin: 0 0 0 1px;
+}
+
+.wr-note-msg {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: pretty;
+}
+
+.wr-note-msg b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* The progress of a send, in place of the hairline over the footer. */
+.wr-progress {
+  position: relative;
+  flex: none;
+  height: 1px;
+  margin: 0 1px;
+  background: var(--divider);
+}
+
+.wr-progress > i {
+  position: absolute;
+  left: 0;
+  top: -0.5px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+/* The title's menu: a draft names its kind in the tertiary tone before
+   its subject, and the pane label caps head each group. */
+.menu > .wr-mhead {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+}
+
+.menu > .wr-mhead:first-child {
+  padding-top: 6px;
+}
+
+.menu.wr-menu-wide {
+  width: 344px;
+  max-width: 344px;
+}
+
+.wr-mkind {
+  margin-right: 8px;
+  color: var(--tertiary);
+}
+
+.wr-mend {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.wr-mmeta {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tertiary);
+}
+
+.wr-mcheck {
+  color: var(--accent);
+}
+
+/* The command line while the game's own editor holds a text Vosh names:
+   a tick at the right edge of the width. */
+.input-row .wr-tick {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: var(--sep);
+  pointer-events: none;
+}
+
+/* The sends that wait while the card drives the game's editor, a chip at
+   the command line's right. */
+.input-row .wr-held {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-row);
+  box-shadow: inset 0 0 0 1px var(--sep);
+  font: 400 12px/16px var(--font-ui);
+  color: var(--secondary);
+  pointer-events: none;
+}
+
+/* The 8 px dot takes 6 px of the row, so the words sit where they did. */
+.wr-held-dot {
+  margin: 0 -1px;
+}

@@ -26,6 +26,10 @@ pub(crate) struct UiConfigPayload {
     pub follow_system_appearance: bool,
     pub light_theme: String,
     pub dark_theme: String,
+    /// `off`, `system` or `game`.
+    pub theme_follow: String,
+    pub day_theme: String,
+    pub night_theme: String,
     pub auto_update: bool,
     pub font_family: String,
     pub font_size: u32,
@@ -45,6 +49,11 @@ pub(crate) struct UiConfigPayload {
     /// `typical`, `deuteranopia`, `protanopia` or `tritanopia`.
     pub color_vision: String,
     pub readable_highlights: bool,
+    pub screen_reader: bool,
+    pub screen_reader_background: bool,
+    pub screen_reader_prompt: bool,
+    /// 4, 8, 16 or 32.
+    pub screen_reader_burst: u32,
     pub collapse_repeats: bool,
     pub collapse_fight_lines: bool,
     pub collapse_attack_lines: bool,
@@ -53,17 +62,37 @@ pub(crate) struct UiConfigPayload {
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
     pub echo_macros: bool,
-    pub input_echo_caret: bool,
+    /// `off`, `chevron`, `gt` or `own`.
+    pub input_echo_mark: String,
+    pub input_echo_mark_text: String,
+    pub input_echo_mark_color: Option<String>,
+    pub input_echo_dim: bool,
+    pub input_line_mark: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
+    pub writing_offer: bool,
+    pub writing_ask_post: bool,
     pub input_cursor_style: String,
+    pub input_caret_blink: bool,
+    pub input_caret_color: Option<String>,
+    pub input_line_color: Option<String>,
+    /// `theme`, `tint` or `own`.
+    pub input_line_background: String,
+    pub input_line_background_color: Option<String>,
+    /// 0 follows the terminal size.
+    pub input_line_size: u32,
+    pub input_type_colors: bool,
+    pub input_type_alias_color: Option<String>,
+    pub input_type_hash_color: Option<String>,
+    pub input_type_chat_color: Option<String>,
+    pub input_type_unknown_color: Option<String>,
     pub vitals_density: String,
     pub vitals_values: String,
     pub vitals_meter: String,
     pub vitals_warn_thirds: bool,
     pub vitals_hide_when_pinned: bool,
-    /// `ledger`, `gauges`, `pips` or `text`, or None for Rows and One
-    /// line, which `vitals_density` holds.
+    /// One of the twelve styles in `VITALS_STYLES`, or None for Rows and
+    /// One line, which `vitals_density` holds.
     pub vitals_style: Option<String>,
     /// `panel` or `status`.
     pub vitals_place: String,
@@ -78,6 +107,8 @@ pub(crate) struct UiConfigPayload {
     pub vitals_text: String,
     /// At most two earlier texts, newest first.
     pub vitals_text_previous: Vec<String>,
+    /// Show each hit.
+    pub vitals_hit: bool,
     /// The style your 0.7 vitals grew into, `text`, `gauges`, `pips`,
     /// `line` or `rows`, which the gallery marks Yours in 0.7. Left out
     /// when they give no clue. Read only, nothing saves it.
@@ -94,6 +125,16 @@ pub(crate) struct UiConfigPayload {
     pub affects_tint: bool,
     pub affects_running_out_hours: u32,
     pub affects_almost_gone_hours: u32,
+    /// The share of the terminal column the snoop split takes.
+    pub snoop_share: f64,
+    pub snoop_folded: bool,
+    pub log_sessions: Option<bool>,
+    pub scrollback_lines: u32,
+    pub writing_card_left: Option<f64>,
+    pub writing_card_top: Option<f64>,
+    pub writing_card_rows: Option<u32>,
+    pub writing_card_cols: Option<u32>,
+    pub writing_card_pinned: bool,
 }
 
 impl UiConfigPayload {
@@ -104,6 +145,9 @@ impl UiConfigPayload {
             follow_system_appearance: ui.follow_system_appearance,
             light_theme: ui.light_theme.clone(),
             dark_theme: ui.dark_theme.clone(),
+            theme_follow: ui.theme_follow.clone(),
+            day_theme: ui.day_theme.clone(),
+            night_theme: ui.night_theme.clone(),
             auto_update: ui.auto_update,
             font_family: ui.font_family.clone(),
             font_size: ui.font_size,
@@ -119,6 +163,10 @@ impl UiConfigPayload {
             fit_game_colors: ui.fit_game_colors,
             color_vision: ui.color_vision.clone(),
             readable_highlights: ui.readable_highlights,
+            screen_reader: ui.screen_reader,
+            screen_reader_background: ui.screen_reader_background,
+            screen_reader_prompt: ui.screen_reader_prompt,
+            screen_reader_burst: ui.screen_reader_burst,
             collapse_repeats: ui.collapse_repeats,
             collapse_fight_lines: ui.collapse_fight_lines,
             collapse_attack_lines: ui.collapse_attack_lines,
@@ -127,10 +175,27 @@ impl UiConfigPayload {
             split_divider_color: ui.split_divider_color.clone(),
             input_echo_color: ui.input_echo_color.clone(),
             echo_macros: ui.echo_macros,
-            input_echo_caret: ui.input_echo_caret,
+            input_echo_mark: ui.input_echo_mark.clone(),
+            input_echo_mark_text: ui.input_echo_mark_text.clone(),
+            input_echo_mark_color: ui.input_echo_mark_color.clone(),
+            input_echo_dim: ui.input_echo_dim,
+            input_line_mark: ui.input_line_mark,
             paste_line_delay_ms: ui.paste_line_delay_ms,
             spellcheck_prompt: ui.spellcheck_prompt,
+            writing_offer: ui.writing_offer,
+            writing_ask_post: ui.writing_ask_post,
             input_cursor_style: ui.input_cursor_style.clone(),
+            input_caret_blink: ui.input_caret_blink,
+            input_caret_color: ui.input_caret_color.clone(),
+            input_line_color: ui.input_line_color.clone(),
+            input_line_background: ui.input_line_background.clone(),
+            input_line_background_color: ui.input_line_background_color.clone(),
+            input_line_size: ui.input_line_size,
+            input_type_colors: ui.input_type_colors,
+            input_type_alias_color: ui.input_type_alias_color.clone(),
+            input_type_hash_color: ui.input_type_hash_color.clone(),
+            input_type_chat_color: ui.input_type_chat_color.clone(),
+            input_type_unknown_color: ui.input_type_unknown_color.clone(),
             vitals_density: ui.vitals_density.clone(),
             vitals_values: ui.vitals_values.clone(),
             vitals_meter: ui.vitals_meter.clone(),
@@ -144,6 +209,7 @@ impl UiConfigPayload {
             vitals_colors: ui.vitals_colors.clone(),
             vitals_text: ui.vitals_text.clone(),
             vitals_text_previous: ui.vitals_text_previous.clone(),
+            vitals_hit: ui.vitals_hit,
             vitals_legacy_style: ui.vitals.legacy_style(),
             vitals_legacy_text: ui.vitals.legacy_text(),
             chip_style: ui.chip_style.clone(),
@@ -154,6 +220,15 @@ impl UiConfigPayload {
             affects_tint: ui.affects_tint,
             affects_running_out_hours: ui.affects_running_out_hours,
             affects_almost_gone_hours: ui.affects_almost_gone_hours,
+            snoop_share: ui.snoop_share,
+            snoop_folded: ui.snoop_folded,
+            log_sessions: ui.log_sessions,
+            scrollback_lines: ui.scrollback_lines,
+            writing_card_left: ui.writing_card_left,
+            writing_card_top: ui.writing_card_top,
+            writing_card_rows: ui.writing_card_rows,
+            writing_card_cols: ui.writing_card_cols,
+            writing_card_pinned: ui.writing_card_pinned,
         }
     }
 }
@@ -181,6 +256,10 @@ pub(crate) enum UiField {
     FollowSystemAppearance(bool),
     LightTheme(String),
     DarkTheme(String),
+    /// Follow system appearance stays true only for `system`.
+    ThemeFollow(String),
+    DayTheme(String),
+    NightTheme(String),
     AutoUpdate(bool),
     FontFamily(String),
     FontSize(u32),
@@ -195,6 +274,10 @@ pub(crate) enum UiField {
     FitGameColors(bool),
     ColorVision(String),
     ReadableHighlights(bool),
+    ScreenReader(bool),
+    ScreenReaderBackground(bool),
+    ScreenReaderPrompt(bool),
+    ScreenReaderBurst(u32),
     CollapseRepeats(bool),
     CollapseFightLines(bool),
     CollapseAttackLines(bool),
@@ -203,10 +286,29 @@ pub(crate) enum UiField {
     SplitDividerColor(Option<String>),
     InputEchoColor(Option<String>),
     EchoMacros(bool),
-    InputEchoCaret(bool),
+    /// Mark before your commands keeps `input_echo_caret` in step for an older
+    /// build.
+    InputEchoMark(String),
+    InputEchoMarkText(String),
+    InputEchoMarkColor(Option<String>),
+    InputEchoDim(bool),
+    InputLineMark(bool),
     PasteLineDelayMs(u32),
     SpellcheckPrompt(bool),
+    WritingOffer(bool),
+    WritingAskPost(bool),
     InputCursorStyle(String),
+    InputCaretBlink(bool),
+    InputCaretColor(Option<String>),
+    InputLineColor(Option<String>),
+    InputLineBackground(String),
+    InputLineBackgroundColor(Option<String>),
+    InputLineSize(u32),
+    InputTypeColors(bool),
+    InputTypeAliasColor(Option<String>),
+    InputTypeHashColor(Option<String>),
+    InputTypeChatColor(Option<String>),
+    InputTypeUnknownColor(Option<String>),
     VitalsDensity(String),
     VitalsValues(String),
     VitalsMeter(String),
@@ -222,6 +324,7 @@ pub(crate) enum UiField {
     /// The text it replaces goes first among the earlier texts.
     VitalsText(String),
     VitalsTextPrevious(Vec<String>),
+    VitalsHit(bool),
     ChipStyle(String),
     TickCount(String),
     GameTime(String),
@@ -232,6 +335,15 @@ pub(crate) enum UiField {
     AffectsRunningOutHours(u32),
     #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_almost_gone_hours")]
     AffectsAlmostGoneHours(u32),
+    SnoopShare(f64),
+    SnoopFolded(bool),
+    LogSessions(Option<bool>),
+    ScrollbackLines(u32),
+    WritingCardLeft(Option<f64>),
+    WritingCardTop(Option<f64>),
+    WritingCardRows(Option<u32>),
+    WritingCardCols(Option<u32>),
+    WritingCardPinned(bool),
 }
 
 /// Save the fields a page names and leave every other one as it is, so
@@ -262,10 +374,24 @@ async fn set_fields(
     profile: Option<String>,
 ) -> Result<Vec<(SessionId, VitalsText)>, String> {
     let sessions = state.all_sessions();
-    let (open, drawn) = {
+    let (open, drawn, resized, marked) = {
         let mut p = state.lock_named(profile).await?;
         let text = p.ui.vitals_text.clone();
+        let lines = p.ui.scrollback_lines;
+        let mark = crate::input::echo_mark(&p.ui);
         apply_fields(&mut p.ui, fields);
+        // A new Scrollback size reaches every session on the profile.
+        let resized: Vec<_> = if p.ui.scrollback_lines == lines {
+            Vec::new()
+        } else {
+            p.players(&sessions).cloned().collect()
+        };
+        // So does a new mark or mark color, for the native grid.
+        let mark = Some(crate::input::echo_mark(&p.ui)).filter(|now| *now != mark);
+        let marked: Vec<_> = match mark {
+            Some(mark) => p.players(&sessions).map(|s| (s.id, mark.clone())).collect(),
+            None => Vec::new(),
+        };
         let mut drawn = Vec::new();
         if p.ui.vitals_text != text {
             let now = tokio::time::Instant::now();
@@ -276,8 +402,20 @@ async fn set_fields(
                 }
             }
         }
-        (p.open().clone(), drawn)
+        (
+            p.open().clone(),
+            drawn,
+            (resized, p.ui.scrollback_lines),
+            marked,
+        )
     };
+    let (resized, lines) = resized;
+    for session in resized {
+        crate::logs::keep_scrollback_lines(&session, lines).await;
+    }
+    for (session, mark) in marked {
+        crate::input::keep_echo_mark(session, mark);
+    }
     persist_profile(state, &open).await;
     Ok(drawn)
 }
@@ -290,9 +428,12 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
     for field in fields {
         match field {
             UiField::Theme(v) => ui.theme = v,
-            UiField::FollowSystemAppearance(v) => ui.follow_system_appearance = v,
+            UiField::FollowSystemAppearance(v) => cfg::set_follow_system_appearance(ui, v),
             UiField::LightTheme(v) => ui.light_theme = cfg::coerce_light_theme(v),
             UiField::DarkTheme(v) => ui.dark_theme = cfg::normalize_dark_theme(v),
+            UiField::ThemeFollow(v) => cfg::set_theme_follow(ui, v),
+            UiField::DayTheme(v) => ui.day_theme = cfg::normalize_day_night_theme(v),
+            UiField::NightTheme(v) => ui.night_theme = cfg::normalize_day_night_theme(v),
             UiField::AutoUpdate(v) => ui.auto_update = v,
             UiField::FontFamily(v) => ui.font_family = v,
             UiField::FontSize(v) => ui.font_size = cfg::coerce_font_size(v),
@@ -309,6 +450,12 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::FitGameColors(v) => ui.fit_game_colors = v,
             UiField::ColorVision(v) => ui.color_vision = cfg::coerce_color_vision(v),
             UiField::ReadableHighlights(v) => ui.readable_highlights = v,
+            UiField::ScreenReader(v) => ui.screen_reader = v,
+            UiField::ScreenReaderBackground(v) => ui.screen_reader_background = v,
+            UiField::ScreenReaderPrompt(v) => ui.screen_reader_prompt = v,
+            UiField::ScreenReaderBurst(v) => {
+                ui.screen_reader_burst = cfg::coerce_screen_reader_burst(v);
+            }
             UiField::CollapseRepeats(v) => ui.collapse_repeats = v,
             UiField::CollapseFightLines(v) => ui.collapse_fight_lines = v,
             UiField::CollapseAttackLines(v) => ui.collapse_attack_lines = v,
@@ -319,13 +466,46 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             }
             UiField::InputEchoColor(v) => ui.input_echo_color = cfg::normalize_optional_color(v),
             UiField::EchoMacros(v) => ui.echo_macros = v,
-            UiField::InputEchoCaret(v) => ui.input_echo_caret = v,
+            UiField::InputEchoMark(v) => cfg::set_input_echo_mark(ui, v),
+            UiField::InputEchoMarkText(v) => {
+                ui.input_echo_mark_text = cfg::coerce_input_echo_mark_text(v);
+            }
+            UiField::InputEchoMarkColor(v) => {
+                ui.input_echo_mark_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputEchoDim(v) => ui.input_echo_dim = v,
+            UiField::InputLineMark(v) => ui.input_line_mark = v,
             UiField::PasteLineDelayMs(v) => {
                 ui.paste_line_delay_ms = cfg::coerce_paste_line_delay_ms(v);
             }
             UiField::SpellcheckPrompt(v) => ui.spellcheck_prompt = v,
+            UiField::WritingOffer(v) => ui.writing_offer = v,
+            UiField::WritingAskPost(v) => ui.writing_ask_post = v,
             UiField::InputCursorStyle(v) => {
                 ui.input_cursor_style = cfg::coerce_input_cursor_style(v);
+            }
+            UiField::InputCaretBlink(v) => ui.input_caret_blink = v,
+            UiField::InputCaretColor(v) => ui.input_caret_color = cfg::normalize_optional_color(v),
+            UiField::InputLineColor(v) => ui.input_line_color = cfg::normalize_optional_color(v),
+            UiField::InputLineBackground(v) => {
+                ui.input_line_background = cfg::coerce_input_line_background(v);
+            }
+            UiField::InputLineBackgroundColor(v) => {
+                ui.input_line_background_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputLineSize(v) => ui.input_line_size = cfg::coerce_input_line_size(v),
+            UiField::InputTypeColors(v) => ui.input_type_colors = v,
+            UiField::InputTypeAliasColor(v) => {
+                ui.input_type_alias_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeHashColor(v) => {
+                ui.input_type_hash_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeChatColor(v) => {
+                ui.input_type_chat_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeUnknownColor(v) => {
+                ui.input_type_unknown_color = cfg::normalize_optional_color(v);
             }
             UiField::VitalsDensity(v) => ui.vitals_density = cfg::coerce_vitals_density(v),
             UiField::VitalsValues(v) => ui.vitals_values = cfg::coerce_vitals_values(v),
@@ -342,6 +522,7 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::VitalsTextPrevious(v) => {
                 ui.vitals_text_previous = cfg::normalize_vitals_text_previous(v);
             }
+            UiField::VitalsHit(v) => ui.vitals_hit = v,
             UiField::ChipStyle(v) => ui.chip_style = cfg::coerce_chip_style(v),
             UiField::TickCount(v) => ui.tick_count = cfg::coerce_tick_count(v),
             UiField::GameTime(v) => ui.game_time = cfg::coerce_game_time(v),
@@ -350,6 +531,15 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::AffectsTint(v) => ui.affects_tint = v,
             UiField::AffectsRunningOutHours(v) => ui.affects_running_out_hours = v,
             UiField::AffectsAlmostGoneHours(v) => ui.affects_almost_gone_hours = v,
+            UiField::SnoopShare(v) => ui.snoop_share = cfg::coerce_snoop_share(v),
+            UiField::SnoopFolded(v) => ui.snoop_folded = v,
+            UiField::LogSessions(v) => ui.log_sessions = v,
+            UiField::ScrollbackLines(v) => ui.scrollback_lines = cfg::coerce_scrollback_lines(v),
+            UiField::WritingCardLeft(v) => ui.writing_card_left = cfg::coerce_writing_card_edge(v),
+            UiField::WritingCardTop(v) => ui.writing_card_top = cfg::coerce_writing_card_edge(v),
+            UiField::WritingCardRows(v) => ui.writing_card_rows = cfg::coerce_writing_card_rows(v),
+            UiField::WritingCardCols(v) => ui.writing_card_cols = cfg::coerce_writing_card_cols(v),
+            UiField::WritingCardPinned(v) => ui.writing_card_pinned = v,
         }
     }
     (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
@@ -357,21 +547,29 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
 }
 
 /// Replace a profile's theme choice without touching the rest of the UI
-/// config, for the main window's palette. The caller applies
-/// and broadcasts the theme itself. While follow system
-/// appearance is on, a pick fills the light or dark slot instead, so the
-/// caller also sends the pair.
+/// config, for the main window's palette. The caller applies and
+/// broadcasts the theme itself. While Switch themes follows the system or
+/// the game, a pick fills the slot that is showing, light or dark, day or
+/// night, so the caller also sends that slot.
 #[tauri::command]
 pub(crate) async fn ui_set_theme(
     state: State<'_, SharedState>,
     theme: String,
     light_theme: Option<String>,
     dark_theme: Option<String>,
+    day_theme: Option<String>,
+    night_theme: Option<String>,
     profile: Option<String>,
 ) -> Result<(), String> {
+    let slots = ThemeSlots {
+        light: light_theme,
+        dark: dark_theme,
+        day: day_theme,
+        night: night_theme,
+    };
     let open = {
         let mut p = state.lock_named(profile).await?;
-        if !apply_theme_pick(&mut p.ui, theme, light_theme, dark_theme) {
+        if !apply_theme_pick(&mut p.ui, theme, slots) {
             return Ok(());
         }
         p.open().clone()
@@ -381,14 +579,23 @@ pub(crate) async fn ui_set_theme(
     Ok(())
 }
 
-/// Write a theme pick onto the live UI config. A missing or blank pair
-/// entry leaves that slot alone. Returns whether anything changed, so an
+/// The slots a palette pick can fill beside the theme. None leaves a
+/// slot alone.
+#[derive(Default)]
+struct ThemeSlots {
+    light: Option<String>,
+    dark: Option<String>,
+    day: Option<String>,
+    night: Option<String>,
+}
+
+/// Write a theme pick onto the live UI config. A missing or blank slot
+/// leaves that slot alone. Returns whether anything changed, so an
 /// unchanged pick skips the save.
 fn apply_theme_pick(
     ui: &mut crate::profile::ui::UiConfig,
     theme: String,
-    light_theme: Option<String>,
-    dark_theme: Option<String>,
+    slots: ThemeSlots,
 ) -> bool {
     let mut changed = false;
     let mut set = |slot: &mut String, value: String| {
@@ -398,11 +605,15 @@ fn apply_theme_pick(
         }
     };
     set(&mut ui.theme, theme);
-    if let Some(v) = light_theme {
-        set(&mut ui.light_theme, v);
-    }
-    if let Some(v) = dark_theme {
-        set(&mut ui.dark_theme, v);
+    for (slot, pick) in [
+        (&mut ui.light_theme, slots.light),
+        (&mut ui.dark_theme, slots.dark),
+        (&mut ui.day_theme, slots.day),
+        (&mut ui.night_theme, slots.night),
+    ] {
+        if let Some(v) = pick {
+            set(slot, v);
+        }
     }
     changed
 }
@@ -594,18 +805,37 @@ mod tests {
             .collect();
         let names: Vec<&String> = values.keys().collect();
         assert_eq!(names, keys);
+        // Follow system appearance on is the system mode of Switch themes,
+        // so that setter writes the mode too.
+        let write = |want: &mut serde_json::Value, f: &str| {
+            want[f] = values[f].clone();
+            if f == "follow_system_appearance" {
+                want["theme_follow"] = "system".into();
+            }
+        };
         for (at, f) in names.iter().enumerate() {
             let mut ui = UiConfig::default();
             super::apply_fields(&mut ui, vec![setter(f, &values[*f])]);
             let mut want = defaults.clone();
-            want[*f] = values[*f].clone();
+            write(&mut want, f);
             assert_eq!(sent(&ui), want, "{f} alone");
             // Another window writes the next field onto the same profile.
             let g = names[(at + 1) % names.len()];
             super::apply_fields(&mut ui, vec![setter(g, &values[g])]);
-            want[g] = values[g].clone();
+            write(&mut want, g);
             assert_eq!(sent(&ui), want, "{f}, then {g}");
         }
+        // Game turns the switch off, so 0.8.1 reads it as off.
+        let mut ui = UiConfig::default();
+        super::apply_fields(
+            &mut ui,
+            vec![
+                setter("follow_system_appearance", &true.into()),
+                setter("theme_follow", &"game".into()),
+            ],
+        );
+        assert_eq!(sent(&ui)["follow_system_appearance"], false);
+        assert_eq!(sent(&ui)["theme_follow"], "game");
     }
 
     #[tokio::test]
@@ -647,6 +877,57 @@ mod tests {
         );
     }
 
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn a_new_mark_reaches_the_native_grid_of_each_session_on_the_profile() {
+        use std::sync::Arc;
+
+        use crate::app::state::{AppState, SharedState};
+        use crate::native::grid;
+        use crate::profile::live::Profile;
+        use crate::profile::set::ProfileSet;
+
+        // The grid map is shared with the other tests.
+        let _grid = grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("Orla").unwrap();
+        let state: SharedState = Arc::new(AppState::default());
+        state.set_profiles(set).await;
+        let orla = state.add_open_profile("Orla", Profile::default());
+        let session = state.open_session(orla);
+        let echo = |mark: &str, command: &str| {
+            grid::feed_session_output(session.id, &text(b"Your choice> "), None);
+            grid::feed_local(session.id, format!("{mark}{command}\r\n").as_bytes());
+        };
+        let gt = "\x1b[90m> \x1b[0m";
+        // The grid leaves out the chevron until the mark changes.
+        echo(gt, "1");
+        let fields = vec![setter("input_echo_mark", &"gt".into())];
+        super::set_fields(&state, fields, Some("Orla".into()))
+            .await
+            .unwrap();
+        echo(gt, "2");
+        // A new mark color changes the bytes it leaves out.
+        let fields = vec![setter("input_echo_mark_color", &"#c6a46a".into())];
+        super::set_fields(&state, fields, Some("Orla".into()))
+            .await
+            .unwrap();
+        echo("\x1b[38;2;198;164;106m> \x1b[0m", "3");
+        let rows = grid::screen_rows(session.id).unwrap().rows;
+        assert_eq!(
+            rows[..3],
+            ["Your choice> > 1", "Your choice> 2", "Your choice> 3"]
+        );
+    }
+
+    /// Game output of `bytes`, as the session hands it to the grid.
+    fn text(bytes: &[u8]) -> vosh_prompt::stage::Output {
+        let mut out = vosh_prompt::stage::Output::new(false);
+        out.text(bytes);
+        out
+    }
+
     #[test]
     fn a_theme_pick_that_names_a_profile_writes_that_profile() {
         use std::sync::Arc;
@@ -679,9 +960,17 @@ mod tests {
             state.open_session(orla.clone());
             let shown = state.selected_profile().await.ui.theme.clone();
 
-            super::ui_set_theme(app.state(), "nord".into(), None, None, Some("Orla".into()))
-                .await
-                .unwrap();
+            super::ui_set_theme(
+                app.state(),
+                "nord".into(),
+                None,
+                None,
+                None,
+                None,
+                Some("Orla".into()),
+            )
+            .await
+            .unwrap();
             assert_eq!(orla.lock().await.ui.theme, "nord");
             assert_eq!(state.selected_profile().await.ui.theme, shown);
             let saved = ProfileConfig::from_toml(&std::fs::read_to_string(&orla_file).unwrap());
@@ -829,12 +1118,28 @@ mod tests {
 
     #[test]
     fn follow_system_appearance_round_trips() {
-        let ui = UiConfig {
-            follow_system_appearance: true,
-            ..UiConfig::default()
-        };
+        let mut ui = UiConfig::default();
+        crate::profile::ui::set_follow_system_appearance(&mut ui, true);
         assert!(through_payload(&ui).follow_system_appearance);
         assert!(!through_payload(&UiConfig::default()).follow_system_appearance);
+    }
+
+    #[test]
+    fn the_switch_themes_keys_round_trip() {
+        let mut ui = UiConfig::default();
+        for mode in ["off", "system", "game"] {
+            crate::profile::ui::set_theme_follow(&mut ui, mode.into());
+            let back = through_payload(&ui);
+            assert_eq!(back.theme_follow, mode);
+            assert_eq!(back.follow_system_appearance, mode == "system");
+        }
+        crate::profile::ui::set_theme_follow(&mut ui, "dusk".into());
+        assert_eq!(through_payload(&ui).theme_follow, "off");
+        ui.day_theme = "solarized-light".into();
+        ui.night_theme = "tokyo-night".into();
+        let back = through_payload(&ui);
+        assert_eq!(back.day_theme, "solarized-light");
+        assert_eq!(back.night_theme, "tokyo-night");
     }
 
     #[test]
@@ -898,31 +1203,119 @@ mod tests {
     }
 
     #[test]
-    fn a_theme_pick_writes_only_what_it_names() {
+    fn the_command_line_look_round_trips() {
         let mut ui = UiConfig::default();
-        assert!(super::apply_theme_pick(&mut ui, "nord".into(), None, None));
+        let back = through_payload(&ui);
+        assert!(back.input_caret_blink);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_size, 0);
+        ui.input_caret_blink = false;
+        ui.input_caret_color = Some("#c6a46a".into());
+        ui.input_line_color = Some("#d8dee9".into());
+        ui.input_line_background = "own".into();
+        ui.input_line_background_color = Some("#1d1f21".into());
+        ui.input_line_size = 18;
+        let back = through_payload(&ui);
+        assert!(!back.input_caret_blink);
+        assert_eq!(back.input_caret_color.as_deref(), Some("#c6a46a"));
+        assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
+        assert_eq!(back.input_line_background, "own");
+        assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
+        assert_eq!(back.input_line_size, 18);
+        ui.input_caret_color = Some("  ".into());
+        ui.input_line_background = "glass".into();
+        ui.input_line_size = 3;
+        let back = through_payload(&ui);
+        assert_eq!(back.input_caret_color, None);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_size, 6);
+    }
+
+    #[test]
+    fn coloring_as_you_type_round_trips() {
+        let mut ui = UiConfig::default();
+        let back = through_payload(&ui);
+        assert!(!back.input_type_colors);
+        assert_eq!(back.input_type_alias_color, None);
+        ui.input_type_colors = true;
+        ui.input_type_alias_color = Some("#8abeb7".into());
+        ui.input_type_hash_color = Some("#b294bb".into());
+        ui.input_type_chat_color = Some(" #f0c674 ".into());
+        ui.input_type_unknown_color = Some(String::new());
+        let back = through_payload(&ui);
+        assert!(back.input_type_colors);
+        assert_eq!(back.input_type_alias_color.as_deref(), Some("#8abeb7"));
+        assert_eq!(back.input_type_hash_color.as_deref(), Some("#b294bb"));
+        assert_eq!(back.input_type_chat_color.as_deref(), Some("#f0c674"));
+        assert_eq!(back.input_type_unknown_color, None);
+    }
+
+    #[test]
+    fn a_theme_pick_writes_only_what_it_names() {
+        use super::ThemeSlots;
+
+        let mut ui = UiConfig::default();
+        assert!(super::apply_theme_pick(
+            &mut ui,
+            "nord".into(),
+            ThemeSlots::default()
+        ));
         assert_eq!(ui.theme, "nord");
         assert_eq!(ui.light_theme, "vellum");
         assert_eq!(ui.dark_theme, "");
 
         // A pick while following the system fills the dark slot.
-        assert!(super::apply_theme_pick(
-            &mut ui,
-            "nord".into(),
-            Some("vellum".into()),
-            Some("tokyo-night".into()),
-        ));
+        let dark = || ThemeSlots {
+            light: Some("vellum".into()),
+            dark: Some("tokyo-night".into()),
+            ..ThemeSlots::default()
+        };
+        assert!(super::apply_theme_pick(&mut ui, "nord".into(), dark()));
         assert_eq!(ui.theme, "nord");
         assert_eq!(ui.dark_theme, "tokyo-night");
 
         // The same pick again changes nothing, and a blank slot is left alone.
+        let blank_light = ThemeSlots {
+            light: Some(String::new()),
+            ..dark()
+        };
         assert!(!super::apply_theme_pick(
             &mut ui,
             "nord".into(),
-            Some(String::new()),
-            Some("tokyo-night".into()),
+            blank_light
         ));
         assert_eq!(ui.light_theme, "vellum");
+    }
+
+    #[test]
+    fn a_theme_pick_while_following_the_game_fills_day_or_night() {
+        use super::ThemeSlots;
+
+        let mut ui = UiConfig::default();
+        let night = ThemeSlots {
+            night: Some("tokyo-night".into()),
+            ..ThemeSlots::default()
+        };
+        assert!(super::apply_theme_pick(
+            &mut ui,
+            "tokyo-night".into(),
+            night
+        ));
+        assert_eq!(ui.night_theme, "tokyo-night");
+        assert_eq!(ui.day_theme, "");
+        let day = ThemeSlots {
+            day: Some("solarized-light".into()),
+            ..ThemeSlots::default()
+        };
+        assert!(super::apply_theme_pick(
+            &mut ui,
+            "solarized-light".into(),
+            day
+        ));
+        assert_eq!(ui.day_theme, "solarized-light");
+        assert_eq!(ui.night_theme, "tokyo-night");
+        assert_eq!(ui.light_theme, "vellum");
+        assert_eq!(ui.dark_theme, "");
     }
 
     #[test]
@@ -982,6 +1375,8 @@ mod tests {
         assert_eq!(back.vitals_order, fresh.vitals_order);
         assert_eq!(back.vitals_text_previous, Vec::<String>::new());
 
+        assert!(!back.vitals_hit);
+
         let ui = UiConfig {
             vitals_style: Some("text".into()),
             vitals_place: "status".into(),
@@ -991,9 +1386,11 @@ mod tests {
             vitals_colors: BTreeMap::from([("move".into(), 10)]),
             vitals_text: "%hp/%maxhp %mn/%maxmn %mv/%maxmv".into(),
             vitals_text_previous: vec!["%hp(%pct_hp)h".into(), "%mv(%pct_mv)v".into()],
+            vitals_hit: true,
             ..UiConfig::default()
         };
         let back = through_payload(&ui);
+        assert!(back.vitals_hit);
         assert_eq!(back.vitals_style, ui.vitals_style);
         assert_eq!(back.vitals_place, ui.vitals_place);
         assert_eq!(back.vitals_order, ui.vitals_order);
@@ -1064,6 +1461,25 @@ mod tests {
         assert!(through_payload(&ui).readable_highlights);
         ui.readable_highlights = false;
         assert!(!through_payload(&ui).readable_highlights);
+    }
+
+    #[test]
+    fn the_screen_reader_fields_round_trip_and_the_burst_holds_to_its_four() {
+        let mut ui = UiConfig::default();
+        let back = through_payload(&ui);
+        assert!(
+            !back.screen_reader && !back.screen_reader_background && !back.screen_reader_prompt
+        );
+        assert_eq!(back.screen_reader_burst, 8);
+        ui.screen_reader = true;
+        ui.screen_reader_background = true;
+        ui.screen_reader_prompt = true;
+        ui.screen_reader_burst = 32;
+        let back = through_payload(&ui);
+        assert!(back.screen_reader && back.screen_reader_background && back.screen_reader_prompt);
+        assert_eq!(back.screen_reader_burst, 32);
+        ui.screen_reader_burst = 7;
+        assert_eq!(through_payload(&ui).screen_reader_burst, 8);
     }
 
     #[test]

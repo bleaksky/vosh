@@ -24,8 +24,10 @@ pub(crate) struct DockEntryPersist {
 /// The built-in content types a pane can show. The panel holds up to
 /// [`CHAT_PANES_MAX`] Chat panes and one of each other type, and a
 /// type doubles as its first leaf's default id. Mirrored by
-/// `PANE_TYPES` in src/panel/paneLayout.ts.
-pub(crate) const PANE_TYPES: [&str; 5] = ["map", "affects", "group", "chat", "imm"];
+/// `PANE_TYPES` in src/panel/paneLayout.ts. `writing` is the writing
+/// card pinned to the panel, which only the card's pin adds. A build
+/// from before it drops the leaf as an unknown type and loads the rest.
+pub(crate) const PANE_TYPES: [&str; 6] = ["map", "affects", "group", "chat", "imm", "writing"];
 
 /// How many Chat panes the panel holds. Mirrored by `CHAT_PANES_MAX`
 /// in src/panel/paneLayout.ts.
@@ -54,7 +56,7 @@ const PANE_MAX_SPLIT_DEPTH: usize = 3;
 /// Weights past this are clamped so summing siblings stays finite.
 const PANE_MAX_WEIGHT: f64 = 1_000_000.0;
 
-/// The one-window panel for one profile: whether it shows, how wide
+/// The side panel for one profile: whether it shows, how wide
 /// it is, and the tree of panes inside it. The vitals footer is
 /// pinned below the tree and is not part of it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -110,13 +112,12 @@ fn default_pane_weight() -> f64 {
     1.0
 }
 
-/// The map's share of the stock layout, over affects. The approved
-/// boards give the Map pane 348 px and the Affects pane 315 px at
-/// 1280 by 800, which shows every Affects row the boards show.
+/// The map's share of the stock layout, over affects. At 1280 by 800
+/// this gives the Map pane 348 px and the Affects pane 315 px.
 const DEFAULT_MAP_WEIGHT: f64 = 0.525;
 const DEFAULT_AFFECTS_WEIGHT: f64 = 0.475;
 
-/// Map above affects, the stock layout in the approved mockups.
+/// Map above affects, the stock layout.
 fn default_pane_root() -> PaneNode {
     PaneNode::split(
         "root",
@@ -206,7 +207,7 @@ impl PaneLayoutPersist {
     }
 
     /// Seed a profile's tree from the old zone layout the first time
-    /// the profile opens in the one-window build. Mirrors how the old
+    /// the profile opens with panes. Mirrors how the old
     /// frontend read a dock layout: unknown ids and bad zones are
     /// skipped, and ids the list never mentions take their old default
     /// placement. Vitals is pinned now, the room strip moved into the
@@ -624,7 +625,7 @@ pub(crate) mod tests {
         assert_eq!(layout.panel_width, None);
         assert_eq!(layout.root.split.as_deref(), Some("column"));
         assert_eq!(leaf_panes(&layout.root), ["map", "affects"]);
-        // The boards' split, 348 px over 315 px of the 663 px the two
+        // The stock split, 348 px over 315 px of the 663 px the two
         // panes share at 1280 by 800.
         assert!(close(layout.root.children[0].weight, 0.525));
         assert!(close(layout.root.children[1].weight, 0.475));
@@ -784,6 +785,28 @@ pub(crate) mod tests {
         assert!(text.contains("[ui.panes]"), "{text}");
         let parsed = ProfileConfig::from_toml(&text).unwrap();
         assert_eq!(parsed.ui.panes, Some(custom_layout()));
+    }
+
+    #[test]
+    fn the_writing_pane_round_trips_and_an_unknown_type_leaves_the_rest() {
+        let mut config = ProfileConfig::default();
+        let mut layout = PaneLayoutPersist::default_layout();
+        layout.root.children.push(PaneNode::leaf("writing", 0.5));
+        layout.sanitize();
+        config.ui.panes = Some(layout.clone());
+        let text = config.to_toml().unwrap();
+        let parsed = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(parsed.ui.pane_layout(), layout);
+        assert_eq!(
+            leaf_panes(&parsed.ui.pane_layout().root),
+            ["map", "affects", "writing"]
+        );
+        // A build that does not know a pane type drops its leaf and keeps
+        // the others, the way a build from before the writing pane reads
+        // a profile with one.
+        let later = text.replace("\"writing\"", "\"someday\"");
+        let older = ProfileConfig::from_toml(&later).unwrap();
+        assert_eq!(leaf_panes(&older.ui.pane_layout().root), ["map", "affects"]);
     }
 
     #[test]

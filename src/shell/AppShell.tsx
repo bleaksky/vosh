@@ -18,7 +18,7 @@ import {
   sessionsColumn,
 } from './sessionsColumn';
 
-// The One Window frame (SPEC 1). A CSS grid with the sessions column,
+// The one window frame. A CSS grid with the sessions column,
 // the terminal column and the panel column. Rows are the 32 px title
 // band, the terminal, the input band (at least 40, taller while you
 // compose several lines), and the 28 px status line. The band spans
@@ -39,6 +39,14 @@ import {
 // sidebar shows it publishes --sessions-col, its column, which the
 // panel's clamp counts. With one session the sidebar is gone, the first
 // column takes 0, and the frame is the one it was before sessions.
+//
+// The sessions toggle holds one spot in the frame's top left corner,
+// over the sidebar's top while it shows and at the band's left end
+// while it hides, so you find it in the same place either way. The root
+// says which with data-lead, so the band's title keeps clear of it only
+// while it sits over the band. In a window too narrow for the sidebar's
+// column, the sidebar slides over the terminal from the left edge
+// instead, under the toggle.
 //
 // The sidebar's 1 px line is its width handle too, below the sidebar's
 // top 32, the way the panel's edge is the panel's. Each drag writes its
@@ -69,8 +77,22 @@ interface Props {
   sessionsWidth?: number;
   /** Keep the width a drag or a key gave the sidebar. */
   onSessionsWidth?: (px: number) => void;
+  /** The sessions sidebar over the terminal, in a window too narrow for
+   *  its column, or null. */
+  sessionsOverlay?: ReactNode;
+  /** The sessions toggle, in the top left corner, or null. */
+  sessionsToggle?: ReactNode;
   titleBand: ReactNode;
+  /** The snoop split, at the top of the terminal column, or null. It
+   *  renders first in the terminal's slot, so the terminal keeps its
+   *  parent and its place among the slot's children as the split comes
+   *  and goes, and never remounts. */
+  snoop?: ReactNode;
   terminal: ReactNode;
+  /** The game lines a screen reader reads, after the terminal in its
+   *  slot, so they read the same under the macOS underlay and under
+   *  xterm, or null. */
+  reader?: ReactNode;
   input: ReactNode;
   statusLine: ReactNode;
   panel: ReactNode;
@@ -101,8 +123,12 @@ export function AppShell({
   sessions = null,
   sessionsWidth = SESSIONS_WIDTH_STOCK,
   onSessionsWidth,
+  sessionsOverlay = null,
+  sessionsToggle = null,
   titleBand,
+  snoop = null,
   terminal,
+  reader = null,
   input,
   statusLine,
   panel,
@@ -207,13 +233,25 @@ export function AppShell({
   return (
     <main
       ref={rootRef}
-      className="shell"
+      className="shell window-edge"
       data-panel={panelOpen ? 'open' : 'hidden'}
+      data-lead={sessionsToggle === null ? undefined : sessions === null ? 'band' : 'sidebar'}
       style={frame}
       onMouseUp={onMouseUp}
     >
+      {/* Tab follows the eye (Q22). The toggle in the corner comes
+          first, then the band, the sidebar's rows, the terminal, the
+          command line and the panel. frame.css places every slot by
+          row and column, so this order moves nothing on screen. */}
+      {sessionsToggle !== null && <div className="shell-lead">{sessionsToggle}</div>}
+      <div className="shell-slot-band">{titleBand}</div>
       {sessions !== null && <div className="shell-slot-sessions">{sessions}</div>}
-      {/* Beside the sidebar, so Tab reaches the line after its rows. */}
+      {sessionsOverlay !== null && (
+        <div className="shell-sessions-overlay" style={{ width: sessionsColumn(sessionsWidth) }}>
+          {sessionsOverlay}
+        </div>
+      )}
+      {/* After the sidebar, so Tab reaches the line after its rows. */}
       {sessions !== null && (
         <div
           role="separator"
@@ -236,9 +274,17 @@ export function AppShell({
           onKeyDown={onKeyDown('sessions')}
         />
       )}
-      <div className="shell-slot-band">{titleBand}</div>
-      <div className="shell-slot-term">{terminal}</div>
-      <div className="shell-slot-input">{input}</div>
+      {/* The output is one stop you can read. The stop sits on the slot
+          and not the log, because under the macOS underlay the terminal
+          host is hidden and could not hold the focus. */}
+      <section className="shell-slot-term" aria-label="Terminal" tabIndex={0}>
+        {snoop}
+        {terminal}
+        {reader}
+      </section>
+      <section className="shell-slot-input" aria-label="Command line">
+        {input}
+      </section>
       <div className="shell-slot-status">{statusLine}</div>
       <aside ref={panelRef} className="shell-slot-panel" aria-label="Panel">
         {panel}

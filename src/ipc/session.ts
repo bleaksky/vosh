@@ -14,6 +14,7 @@ import {
   SESSIONS_CHANGED,
   STATE,
   TARGET,
+  WALK,
 } from './events';
 
 /** The session the app starts with, `SessionId::FIRST` in
@@ -247,11 +248,57 @@ export async function sendMaskedInput(line: string, session?: number): Promise<v
   await invoke('session_send_masked', { line, session });
 }
 
+/// Send a line you type into the game's line editor to a session, the
+/// selected one when it names none, while the editor holds a text Vosh
+/// names. It goes exactly as typed, past aliases, variables, slash
+/// commands and the semicolon split, and logs as typed.
+export async function sendRawInput(line: string, session?: number): Promise<void> {
+  await invoke('session_send_raw', { line, session });
+}
+
 /// Stop the walk under way in a session, the selected one when it names
 /// none, as Esc in the command line does. The session says nothing when
 /// you are not walking.
 export async function stopWalk(session?: number): Promise<void> {
   await invoke('session_walk_stop', { session });
+}
+
+/// Walk the path you clicked on the map in a session, the selected one
+/// when it names none. `steps` is the path as a `#walk` string, planned
+/// from room `start`, and `rooms` holds the room each step should reach.
+/// A walk under way gives way once its step in flight lands.
+export async function walkRoute(
+  steps: string,
+  start: number,
+  rooms: number[],
+  session?: number,
+): Promise<void> {
+  await invoke('session_walk_route', { steps, start, rooms, session });
+}
+
+/** Where a walk stands, `WalkProgress` in src-tauri/src/session/walk.rs.
+ *  `left` is the steps still to go as a `#walk` string, and `route` is
+ *  true for a walk a click on the map started. */
+export type WalkProgress =
+  | { kind: 'idle' }
+  | { kind: 'walking'; done: number; total: number; left: string; route: boolean }
+  | {
+      kind: 'stopped';
+      done: number;
+      total: number;
+      why: 'plain' | 'lost_sight' | 'lost_track';
+    };
+
+/** Hear each change to where a session's walk stands, with that
+ *  session. A walk ends idle when it arrives or the connection drops. */
+export async function onWalk(
+  cb: (progress: WalkProgress, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<WalkProgress & { session?: number }>(WALK, (event) => {
+    // The session rides beside the progress, so the callback gets them apart.
+    const { session: _session, ...progress } = event.payload;
+    cb(progress as WalkProgress, sessionOf(event.payload));
+  });
 }
 
 /** What a GMCP package, the prompt values and the affect fulls carry,

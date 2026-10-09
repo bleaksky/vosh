@@ -106,11 +106,13 @@ export type PaneMins = Partial<Record<PaneKind, number>>;
  *  Affects its header and six rows, Group, Staff queues and a Lua pane
  *  their header and three rows, and the Map and Chat their header and
  *  a body as much taller as their text. Each is its PANE_MIN_H entry
- *  at 12 px. */
+ *  at 12 px. The pinned writing card keeps its entry at every size. */
 export function paneMinH(pane: PaneKind, size: number = PANE_TEXT_PX): number {
   const text = paneText(size);
   if (pane === 'affects') return text.header + 6 * text.affectsRow;
   if (pane === 'group' || pane === 'imm' || pane === 'lua') return text.header + 3 * text.row;
+  // The writing card draws at your terminal size, not the panel's.
+  if (pane === 'writing') return PANE_MIN_H.writing;
   return text.header + textPx(PANE_MIN_H[pane] - PANE_HEADER_PX, size);
 }
 

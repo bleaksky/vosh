@@ -79,7 +79,7 @@ mod tests {
         // Before the profile set loads, nothing is recorded.
         note_line_triggers(&state, vec!["early".to_string()]).await;
         crate::app::launch::load(&state, root).await;
-        let leftover = &state.take_launch_notices();
+        let leftover = &state.take_launch_messages();
         assert!(leftover.is_empty(), "{leftover:?}");
 
         note_line_triggers(&state, vec!["hp-watch".to_string()]).await;
@@ -93,7 +93,7 @@ mod tests {
         let next: crate::app::state::SharedState =
             std::sync::Arc::new(crate::app::state::AppState::default());
         crate::app::launch::load(&next, root).await;
-        let notices = next.take_launch_notices();
+        let notices = next.take_launch_messages();
         assert_eq!(notices.len(), 1, "{notices:?}");
         assert!(
             notices[0].contains("The trigger hp-watch matched"),
@@ -102,7 +102,7 @@ mod tests {
         let again: crate::app::state::SharedState =
             std::sync::Arc::new(crate::app::state::AppState::default());
         crate::app::launch::load(&again, root).await;
-        let leftover = &again.take_launch_notices();
+        let leftover = &again.take_launch_messages();
         assert!(leftover.is_empty(), "{leftover:?}");
     }
 }

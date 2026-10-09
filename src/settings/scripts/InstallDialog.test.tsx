@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { PluginInstallCheck } from '../../ipc/scripts';
 import { InstallDialog } from './InstallDialog';
 
-// Install's one question as markup, worded as board 4 words it.
+// Install's one question as markup.
 
 const none = () => undefined;
 
-// Board 4's weather_pane.
+// A sample plugin with a pane, weather_pane.
 const WEATHER: PluginInstallCheck = {
   name: 'weather_pane',
   version: '0.2.0',
@@ -25,9 +25,7 @@ function draw(check: PluginInstallCheck, busy = false) {
   return {
     title: /class="ov-confirm-title">([^<]*)</.exec(html)?.[1],
     body: /class="ov-confirm-body">([^<]*)</.exec(html)?.[1],
-    install: /<button type="button" class="ov-button is-primary"( disabled="")?>Install</.exec(
-      html,
-    ),
+    install: /<button type="button"( disabled="")? class="btn is-primary">Install</.exec(html),
   };
 }
 

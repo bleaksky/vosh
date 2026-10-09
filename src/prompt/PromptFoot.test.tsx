@@ -4,8 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PromptShowState } from '../ipc/prompt';
 import type { PromptPreviewName } from '../ipc/promptDesign';
 import { findAll, type FakeElement } from '../test/fakeDom';
-import { BUTTON, checkMarks, menuButtonDom, menuHeight, on } from '../test/menuButtonDom';
-import { MENU_BUTTON_MENU_WIDTH } from './MenuButton';
+import {
+  BUTTON,
+  checkMarks,
+  menuButtonDom,
+  menuHeight,
+  MENU_WIDTH,
+  on,
+} from '../test/menuButtonDom';
 import { DesignFoot, PreviewButton } from './PromptFoot';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -58,7 +64,7 @@ describe('the Preview button', () => {
       const html = draw(value);
       expect(html, value).toMatch(
         new RegExp(
-          `<button[^>]*class="st-button st-button-secondary pc-menu-button"[^>]*>` +
+          `<button[^>]*class="btn is-small pc-menu-button"[^>]*>` +
             `<span><span class="pc-menu-button-lead">Preview: </span>${label}</span><svg`,
         ),
       );
@@ -77,8 +83,8 @@ describe('the Preview button', () => {
     const preview = draw('now');
     const place = renderToStaticMarkup(foot(false));
     const button = (html: string) => /<button[^>]*aria-haspopup="menu"[^>]*>/.exec(html)?.[0];
-    expect(button(preview)).toContain('class="st-button st-button-secondary pc-menu-button"');
-    expect(button(place)).toContain('class="st-button st-button-secondary pc-menu-button"');
+    expect(button(preview)).toContain('class="btn is-small pc-menu-button"');
+    expect(button(place)).toContain('class="btn is-small pc-menu-button"');
   });
 });
 
@@ -144,21 +150,20 @@ describe('the Preview menu', () => {
     const menu = m.menu();
     expect(menu).not.toBeNull();
     expect(menu?.getAttribute('aria-label')).toBe('Preview');
-    expect(menu?.getAttribute('class')).toBe('pc-menu');
+    expect(menu?.getAttribute('class')).toBe('menu');
     expect(m.button.getAttribute('aria-expanded')).toBe('true');
     expect(m.items().map((el) => el.textContent)).toEqual(['Now', 'Low health', 'Fight']);
     for (const item of m.items()) {
-      expect(item.getAttribute('class')).toBe('ov-menu-item');
+      expect(item.getAttribute('class')).toBe('menu-item');
       expect(item.getAttribute('role')).toBe('menuitemradio');
       expect(checkMarks(item), item.textContent ?? '').toBe(
         item.textContent === 'Low health' ? 1 : 0,
       );
     }
     expect(m.checked()).toEqual(['Low health']);
-    // It opens above the button, their right edges together, the width
-    // of the menu of where your prompt shows, and takes focus.
-    expect(menu?.style.width).toBe(`${MENU_BUTTON_MENU_WIDTH}px`);
-    expect(menu?.style.left).toBe(`${BUTTON.right - MENU_BUTTON_MENU_WIDTH}px`);
+    // It opens above the button, their right edges together, as wide
+    // as its rows ask, and takes focus.
+    expect(menu?.style.left).toBe(`${BUTTON.right - MENU_WIDTH}px`);
     expect(menu?.style.top).toBe(`${BUTTON.top - 4 - menuHeight(3)}px`);
     expect(doc.activeElement).toBe(menu);
 

@@ -9,12 +9,12 @@ use crate::{LogStore, HIDDEN_SENT_TEXT};
 // ---- the store ----
 
 /// A log file in a fresh temp folder, removed on drop.
-struct TempLog {
+pub(super) struct TempLog {
     dir: std::path::PathBuf,
 }
 
 impl TempLog {
-    fn new(tag: &str) -> Self {
+    pub(super) fn new(tag: &str) -> Self {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -56,7 +56,7 @@ impl Drop for TempLog {
 
 /// Log `rows` as one session the way the app does: game lines with
 /// their raw bytes, sent lines as `> ` rows with none.
-fn log_session(store: &mut LogStore, rows: &[Row<'_>], filler: usize) -> i64 {
+pub(super) fn log_session(store: &mut LogStore, rows: &[Row<'_>], filler: usize) -> i64 {
     let sid = store
         .start_session("play.theforsakenlands.com", 1848, 0)
         .unwrap();
@@ -92,6 +92,7 @@ fn log_session(store: &mut LogStore, rows: &[Row<'_>], filler: usize) -> i64 {
                 format!("\x1b[1;37mThe Temple Square hums with voices, line {n}.\x1b[0m")
                     .into_bytes(),
             ),
+            kind: crate::LineKind::Text,
         })
         .collect();
     store.append_batch(&entries).unwrap();
@@ -118,7 +119,7 @@ fn snapshot(store: &LogStore) -> Vec<RowSnapshot> {
 /// Three sessions. The first logs in with the account password and
 /// an immortal password, the second changes the account password,
 /// the third only plays.
-fn populated(log: &TempLog) -> (LogStore, Vec<i64>) {
+pub(super) fn populated(log: &TempLog) -> (LogStore, Vec<i64>) {
     let mut store = LogStore::open(&log.path()).unwrap();
     let first = session(&[
         &greeting(),
@@ -318,6 +319,7 @@ fn the_live_log_keeps_working_after_forgetting() {
             ts_ms: 90_001,
             text: "You slay the rat.".into(),
             raw: Some(b"\x1b[31mYou slay the rat.\x1b[0m".to_vec()),
+            kind: crate::LineKind::Text,
         }])
         .unwrap();
     store.end_session(sid, 90_002).unwrap();

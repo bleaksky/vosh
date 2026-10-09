@@ -96,9 +96,9 @@ describe('when you can pick a place', () => {
 });
 
 describe('where your prompt shows, found and read', () => {
-  it('has a search entry that opens the row in the Prompt section', () => {
+  it('has a search entry that opens the row on the Prompt tab', () => {
     const entry = SETTINGS_ROWS.find((r) => r.label === 'Where your prompt shows');
-    expect(entry?.target).toEqual({ group: 'input', section: 'prompt', anchor: 'prompt-show' });
+    expect(entry?.target).toEqual({ group: 'prompt', anchor: 'prompt-show' });
     expect(entry?.keywords).toContain('pinned');
     expect(entry?.keywords).toContain('lifted');
   });

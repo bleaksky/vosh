@@ -1,7 +1,7 @@
 import { textPx } from './paneTextSize';
 import { FOOTER_INSETS, type MeasureText } from './vitalsLedgerFit';
 
-// The Gauges and Pips vitals styles (Vitals Styles, boards 1 and 6).
+// The Gauges and Pips vitals styles.
 // Each vital is a 22 px pane row of its label, a mark and its value,
 // the marks starting together after the longest label and ending
 // together before the widest value. Gauges draws a 6 px pill that fills
@@ -36,7 +36,7 @@ function widest(texts: readonly string[], px: number, weight: number, measure: M
 
 /** The room a footer `width` px wide leaves beside the longest of your
  *  `labels` and the widest of `values`, each value at its max. */
-function room(
+export function markRoom(
   width: number,
   size: number,
   labels: readonly string[],
@@ -58,7 +58,7 @@ export function gaugesFit(
   measure: MeasureText,
 ): GaugesFit {
   if (labels.length === 0) return 'beside';
-  return room(width, size, labels, values, measure) - 2 * GAUGE_GAP < GAUGE_MIN
+  return markRoom(width, size, labels, values, measure) - 2 * GAUGE_GAP < GAUGE_MIN
     ? 'under'
     : 'beside';
 }
@@ -78,7 +78,7 @@ export function pipsFit(
   measure: MeasureText,
 ): PipsFit {
   if (labels.length === 0) return 'ten';
-  const spare = room(width, size, labels, values, measure) - 2 * PIPS_GAP;
+  const spare = markRoom(width, size, labels, values, measure) - 2 * PIPS_GAP;
   if (pipsWidth(10) <= spare) return 'ten';
   if (pipsWidth(5) <= spare) return 'five';
   return 'under';

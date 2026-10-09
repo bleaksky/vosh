@@ -117,7 +117,7 @@ impl Template {
 /// `max_spellings` in the values module holds the same four spellings in
 /// the order a lookup tries them. Here any one of them matches, so the
 /// order changes nothing. The design module reads nothing from values, so
-/// this list stays here in its own order (refactor plan D26).
+/// this list stays here in its own order.
 fn is_max_of(base: &ValueRef, max: &ValueRef) -> bool {
     if base.format != Format::Value || base.field.param.is_some() || max.field.param.is_some() {
         return false;

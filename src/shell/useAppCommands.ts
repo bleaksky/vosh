@@ -18,7 +18,9 @@ import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import type { MacroKeys } from '../input/useMacroKeys';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from '../lib/helpLink';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
+import { getScreenReader } from '../stores/config/screenReaderStore';
 import { getImmState, subscribeImmState } from '../stores/gmcp/immStore';
+import { getSnoops, useSnoops } from '../stores/session/snoopStore';
 import { goTo, sessionAt, sessionStep } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
 import {
@@ -36,6 +38,7 @@ import {
   type PaletteDeps,
 } from './overlays/palette';
 import { openNewSession } from './newSession';
+import { goToSnoop, requestSnoop, snoopHasCaret } from './snoopKeys';
 import type { ScrollbackFind } from './useFind';
 import type { ScrollbackSplit } from './useScrollbackSplit';
 
@@ -114,16 +117,20 @@ export function useAppCommands({
 }: CommandInputs): AppCommands {
   // What the macOS menu bar mirrors beyond the panel and the session: a
   // tick for every theme apply or custom theme change, whether the MUD
-  // offers staff queues, and whether the native grid is scrolled back.
+  // offers staff queues, whether the native grid is scrolled back, and
+  // how many snoop tabs the session has.
   const [themeTick, setThemeTick] = useState(0);
   const [staffOffered, setStaffOffered] = useState(false);
   const [nativeScrolled, setNativeScrolled] = useState(false);
+  // The selected session's snoop tabs, for Go to snoop in View.
+  const snoops = useSnoops().tabs.length;
 
   // Window shortcuts, in the capture phase so they fire before xterm's
   // own keybindings, the webview's find and reload, and the command
-  // line's macros. macOS binds Cmd only, because Ctrl belongs to your
-  // macros there. Windows and Linux bind Ctrl. The keys live in
-  // lib/appShortcuts.json, which the macOS menu bar reads too.
+  // line's macros. macOS binds Cmd, because Ctrl belongs to your macros
+  // there, and Ctrl with Cmd only for the sessions toggle. Windows and
+  // Linux bind Ctrl. The keys live in lib/appShortcuts.json, which the
+  // macOS menu bar reads too.
   //   Mod+K        command palette (toggles)
   //   Mod+F        find in scrollback (again refocuses the find field)
   //   Mod+R        connect the selected session. Ctrl+R never reloads
@@ -131,28 +138,51 @@ export function useAppCommands({
   //   Mod+,        settings
   //   Mod+/        help
   //   Mod+Shift+L  show or hide the panel
+  //   Ctrl+Cmd+S   show or hide the sessions sidebar, Ctrl+Shift+S on
+  //                Windows and Linux
   //   Mod+\        open or close the scrollback split
+  //   Mod+J        into the snoop, and in a snoop to the next tab. With
+  //                no snoop open the key stays the page's.
+  //   Mod+Shift+P  read your prompt aloud, while the screen reader is
+  //                on. With it off the key stays the page's.
   //   Mod+T        new session
   //   Mod+W        close the session, or the window with one session
   //   Mod+Shift+W  close the window
   //   Mod+Shift+]  the next session, and Mod+Shift+[ the previous one
   //   Mod+1 to 9   the session at that place in the list
+  //   Cmd+Option+1 to 4 on macOS and Ctrl+Shift+1 to 4 elsewhere
+  //                Timers, Aliases, Triggers and Macros in Settings, by
+  //                the physical digit key, since Option or Shift with 1
+  //                types another character
   // A key this handler takes never reaches the menu bar, and the menu
   // bar sends its commands through runCommand below too, so each press
   // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
   // layout still reaches them by the physical key. A macro the selected
-  // session's profile binds to one of the session keys keeps the key
-  // (Sessions Q11): nothing here or in the menu bar takes it, and the
-  // command line fires the macro.
+  // session's profile binds to one of the session keys or Settings keys
+  // keeps the key, as does one on the sessions toggle's key, since
+  // your macros come first: nothing here or in the menu bar takes
+  // it, and the command line fires the macro.
   const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
   const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
   useEffect(() => {
     const mac = isMacPlatform();
     const onKey = (e: globalThis.KeyboardEvent) => {
-      const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (!primary || e.altKey) return;
-      const press = { key: shortcutKey(e), code: e.code, shift: e.shiftKey };
-      const hit = resolveShortcut(press, () => macroKeys.bound(canonicalKeyFromEvent(e)));
+      // Ctrl beside Cmd on macOS reaches only a key whose spec names
+      // Ctrl, the sessions toggle's.
+      const primary = mac ? e.metaKey : e.ctrlKey && !e.metaKey;
+      if (!primary) return;
+      const press = {
+        key: shortcutKey(e),
+        code: e.code,
+        shift: e.shiftKey,
+        ctrl: mac && e.ctrlKey,
+        alt: e.altKey,
+      };
+      const hit = resolveShortcut(
+        press,
+        () => macroKeys.bound(canonicalKeyFromEvent(e)),
+        (id) => (id === 'snoop' ? getSnoops().tabs.length > 0 : getScreenReader().screen_reader),
+      );
       if (!hit) return;
       e.preventDefault();
       if (hit.kind === 'macro') return;
@@ -189,6 +219,10 @@ export function useAppCommands({
   // line and Copy in the terminal menu. Otherwise the system copies the
   // field or page selection.
   const copyFromMenu = () => {
+    if (snoopHasCaret()) {
+      requestSnoop('copy');
+      return;
+    }
     const own = pageHasSelection();
     if (!own && !nativeSurfaceEnabled()) {
       const text = termRef.current?.getSelection() || historyTermRef.current?.getSelection() || '';
@@ -219,6 +253,11 @@ export function useAppCommands({
         if (inPalette) focusInput();
         return;
       case 'find':
+        // Cmd F in a snoop finds in that snoop.
+        if (snoopHasCaret()) {
+          requestSnoop('find');
+          return;
+        }
         // Open just the toolbar. Whether to open the split is decided
         // per search: only when a match would scroll the live pane up
         // off its tail (see submitFind in useFind.ts).
@@ -233,6 +272,9 @@ export function useAppCommands({
         return;
       case 'split':
         toggleSplit();
+        return;
+      case 'snoop':
+        goToSnoop();
         return;
       case 'session-edit':
         requestSessionMenu({ mode: 'edit' });
@@ -315,6 +357,7 @@ export function useAppCommands({
         theme: getCurrentThemeId(),
         sessions: sessionCount,
         sessionsShown,
+        snoops,
       }),
     );
   }, [
@@ -329,6 +372,7 @@ export function useAppCommands({
     themeTick,
     sessionCount,
     sessionsShown,
+    snoops,
   ]);
 
   return {

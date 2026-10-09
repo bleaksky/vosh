@@ -5,14 +5,18 @@ pub(crate) mod affects;
 pub(crate) mod alerts;
 pub(crate) mod automation;
 pub(crate) mod characters;
+pub(crate) mod get_started;
+pub(crate) mod input;
 pub(crate) mod loadouts;
 pub(crate) mod logs;
 pub(crate) mod native_surface;
 pub(crate) mod panes;
+pub(crate) mod preset_edits;
 pub(crate) mod profiles;
 pub(crate) mod prompt;
 pub(crate) mod scripts;
 pub(crate) mod session;
+pub(crate) mod snoop;
 pub(crate) mod terminal;
 pub(crate) mod tick;
 pub(crate) mod ui_config;
@@ -20,6 +24,7 @@ pub(crate) mod updater;
 pub(crate) mod vitals;
 pub(crate) mod windows;
 pub(crate) mod wizard;
+pub(crate) mod writing;
 
 /// Your Downloads folder, where Export to Downloads saves a profile or a
 /// plugin, or the sentence a command returns when the system names none.
@@ -69,13 +74,23 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::session_connect,
         session::session_send_input,
         session::session_send_masked,
+        session::session_send_raw,
+        session::session_walk_route,
         session::session_walk_stop,
+        writing::writing_start,
+        writing::writing_stop,
+        writing::writing_take,
+        writing::writing_take_editor,
+        writing::writing_file_get,
+        writing::writing_character_set,
+        writing::writing_switches_set,
         session::session_set_window_size,
         session::session_disconnect,
         session::session_reconnect_now,
         session::session_reconnect_cancel,
         session::reconnect_get,
         session::reconnect_set,
+        input::input_known_words,
         automation::triggers_list,
         session::target_get,
         automation::triggers_export,
@@ -84,9 +99,16 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         automation::aliases_import,
         automation::presets_install,
         automation::presets_remove,
+        automation::presets_enabled_set,
         logs::logs_list_sessions,
         logs::logs_search_page,
         logs::logs_export,
+        logs::logs_save,
+        logs::scene_preview,
+        logs::scene_reveal,
+        logs::scene_save,
+        logs::logs_keep_get,
+        logs::logs_keep_set,
         terminal::scrollback_load,
         terminal::scrollback_clear,
         ui_config::ui_get_config,
@@ -116,10 +138,16 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         alerts::alerts_permission,
         alerts::alerts_ask_permission,
         alerts::alerts_open_settings,
+        preset_edits::preset_edits_get,
+        preset_edits::preset_edits_set,
         profiles::profile_get_scope,
         profiles::profile_set_scope,
         windows::open_settings_window,
         windows::open_help_window,
+        get_started::get_started_get,
+        get_started::get_started_set,
+        get_started::open_get_started,
+        windows::snoop_window_open,
         windows::window_backdrop_set,
         terminal::highlight_ground_set,
         panes::pane_layout_get,
@@ -128,6 +156,9 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         characters::profile_detail_get,
         panes::pane_layout_reset,
         panes::lua_panes_get,
+        snoop::snoop_get,
+        snoop::snoop_stop,
+        snoop::snoop_close,
         characters::profile_set_login,
         characters::profile_set_world,
         characters::session_identity_get,

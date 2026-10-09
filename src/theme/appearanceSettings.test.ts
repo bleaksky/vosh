@@ -11,7 +11,7 @@ import {
   keepFit,
   pairChoices,
   panelFontChoices,
-  panelSizeChoices,
+  sizeChoicesWithTerminal,
   primaryFontFamily,
   removeCustomTheme,
   sizeChoices,
@@ -24,7 +24,7 @@ import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
 import { CHROME_COLOR_KEYS } from './chrome';
 import type { CustomTheme } from '../ipc/theme';
 import { COLOR_VISIONS } from './gameFit';
-import { pickTheme, resolveActiveTheme } from './theme';
+import { pickTheme, resolveActiveTheme, type ThemePrefs } from './theme';
 import { galleryThemes } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme } from './themes';
 
@@ -39,8 +39,8 @@ const installed = [
 
 describe('primaryFontFamily', () => {
   it('reads the first family without quotes', () => {
-    expect(primaryFontFamily('"BerkeleyMono Bundled", Menlo, monospace')).toBe(
-      'BerkeleyMono Bundled',
+    expect(primaryFontFamily('"JetBrainsMono Bundled", Menlo, monospace')).toBe(
+      'JetBrainsMono Bundled',
     );
     expect(primaryFontFamily("  'SF Mono' , monospace")).toBe('SF Mono');
     expect(primaryFontFamily('Menlo')).toBe('Menlo');
@@ -51,8 +51,9 @@ describe('primaryFontFamily', () => {
 describe('fontLabel', () => {
   it('names the bundled fonts the way the board does', () => {
     expect(fontLabel('"JetBrainsMono Bundled", Menlo, monospace')).toBe('JetBrains Mono');
+    // A list saved with the retired bundled name draws in JetBrains Mono.
     expect(fontLabel('"BerkeleyMono Bundled", "JetBrainsMono Bundled", monospace')).toBe(
-      'Berkeley Mono',
+      'JetBrains Mono',
     );
   });
 
@@ -85,14 +86,14 @@ describe('panelFontChoices', () => {
   });
 });
 
-describe('panelSizeChoices', () => {
+describe('sizeChoicesWithTerminal', () => {
   it('offers the terminal size, then the sizes Size offers', () => {
-    expect(panelSizeChoices(12)).toEqual([
+    expect(sizeChoicesWithTerminal(12)).toEqual([
       { value: '0', label: 'Same as terminal' },
       ...sizeChoices(12),
     ]);
-    expect(panelSizeChoices(0)).toEqual(panelSizeChoices(12));
-    expect(panelSizeChoices(12).map((c) => c.value)).toEqual([
+    expect(sizeChoicesWithTerminal(0)).toEqual(sizeChoicesWithTerminal(12));
+    expect(sizeChoicesWithTerminal(12).map((c) => c.value)).toEqual([
       '0',
       '11',
       '12',
@@ -105,8 +106,8 @@ describe('panelSizeChoices', () => {
   });
 
   it('lists a size of your own among them', () => {
-    expect(panelSizeChoices(20).at(-1)).toEqual({ value: '20', label: '20 pt' });
-    expect(panelSizeChoices(9)[1]).toEqual({ value: '9', label: '9 pt' });
+    expect(sizeChoicesWithTerminal(20).at(-1)).toEqual({ value: '20', label: '20 pt' });
+    expect(sizeChoicesWithTerminal(9)[1]).toEqual({ value: '9', label: '9 pt' });
   });
 });
 
@@ -143,15 +144,15 @@ describe('fontChoices', () => {
     expect(choices).toHaveLength(5);
   });
 
-  it('keeps a Berkeley Mono list saved while Vosh bundled it, by name', () => {
-    const saved = '"BerkeleyMono Bundled", Menlo, monospace';
-    expect(fontChoices(saved, installed)[0]).toEqual({ label: 'Berkeley Mono', value: saved });
-    // Where you have it installed, its entry carries your list.
-    const withBerkeley = [...installed, { family: 'Berkeley Mono', monospace: true }];
-    const choices = fontChoices(saved, withBerkeley);
-    expect(choices.filter((c) => c.label === 'Berkeley Mono')).toEqual([
-      { label: 'Berkeley Mono', value: saved },
-    ]);
+  it('shows a list saved with a retired default as JetBrains Mono, unchanged', () => {
+    for (const saved of [
+      '"BerkeleyMono Bundled", Menlo, monospace',
+      'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace',
+    ]) {
+      const choices = fontChoices(saved, installed);
+      expect(choices[0]).toEqual({ label: 'JetBrains Mono', value: saved });
+      expect(choices.filter((c) => c.label === 'JetBrains Mono')).toHaveLength(1);
+    }
   });
 
   it('works before the installed list loads', () => {
@@ -214,7 +215,15 @@ describe('pairChoices', () => {
       'rubric',
       'melange-light',
       'solarized-light',
+      'high-contrast-light',
     ]);
+  });
+
+  it('lists every theme, light or dark, in gallery order for Day and Night', () => {
+    const every = pairChoices(themes, null, 'gruvbox').map((c) => c.value);
+    expect(every).toEqual(themes.map((t) => t.id));
+    expect(every).toContain('rubric');
+    expect(every).toContain('obsidian-ember');
   });
 
   it('keeps a pick of the other appearance, first', () => {
@@ -263,8 +272,9 @@ describe('stepGalleryTheme', () => {
   it('steps between the light themes while follow is on', () => {
     expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('melange-light');
     expect(stepGalleryTheme(themes, 'melange-light', 1, 'light')).toBe('solarized-light');
-    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('rubric');
-    expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('solarized-light');
+    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('high-contrast-light');
+    expect(stepGalleryTheme(themes, 'high-contrast-light', 1, 'light')).toBe('rubric');
+    expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('high-contrast-light');
     expect(stepGalleryTheme(themes, 'melange-light', -1, 'light')).toBe('rubric');
   });
 
@@ -274,18 +284,21 @@ describe('stepGalleryTheme', () => {
   });
 
   it('shows every step and leaves the light theme alone on a dark system', () => {
-    let ui = {
+    let ui: ThemePrefs = {
       theme: 'nord',
       follow_system_appearance: true,
       light_theme: 'rubric',
       dark_theme: 'nord',
+      theme_follow: 'system',
+      day_theme: '',
+      night_theme: '',
     };
     let id = 'nord';
     for (let i = 0; i < themes.length; i += 1) {
       id = stepGalleryTheme(themes, id, 1, 'dark');
       ui = pickTheme(ui, id);
       // The radio the arrow lands on is the one the gallery checks.
-      expect(resolveActiveTheme(ui, true)).toBe(id);
+      expect(resolveActiveTheme(ui, true, null)).toBe(id);
     }
     expect(ui.light_theme).toBe('rubric');
   });
@@ -302,7 +315,7 @@ const custom = (id: string, label = id): CustomTheme => ({
 describe('themeCaption', () => {
   it('follows the description with the source, the author and the license', () => {
     expect(themeCaption(findTheme('kanso-zen'))).toBe(
-      'Calm Japanese dark. Cool blue accent, with sage, gold and red for status. ' +
+      'Calm Japanese dark. Cool blue accent, with sage, gold, and red for status. ' +
         'Its colors come from kanso.nvim by Webhooked, under the MIT license.',
     );
     expect(themeCaption(findTheme('solarized-light'))).toBe(
@@ -313,7 +326,7 @@ describe('themeCaption', () => {
 
   it('says James Wright made a theme of its own for Vosh', () => {
     expect(themeCaption(findTheme('obsidian-ember'))).toBe(
-      'Warm near black ground, pastel colors and a single ember accent. ' +
+      'Warm near black ground, pastel colors, and a single ember accent. ' +
         'James Wright made it for Vosh, under the GPL version 3.',
     );
   });
@@ -345,9 +358,10 @@ describe('themeCaption', () => {
     expect(themeCaption(customToAppTheme(custom('blank')))).toBe('');
   });
 
+  // A contrast ratio like 7:1 is no colon in a sentence.
   it('keeps every built in caption free of colons, semicolons and dashes', () => {
     for (const theme of BUILTIN_THEMES) {
-      const caption = themeCaption(theme);
+      const caption = themeCaption(theme).replace(/\d+:\d+/g, 'ratio');
       expect(caption, theme.id).not.toMatch(/[:;\u2010-\u2015-]/);
       expect(caption, theme.id).toMatch(/\.$/);
     }
@@ -364,11 +378,11 @@ describe('colorVisionNote', () => {
   // says what turns into what, as far as the theme leaves room.
   it('says what each vision swaps, in the game text and the window', () => {
     const redGreen =
-      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
+      'In the game text greens turn blue, reds lean toward orange, and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
     expect(colorVisionNote('deuteranopia')).toBe(redGreen);
     expect(colorVisionNote('protanopia')).toBe(redGreen);
     expect(colorVisionNote('tritanopia')).toBe(
-      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
+      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn, and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
     );
   });
 
@@ -381,7 +395,7 @@ describe('colorVisionNote', () => {
     );
     expect(colorVisionNote('protanopia', false)).toBe(colorVisionNote('deuteranopia', false));
     expect(colorVisionNote('tritanopia', false)).toBe(
-      "Game text keeps your base palette while the theme's colors are off for MUD text. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.",
+      "Game text keeps your base palette while the theme's colors are off for MUD text. The window keeps danger, warn, and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.",
     );
     for (const vision of COLOR_VISIONS) {
       expect(colorVisionNote(vision, false)).not.toContain('nothing changes');
@@ -476,16 +490,23 @@ describe('removeCustomTheme', () => {
     follow_system_appearance: true,
     light_theme: 'mine',
     dark_theme: 'mine',
+    theme_follow: 'system' as const,
+    day_theme: 'mine',
+    night_theme: 'nord',
     custom_themes: [custom('mine'), custom('other')],
   };
 
   it('drops the theme and resets every pick that named it', () => {
-    // The light pick falls back to the light default, which shows Rubric.
+    // The light pick falls back to the light default, which shows Rubric,
+    // and the day pick to none, which shows the manual pick.
     expect(removeCustomTheme(ui, 'mine')).toEqual({
       theme: 'obsidian-ember',
       follow_system_appearance: true,
       light_theme: 'vellum',
       dark_theme: 'obsidian-ember',
+      theme_follow: 'system',
+      day_theme: '',
+      night_theme: 'nord',
       custom_themes: [custom('other')],
     });
   });

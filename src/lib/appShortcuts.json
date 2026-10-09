@@ -1,5 +1,9 @@
 {
   "settings": "Mod+,",
+  "settings-automation:timers": { "mac": "Mod+Alt+1", "other": "Mod+Shift+1" },
+  "settings-automation:aliases": { "mac": "Mod+Alt+2", "other": "Mod+Shift+2" },
+  "settings-automation:triggers": { "mac": "Mod+Alt+3", "other": "Mod+Shift+3" },
+  "settings-automation:macros": { "mac": "Mod+Alt+4", "other": "Mod+Shift+4" },
   "connect": "Mod+R",
   "session-new": "Mod+T",
   "session-close": "Mod+W",
@@ -10,6 +14,9 @@
   "find": "Mod+F",
   "palette": "Mod+K",
   "panel": "Mod+Shift+L",
+  "sessions-sidebar": { "mac": "Ctrl+Mod+S", "other": "Mod+Shift+S" },
   "split": "Mod+\\",
+  "snoop": "Mod+J",
+  "read-prompt": "Mod+Shift+P",
   "help": "Mod+/"
 }

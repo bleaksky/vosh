@@ -1,78 +1,64 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Terminal } from '../terminal/Terminal';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
 import { useMacroKeys } from '../input/useMacroKeys';
-import { Resizable } from '../terminal/Resizable';
 import { ReconnectNotice } from './overlays/ReconnectNotice';
-import { UpdateNotice } from './overlays/UpdateNotice';
-import { Toasts } from './overlays/Toasts';
-import { FindToolbar } from '../terminal/FindToolbar';
+import { CornerNotices } from './overlays/CornerNotices';
 import { TerminalMenu } from '../terminal/TerminalMenu';
-import { ScrollDepth } from '../terminal/ScrollDepth';
+import { ScreenReaderFeed } from '../terminal/ScreenReaderFeed';
 import { AppShell } from './AppShell';
+import { GetStarted } from './getStarted/GetStarted';
+import { markDone } from './getStarted/getStartedStore';
+import { showMe } from './getStarted/showMe';
+import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
+import { SessionsToggle } from './SessionsToggle';
+import { SnoopSplit } from './SnoopSplit';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
 import { PanelHost } from '../panel/PanelHost';
 import {
   panelWidthOf,
+  setPanelOpen,
   setPanelWidth,
   togglePanelOpen,
   usePanelLayout,
 } from '../panel/panelLayoutStore';
-import { addPaneAtBottom, togglePane } from '../panel/paneActions';
-import {
-  promptConfigGet,
-  promptConfigSet,
-  promptCodeReaderSet,
-  subscribePromptCardOpen,
-} from '../ipc/prompt';
-import { promptPreviewSet } from '../ipc/promptDesign';
+import { addPaneAtBottom } from '../panel/paneActions';
 import { disconnectSession } from '../ipc/session';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
-import { useTauriEvent } from '../ipc/useTauriEvent';
-import { openHelpWindow, openSettingsWindow } from '../ipc/windows';
-import { subscribeMigrationApplied } from '../ipc/wizard';
 import { listenForQuitFlush } from '../lib/pendingWrites';
 import { startStores } from '../stores';
-import { pushToast } from '../stores/toasts';
-import { showMigrationApplied } from './launchNotices';
-import { startGamePromptToasts } from '../prompt/gamePromptToast';
 import { CommandPalette } from './overlays/CommandPalette';
-import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { openSettingsTab } from '../lib/settingsLink';
+import { CoachRing } from '../ui/CoachRing';
 import { requestSessionMenu } from '../lib/appMenu';
-import { getNativeScroll } from '../terminal/native/nativeScroll';
-import { allPanes, PANE_TYPES } from '../panel/paneLayout';
-import { offeredPaneTypes } from '../panel/paneTypes';
+import { allPanes } from '../panel/paneLayout';
 import {
   getSelected,
-  goTo,
   move,
   rename,
   select,
-  sessionStep,
   useOpened,
   useSelected,
   useSessions,
 } from '../stores/session/sessionsStore';
 import { useConnection } from '../stores/session/useConnection';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
+import { useScreenReader } from '../stores/config/screenReaderStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
-import { PromptDock } from '../prompt/PromptDock';
-import { PROMPT_BINDING, VITALS_TEXT_BINDING, type CardBinding } from '../prompt/cardBinding';
-import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
-import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
+import { PromptCard } from '../prompt/PromptCard';
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
-import { useAlertTones } from './useAlertTones';
+import { WritingCard } from '../writing/WritingCard';
+import { WritingOffer } from '../writing/WritingOffer';
+import { terminalArea } from './terminalArea';
 import { useAppCommands } from './useAppCommands';
+import { useCardRequests } from './useCardRequests';
+import { paletteDepsFor } from './paletteDeps';
 import { useClosing } from './useClosing';
 import { useFind } from './useFind';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
@@ -80,6 +66,8 @@ import { useScrollbackSplit } from './useScrollbackSplit';
 import { useSessionTerminals } from './useSessionTerminals';
 import { useSessionsSidebar } from './useSessionsSidebar';
 import { useUiConfigFollow } from './useUiConfigFollow';
+import { useWindowNotices } from './useWindowNotices';
+import { useWindowFocus } from './useWindowFocus';
 
 // Hide or show the panel. When focus sat on the title band's toggle or
 // inside the panel, the caret goes back to the command line: a hidden
@@ -109,19 +97,25 @@ function MainWindow() {
   // The sessions this window opened. Each keeps a live terminal of its
   // own until it closes, and only the selected session's shows.
   const opened = useOpened();
-  // Every open session, which the sessions sidebar lists. It shows while
-  // two or more are open, until Hide sessions folds it for this window
-  // (Q17) or the window grows too narrow to hold it (board 8).
+  // Every open session, which the sessions sidebar lists. It shows
+  // while two or more are open, until the sessions toggle hides it for
+  // this window or the window grows too narrow to hold it, where the
+  // toggle slides it over the terminal instead.
   const sessions = useSessions();
   const panelOpen = panelLayout?.panel_open ?? true;
   // The status line carries your vitals with the panel hidden, or with
   // Show your vitals in on Status line.
   const vitalsPlace = useVitalsOptions().place;
   const lineShowsVitals = !panelOpen || vitalsPlace === 'status';
-  const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen);
+  // Read your prompt shows in the palette while the reader is on.
+  const readerOn = useScreenReader().screen_reader;
+  // The sidebar hands the caret back to the command line as it goes.
+  const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen, () =>
+    inputRef.current?.focus(),
+  );
   const sessionsShown = sessionsSidebar.shown;
   // Rename session… names the selected session in its row while the
-  // sidebar shows (Q7), and in the session popover's own form while it
+  // sidebar shows, and in the session popover's own form while it
   // does not, as with one session.
   const sidebar = useRef<SessionSidebarHandle | null>(null);
   const renameSession = () => {
@@ -150,7 +144,7 @@ function MainWindow() {
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
   // The selected session's macros, which the command line fires and the
-  // session keys ask after (Q11).
+  // session keys ask after, since a macro on a session key keeps it.
   const macroKeys = useMacroKeys();
   // Puts the caret back on the command line.
   const focusInput = () => inputRef.current?.focus();
@@ -168,60 +162,28 @@ function MainWindow() {
   // open; the value is the pointer's viewport position (the menu
   // clamps itself to the window edges).
   const [terminalMenu, setTerminalMenu] = useState<{ x: number; y: number } | null>(null);
-  // The prompt card (Customize prompt…), open over your prompt, and the
-  // view it opens on, or `point` to open on pointing at your game's line.
-  const [promptCard, setPromptCard] = useState<CardRequest | null>(null);
-  // What the card edits: your prompt, or your vitals text.
-  const [cardBinding, setCardBinding] = useState<CardBinding>(PROMPT_BINDING);
-  // Every request counts, so the open card hears a repeat of one.
-  const openPromptCard = useCallback(
-    (view: CardRequestView, binding: CardBinding = PROMPT_BINDING) => {
-      setCardBinding(binding);
-      setPromptCard((prev) => nextCardRequest(prev, view));
-    },
-    [],
-  );
-  // The card draws your design over the band of Lifted in the text.
-  const [cardBand, setCardBand] = useState(false);
-
-  // A preview the prompt card left on before this window loaded again
-  // would go on drawing on your prompt, so the window clears it as it
-  // mounts.
-  useEffect(() => {
-    promptPreviewSet(null).catch((e: unknown) =>
-      console.error('[main] clearing the prompt preview failed', e),
-    );
-    // And the code reader the card chose on another host.
-    promptCodeReaderSet(false).catch((e: unknown) =>
-      console.error('[main] clearing the code reader failed', e),
-    );
-  }, []);
-
-  // The prompt card reaches the terminal it sits over through these. The
-  // ref never changes, so the host never does.
-  const promptCardHost = useMemo<PromptCardHost>(
-    () => ({
-      terminal: () => termRef.current,
-      area: () => terminalAreaRef.current,
-      dock: () => document.querySelector<HTMLElement>('.prompt-dock'),
-    }),
-    [termRef],
-  );
-  const closePromptCard = () => {
-    setPromptCard(null);
-    setCardBand(false);
-    focusInput();
-  };
-
-  // Customize… in Settings, and anything else in another window, opens
-  // the card here and brings this window forward. Edit… under Customize
-  // vitals and Edit your text… on the vitals menu open it on your
-  // vitals text.
-  useTauriEvent(subscribePromptCardOpen, (request) => {
-    openPromptCard(request.view ?? 'design', request.vitals ? VITALS_TEXT_BINDING : PROMPT_BINDING);
-    void getCurrentWindow()
-      .setFocus()
-      .catch(() => {});
+  // The prompt card and the writing card over your prompt, and what
+  // opens each.
+  const {
+    promptCard,
+    cardBinding,
+    writingCard,
+    openPromptCard,
+    openWriting,
+    openWritingFromEditor,
+    charStatus,
+    writeKinds,
+    cardBand,
+    setCardBand,
+    promptCardHost,
+    closePromptCard,
+    closeWriting,
+  } = useCardRequests({
+    termRef,
+    terminalAreaRef,
+    focusInput,
+    shownPanes,
+    panelLoaded: panelLayout !== null,
   });
 
   // On quit the backend asks each window for the writes it holds back,
@@ -279,91 +241,9 @@ function MainWindow() {
     return () => cancelAnimationFrame(id);
   }, [termRef, panelOpen, panelWidth, sessionsShown, sessionsSidebar.width]);
 
-  // Click anywhere in the terminal area focuses the input. Skip when
-  // the user is selecting text (so copy still works) or clicking an
-  // actual interactive element. A middle click goes to the split.
-  const handleTerminalMouseUp = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.button === 1) {
-      middleClick(event);
-      return;
-    }
-    focusInputFromClick(event);
-  };
-
-  // Wider click handler attached to the <main>. Catches clicks outside
-  // the terminal (panels, chrome) so the user who clicks anywhere in
-  // the window — including after pulling focus back from Discord —
-  // lands with the command line ready to type.
-  const handleAppMouseUp = (event: MouseEvent<HTMLElement>) => {
-    focusInputFromClick(event);
-  };
-
-  // Shared "click anywhere focuses input" logic. Skips interactive
-  // elements (so the actual click handler runs and keeps its own
-  // focus state) and selection drags (so copy still works).
-  const focusInputFromClick = (event: MouseEvent<Element>) => {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
-    // Floating surfaces and the panel edge keep the focus they hold, so
-    // a press on a form's label or padding does not yank the caret out.
-    if (
-      target.closest(
-        'button, input, textarea, select, a, label, [role="button"], [role="menu"], [role="dialog"], [role="separator"]',
-      )
-    )
-      return;
-    const selection = window.getSelection?.();
-    if (selection && selection.toString().length > 0) return;
-    focusInput();
-  };
-
-  // Tauri reports a window-level focus event when the OS brings the
-  // app back to front (user clicked the Vosh window while it was
-  // unfocused, or alt-tabbed in). Focusing the input here is the
-  // "click-to-type" affordance the user expects on every reactivation.
-  useEffect(() => {
-    window.addEventListener('focus', focusInput);
-    return () => window.removeEventListener('focus', focusInput);
-  }, []);
-
-  // Mark the root while the window is in the background, so frame.css
-  // can dim the window title to the tertiary tone the way the OS dims
-  // an inactive title bar.
-  useEffect(() => {
-    const root = document.documentElement;
-    const mark = () => {
-      root.dataset.windowFocus = document.hasFocus() ? 'focused' : 'unfocused';
-    };
-    mark();
-    window.addEventListener('focus', mark);
-    window.addEventListener('blur', mark);
-    return () => {
-      window.removeEventListener('focus', mark);
-      window.removeEventListener('blur', mark);
-      delete root.dataset.windowFocus;
-    };
-  }, []);
-
-  // After a copy the caret should land back on the command line. The
-  // terminal copy path dispatches `vosh:focus-input` explicitly; the
-  // DOM `copy` listener is the catch-all for a browser-native copy of
-  // selected terminal text. Both skip when the copy came from a field
-  // (the command input, the find box) so that field keeps its focus,
-  // and the copy listener defers a frame so the clipboard reads the
-  // selection before focus moves off it.
-  useEffect(() => {
-    const onCopy = () => {
-      if ((document.activeElement as HTMLElement | null)?.closest('.input-row, input, textarea'))
-        return;
-      window.setTimeout(focusInput, 0);
-    };
-    window.addEventListener('vosh:focus-input', focusInput);
-    document.addEventListener('copy', onCopy);
-    return () => {
-      window.removeEventListener('vosh:focus-input', focusInput);
-      document.removeEventListener('copy', onCopy);
-    };
-  }, []);
+  // Click to type: a click in the window, the window coming to the
+  // front and a copy put the caret back on the command line.
+  const { handleTerminalMouseUp, handleAppMouseUp } = useWindowFocus({ focusInput, middleClick });
 
   // Find in scrollback. A match up in scrollback shows in the split.
   const { findOpen, openFind, findToolbarRef, finds, closeFind, submitFind, onFindResults } =
@@ -411,48 +291,42 @@ function MainWindow() {
 
   // Everything the palette can reach, rebuilt fresh at each open so
   // labels track live state.
-  const paletteDeps = (): PaletteDeps => ({
-    connected,
-    redialing: connection.redialing,
-    host: status.kind === 'connected' || status.kind === 'connecting' ? status.host : null,
-    worldName: connection.world,
-    panelOpen,
-    togglePanel: togglePanelOpen,
-    splitOpen: splitOpen || (nativeSurfaceEnabled() && getNativeScroll().offset > 0),
-    toggleSplit,
-    // The staff queues row waits for Imm.Queues, like Add a pane, but a
-    // pane the tree already shows stays listed so you can hide it.
-    paneTypes: PANE_TYPES.filter((t) => offeredPaneTypes().includes(t) || shownPanes.includes(t)),
-    paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
-    togglePane,
-    openHelp: openHelpWindow,
-    openFind,
-    openSettings: openSettingsWindow,
-    openSettingsTab,
-    connect: () => void connection.connect(),
-    newSession: () => void openNewSession(),
-    renameSession,
-    closeSession: () => closing.closeSession(),
-    sessions: {
-      rows: sessions,
+  const paletteDeps = () =>
+    paletteDepsFor({
+      connected,
+      status,
+      connection,
+      panelOpen,
+      splitOpen,
+      toggleSplit,
+      shownPanes,
+      openFind,
+      renameSession,
+      closing,
+      sessions,
       selected,
-      shown: sessionsSidebar.wanted,
-      goTo,
-      step: (step) => goTo(sessionStep(step)),
-      toggleShown: sessionsSidebar.toggle,
-    },
-    disconnect: () => void disconnectSession(getSelected()),
-    insertInput: (text) => inputRef.current?.insert(text),
-    promptShow: promptShow?.capture ? promptShow.show : null,
-    openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
-    promptDraw: promptShow?.capture ? promptShow.draw : null,
-    setPromptDraw: (on) => {
-      const session = getSelected();
-      void promptConfigGet(session)
-        .then((config) => promptConfigSet({ ...config, draw: on }, { session }))
-        .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
-    },
-  });
+      sessionsSidebar,
+      inputRef,
+      promptShow,
+      openPromptCard,
+      writeKinds,
+      charStatus,
+      openWriting,
+      readerOn,
+    });
+
+  // Show me opens the panel or the terminal menu here (showMe.ts).
+  const showMeHere = (step: StepId) =>
+    showMe(step, {
+      openPanel: () => setPanelOpen(true),
+      openTerminalMenu: () => {
+        const area = terminalAreaRef.current?.getBoundingClientRect();
+        const term = termRef.current;
+        if (!area) return;
+        const last = term ? term.rowTop(term.getSize().rows - 1) : null;
+        setTerminalMenu({ x: area.left + 12, y: last ?? area.bottom - 24 });
+      },
+    });
 
   // The window shortcuts, the macOS menu bar and #help.
   const { runCommand, themesChanged } = useAppCommands({
@@ -473,7 +347,7 @@ function MainWindow() {
     panelOpen,
     shownPanes,
     sessionCount: sessions.length,
-    sessionsShown: sessionsSidebar.wanted,
+    sessionsShown: sessionsSidebar.pressed,
     toggleSessions: sessionsSidebar.toggle,
     termRef,
     historyTermRef,
@@ -493,6 +367,7 @@ function MainWindow() {
     themeTerminalColors,
     brightBold,
     blinkText,
+    scrollbackLines,
   } = useUiConfigFollow({ onThemesChanged: themesChanged });
   // The terminal settings the Text style of your vitals draws with, in
   // the footer or the status line.
@@ -510,29 +385,8 @@ function MainWindow() {
     focusInput,
   });
 
-  // Play the tone of each alert a session rings.
-  useAlertTones();
-
-  useEffect(() => {
-    // The game sent a new prompt setting and your capture follows it.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void startGamePromptToasts().then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  // The shared catalog wizard wrote its files. Nothing this session
-  // changes saves until Vosh opens again, so say so in the terminal and
-  // in a toast that stays up.
-  useTauriEvent(subscribeMigrationApplied, () => {
-    showMigrationApplied(writeLive);
-  });
+  // The tones, toasts and notices the window raises on its own.
+  useWindowNotices(writeLive);
 
   const inputElement = (
     <Input
@@ -541,6 +395,7 @@ function MainWindow() {
       macroKeys={macroKeys}
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
+      onOpenWriting={openWritingFromEditor}
       onSelectAllTerminal={() => termRef.current?.selectAll()}
       onLocalEcho={(text, session) => {
         writeTo(session, text);
@@ -557,123 +412,69 @@ function MainWindow() {
     />
   );
 
-  const terminalAreaElement = (
-    <div
-      ref={terminalAreaRef}
-      className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
-      onMouseUp={handleTerminalMouseUp}
-      onContextMenu={(event) => {
-        // Replace the webview's default context menu with ours.
-        event.preventDefault();
-        setTerminalMenu({ x: event.clientX, y: event.clientY });
+  const terminalAreaElement = terminalArea({
+    terminalAreaRef,
+    splitOpen,
+    handleTerminalMouseUp,
+    setTerminalMenu,
+    finds,
+    opened,
+    selected,
+    findToolbarRef,
+    submitFind,
+    closeFind,
+    findOpen,
+    historyScrollPos,
+    historyReady,
+    termRef,
+    renderFamily,
+    fontSize,
+    terminalLineHeight,
+    themeTerminalColors,
+    blinkText,
+    scrollbackLines,
+    historyTermRef,
+    onHistoryLoaded,
+    onHistoryScroll,
+    onTerminalReady,
+    onScrollbackLoaded,
+    onFindResults,
+    setCellSize,
+    promptLifted,
+    dockLent,
+    dockShows,
+    promptPinned,
+    promptShow,
+    cellSize,
+    brightBold,
+  });
+
+  // The sessions sidebar, in its column or over the terminal. Over the
+  // terminal it takes the keyboard as it slides in, and picking a row or
+  // opening a session puts it away.
+  const sessionSidebar = (over: boolean) => (
+    <SessionSidebar
+      ref={sidebar}
+      rows={sessions}
+      selected={selected}
+      onSelect={(session) => {
+        if (over) sessionsSidebar.closeOverlay();
+        void select(session);
       }}
-    >
-      {/* Each opened session with its find bar open keeps it, with its
-          query, and the selected session's shows. */}
-      {[...finds]
-        .filter(([id]) => opened.includes(id))
-        .map(([id, results]) => (
-          <FindToolbar
-            key={id}
-            ref={id === selected ? findToolbarRef : undefined}
-            hidden={id !== selected}
-            results={results}
-            onFindNext={(query, opts) => submitFind(query, opts, 'next')}
-            onFindPrevious={(query, opts) => submitFind(query, opts, 'previous')}
-            onClose={closeFind}
-          />
-        ))}
-      <ScrollDepth findOpen={findOpen} />
-      {/* The containing block for the scrollback split, where the well
-          splits wrapper was. It never changes, so opening the split or
-          toggling the panel never remounts the live Terminal. */}
-      <div className="terminal-well">
-        {splitOpen && (
-          // History pane is a Resizable so the user can drag the
-          // divider between history and live to set the split ratio.
-          // anchor=top places the panel at the top with the drag
-          // handle on the bottom edge facing the live pane below.
-          // Lazy mount. A hidden Terminal cannot be measured by
-          // FitAddon (its container is display:none, bounding rect
-          // 0x0) so writes wrap at 1-3 columns and the scrollback
-          // arrives mangled. The initial scroll runs in
-          // onScrollbackLoaded — onReady fires before loadScrollback
-          // resolves, and a scrollPages call on an empty terminal
-          // is a no-op that the next write would override anyway.
-          <Resizable
-            storageKey="vosh.layout.splitHistoryHeight"
-            defaultSize={240}
-            minSize={80}
-            maxSize={1200}
-            reservePx={120}
-            className={`terminal-pane terminal-pane-history${historyReady ? '' : ' terminal-pane-history-priming'}`}
-            handleLabel="resize scrollback split"
-            snapPx={() => termRef.current?.cellHeight() ?? 0}
-          >
-            <Terminal
-              key={selected}
-              session={selected}
-              fontFamily={renderFamily}
-              fontSize={fontSize}
-              lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
-              themeTerminalColors={themeTerminalColors}
-              blinkText={blinkText}
-              quiet
-              onReady={(handle) => {
-                historyTermRef.current = handle;
-              }}
-              onScrollbackLoaded={onHistoryLoaded}
-              onScrollPosition={onHistoryScroll}
-            />
-            {historyScrollPos && historyScrollPos.max > 0 && (
-              <div className="scrollback-indicator" aria-live="polite">
-                ↑ {historyScrollPos.back} / {historyScrollPos.max}
-              </div>
-            )}
-          </Resizable>
-        )}
-        {/* One live terminal for each session this window opened, keyed
-            by session, so a selection only shows one and hides another.
-            A session launch restored opens as its first selection
-            finishes, and its scrollback loads then. */}
-        <div className="terminal-pane terminal-pane-live">
-          {opened.map((id) => (
-            <Terminal
-              key={id}
-              session={id}
-              shown={id === selected}
-              fontFamily={renderFamily}
-              fontSize={fontSize}
-              lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
-              themeTerminalColors={themeTerminalColors}
-              blinkText={blinkText}
-              onReady={onTerminalReady(id)}
-              onScrollbackLoaded={onScrollbackLoaded(id)}
-              onResultsChanged={(event) => onFindResults(id, event)}
-              onCellSize={setCellSize}
-              lifted={promptLifted}
-              lentRows={dockLent}
-              anchorBottom={dockShows}
-            />
-          ))}
-        </div>
-      </div>
-      {/* Your prompt pinned above the command line. It takes one row from
-          the terminal only while your prompt shows pinned and a prompt
-          is pinned, and borrows the rows past its first from the bottom
-          of the live pane. */}
-      {promptPinned && promptShow && cellSize && (
-        <PromptDock
-          state={promptShow}
-          cell={cellSize}
-          fontSize={fontSize}
-          themeTerminalColors={themeTerminalColors}
-          brightBold={brightBold}
-          renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
-          blinkText={blinkText}
-        />
-      )}
-    </div>
+      onNewSession={() => {
+        if (over) sessionsSidebar.closeOverlay();
+        void openNewSession();
+      }}
+      onClose={closing.closeSession}
+      takeFocus={over}
+      onCaret={focusInput}
+      onRename={(session, name) => void rename(session, name)}
+      onEditConnection={() => requestSessionMenu({ mode: 'edit' })}
+      onDisconnect={(session) =>
+        void disconnectSession(session).catch((e: unknown) => handleError(String(e), session))
+      }
+      onMove={(session, to) => void move(session, to)}
+    />
   );
 
   // The shell gives each slot a fixed grid cell under a fixed parent,
@@ -691,24 +492,11 @@ function MainWindow() {
       onMouseUp={handleAppMouseUp}
       sessionsWidth={sessionsSidebar.width}
       onSessionsWidth={sessionsSidebar.setWidth}
-      sessions={
-        sessionsShown ? (
-          <SessionSidebar
-            ref={sidebar}
-            rows={sessions}
-            selected={selected}
-            onSelect={select}
-            onNewSession={() => void openNewSession()}
-            onClose={closing.closeSession}
-            onHide={sessionsSidebar.hide}
-            onCaret={focusInput}
-            onRename={(session, name) => void rename(session, name)}
-            onEditConnection={() => requestSessionMenu({ mode: 'edit' })}
-            onDisconnect={(session) =>
-              void disconnectSession(session).catch((e: unknown) => handleError(String(e), session))
-            }
-            onMove={(session, to) => void move(session, to)}
-          />
+      sessions={sessionsShown ? sessionSidebar(false) : null}
+      sessionsOverlay={sessionsSidebar.overlay ? sessionSidebar(true) : null}
+      sessionsToggle={
+        sessionsSidebar.toggleable ? (
+          <SessionsToggle pressed={sessionsSidebar.pressed} onToggle={sessionsSidebar.toggle} />
         ) : null
       }
       titleBand={
@@ -726,7 +514,18 @@ function MainWindow() {
           onCloseSession={closing.closeSession}
         />
       }
+      snoop={
+        <SnoopSplit
+          session={selected}
+          fontFamily={renderFamily}
+          fontSize={fontSize}
+          lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
+          themeTerminalColors={themeTerminalColors}
+          onCaret={focusInput}
+        />
+      }
       terminal={terminalAreaElement}
+      reader={<ScreenReaderFeed />}
       input={inputElement}
       statusLine={
         <StatusLine
@@ -737,13 +536,29 @@ function MainWindow() {
       }
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
-      <ReconnectNotice
-        session={selected}
-        onTryAgain={() => void connection.connect()}
-        onError={handleError}
+      <CornerNotices
+        reconnect={
+          <ReconnectNotice
+            session={selected}
+            onTryAgain={() => void connection.connect()}
+            onError={handleError}
+          />
+        }
+        offer={<WritingOffer onOpen={openWriting} />}
       />
-      <UpdateNotice />
-      <Toasts />
+      <GetStarted
+        play={{
+          live: connected,
+          character: connection.character,
+          connect: () => void connection.connect(),
+        }}
+        covered={promptCard !== null}
+        host={promptCardHost}
+        cell={cellSize}
+        show={promptShow}
+        onShowMe={showMeHere}
+        focusInput={focusInput}
+      />
       {terminalMenu && (
         <TerminalMenu
           x={terminalMenu.x}
@@ -753,9 +568,12 @@ function MainWindow() {
           inputRef={inputRef}
           onOpenFind={openFind}
           onCustomizePrompt={() => openPromptCard('design')}
+          writeKinds={writeKinds}
+          onWrite={(kind) => openWriting(kind)}
           onClose={() => setTerminalMenu(null)}
         />
       )}
+      <CoachRing />
       {promptCard && (
         // A selection mounts the card again for the session it brings to
         // the front, and the card it leaves puts that session's live
@@ -774,7 +592,25 @@ function MainWindow() {
           themeTerminalColors={themeTerminalColors}
           brightBold={brightBold}
           renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+          onPromptDone={() => markDone('prompt')}
           onClose={closePromptCard}
+        />
+      )}
+      {writingCard && (
+        // A selection mounts the card again for the session it brings to
+        // the front.
+        <WritingCard
+          key={selected}
+          session={selected}
+          request={writingCard}
+          host={promptCardHost}
+          cell={cellSize}
+          fontFamily={renderFamily}
+          fontSize={fontSize}
+          themeTerminalColors={themeTerminalColors}
+          brightBold={brightBold}
+          renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+          onClose={closeWriting}
         />
       )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={closePalette} />}

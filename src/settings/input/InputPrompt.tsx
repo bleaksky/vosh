@@ -54,16 +54,15 @@ import { PreviewBlock } from './PromptPreview';
 import { useShown } from '../shownProfile';
 import { Button, Row, Section, Toggle } from '../../ui';
 
-// Settings, Input, Prompt (section 7 step 12 of the prompt build spec,
-// boards P12 and P13, with the Settings specimens on P0 and P14). One
-// card in three parts: your game's prompt, then Draw your own prompt with
-// Customize… and where your prompt shows, then the preview. Every change
-// saves to the profile's [prompt] table through the prompt commands, and
-// the section reads the table again whenever anything changes it: the
-// card, a command such as #prompt, the game sending your prompt setting,
-// a profile switch, or a connect. The prompt commands read a session's
-// prompt engine, so each names the session the Settings header names,
-// which plays the profile Settings shows.
+// Settings, Input, Prompt. One card in three parts: your game's prompt,
+// then Draw your own prompt with Customize… and where your prompt shows,
+// then the preview. Every change saves to the profile's [prompt] table
+// through the prompt commands, and the section reads the table again
+// whenever anything changes it: the card, a command such as #prompt, the
+// game sending your prompt setting, a profile switch, or a connect. The
+// prompt commands read a session's prompt engine, so each names the
+// session the Settings header names, which plays the profile Settings
+// shows.
 
 /** What the section reads to draw itself. */
 interface PromptData {
@@ -333,7 +332,7 @@ export function PromptSection({
 // ---------------------------------------------------------------------
 
 interface DrawRowProps {
-  /** The profile reads a prompt. Without one the switch waits (P13). */
+  /** The profile reads a prompt. Without one the switch waits. */
   capture: boolean;
   draw: boolean;
   description: string;

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
-import { SESSION_MENU_EVENT, type SessionMenuRequest } from '../lib/appMenu';
-import { isMacPlatform, shortcutLabel } from '../lib/shortcuts';
+import { ADD_PANE_MENU_EVENT, SESSION_MENU_EVENT, type SessionMenuRequest } from '../lib/appMenu';
+import { ariaKeyshortcuts, isMacPlatform, shortcutLabel } from '../lib/shortcuts';
 import { paneKey, paneRef, type PaneRef, type PaneSplit } from '../panel/paneLayout';
 import {
   PANE_LABELS,
@@ -26,22 +26,22 @@ import {
 } from '../ui/icons';
 import { PanelIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
-import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { ShellMenu } from './ShellMenu';
 import { chatRefToAdd } from '../panel/paneActions';
 import { TitleButton } from './TitleButton';
 
-// The 32 px title band across the top of the window (SPEC 1 and 9). No
-// fill and no line of its own: the terminal ground runs up under it and
-// the panel ground runs up on the right. Its empty areas drag the
-// window. The session button sits centered over the terminal column.
-// Add a pane, Search commands, the panel toggle, and Settings sit at
-// the right, over the panel. On macOS the native traffic lights own the
-// left corner. Windows and Linux draw minimize, maximize, and close
-// here, after Settings, and the panel draws at least 248 px wide there
-// to keep all seven over it. They have no menu bar, so there the gear
-// is how you find Settings.
-
-const ADD_MENU_WIDTH = 200;
+// The 32 px title band across the top of the window. No fill and no
+// line of its own: the terminal ground runs up under it and the panel
+// ground runs up on the right. Its empty areas drag the window. The
+// session button sits centered over the terminal column. The sessions
+// toggle belongs to the frame (AppShell), which holds it at the band's
+// left end while the sidebar hides. Add a pane, Search commands, the
+// panel toggle, and Settings sit at the right, over the panel. On macOS
+// the native traffic lights own the left corner. Windows and Linux draw
+// minimize, maximize, and close here, after Settings, and the panel
+// draws at least 248 px wide there to keep all seven over it. They have
+// no menu bar, so there the gear is how you find Settings.
 
 interface Props {
   connection: Connection;
@@ -109,8 +109,13 @@ export function TitleBand({
       setSession((s) => ({ request, key: s.key + 1 }));
       setMenu('session');
     };
+    const onAddPane = () => setMenu('add');
     window.addEventListener(SESSION_MENU_EVENT, onRequest);
-    return () => window.removeEventListener(SESSION_MENU_EVENT, onRequest);
+    window.addEventListener(ADD_PANE_MENU_EVENT, onAddPane);
+    return () => {
+      window.removeEventListener(SESSION_MENU_EVENT, onRequest);
+      window.removeEventListener(ADD_PANE_MENU_EVENT, onAddPane);
+    };
   }, []);
   // Hiding the panel takes Add a pane with it, so its menu closes too
   // instead of coming back the next time the panel shows.
@@ -147,7 +152,8 @@ export function TitleBand({
         <button
           type="button"
           className="shell-icon-button"
-          aria-label={`Search commands (${shortcutLabel(APP_SHORTCUTS.palette)})`}
+          aria-label="Search commands"
+          aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS.palette, mac)}
           // The palette leaves presses on its own button to this toggle.
           data-palette-anchor=""
           onClick={onTogglePalette}
@@ -161,6 +167,7 @@ export function TitleBand({
           // of it ("Hide panel, pressed" reads backward).
           aria-label={panelLabel}
           title={`${panelLabel} (${shortcutLabel(APP_SHORTCUTS.panel)})`}
+          aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS.panel, mac)}
           onClick={onTogglePanel}
         >
           <PanelIcon />
@@ -170,6 +177,7 @@ export function TitleBand({
           className="shell-icon-button"
           aria-label="Settings"
           title={`Settings (${shortcutLabel(APP_SHORTCUTS.settings)})`}
+          aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS.settings, mac)}
           onClick={(e) => {
             onOpenSettings();
             // WebView2 and WebKitGTK focus a button on click. Left on the
@@ -231,40 +239,36 @@ function AddPaneMenu({
   // A second Chat pane starts on tell, and the menu says so.
   const chatOnTell = chatRefToAdd(paneTree).props.channel === 'tell';
   return (
-    <ShellMenu
-      anchor={anchor}
-      align="end"
-      width={ADD_MENU_WIDTH}
-      label="Add a pane"
-      onClose={onClose}
-    >
+    <ShellMenu anchor={anchor} align="end" label="Add a pane" onClose={onClose}>
       {builtIns.length === 0 && luaToAdd.length === 0 && (
-        <p className="shell-menu-note">Every pane is showing.</p>
+        <li role="none" className="menu-note">
+          Every pane is showing.
+        </li>
       )}
       {builtIns.map((pane) => (
-        <ShellMenuItem
+        <MenuItem
           key={pane}
           trailing={
             pane === 'chat' && chatOnTell ? (
-              <span className="shell-menu-kbd">starts on Tell</span>
+              <span className="menu-hint">starts on Tell</span>
             ) : undefined
           }
           onSelect={() => onAdd(paneRef(pane))}
         >
           {PANE_LABELS[pane]}
-        </ShellMenuItem>
+        </MenuItem>
       ))}
-      {builtIns.length > 0 && luaToAdd.length > 0 && <ShellMenuSeparator />}
+      {builtIns.length > 0 && luaToAdd.length > 0 && <MenuSeparator />}
       {luaToAdd.map((offer) => {
         const ref = luaPaneRef(offer);
         return (
-          <ShellMenuItem
+          <MenuItem
             key={paneKey(ref)}
-            trailing={<span className="shell-menu-kbd">{offer.plugin}</span>}
+            trailing={<span className="menu-hint">{offer.plugin}</span>}
             onSelect={() => onAdd(ref)}
           >
             {paneLabel(ref)}
-          </ShellMenuItem>
+          </MenuItem>
         );
       })}
     </ShellMenu>

@@ -1,3 +1,4 @@
+import { listJoin } from '../../lib/text';
 import type { ChatLine } from '../../stores/gmcp/chatStore';
 import { GAME_CHANNEL_SLOTS } from '../../theme/gameChannels';
 import { isLeaf, type PaneLeaf, type PaneNode, type PaneRef } from '../paneLayout';
@@ -100,12 +101,6 @@ export function channelName(channel: string): string {
   return channel.charAt(0).toUpperCase() + channel.slice(1);
 }
 
-/** Names as a sentence lists them, Gtell, Say and Tell. */
-function spoken(names: string[]): string {
-  if (names.length < 2) return names.join('');
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-}
-
 /** What the filter reads as in the pane's header and its label. */
 export function chatFilterLabel(filter: ChatFilter): string {
   switch (filter.kind) {
@@ -125,14 +120,14 @@ export function chatFilterLabel(filter: ChatFilter): string {
 export function chatEmptyText(filter: ChatFilter, owned: ReadonlySet<string>): string {
   switch (filter.kind) {
     case 'channels':
-      return `${spoken(filter.channels.map(channelName))} messages show up here as they come in.`;
+      return `${listJoin(filter.channels.map(channelName))} messages show up here as they come in.`;
     case 'none':
       return 'Pick the channels this pane shows from the menu up top.';
     case 'all':
       return 'Chat appears when someone talks on a channel.';
     default: {
       const names = [...owned].sort().map(channelName);
-      const but = names.length > 0 ? ` but ${spoken(names)}` : '';
+      const but = names.length > 0 ? ` but ${listJoin(names)}` : '';
       return `Messages on every channel${but} show up here as they come in.`;
     }
   }

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { buildSections, sectionKeyOf, type ListEntry } from '../../automation/automationList';
+import controlsCss from '../../styles/controls.css?raw';
 import settingsCss from '../../styles/settings.css?raw';
 import { ItemList, type ItemListProps } from './ItemList';
 import { HIDES_PROMPT_NOTE } from './TriggersEditor';
@@ -99,6 +100,23 @@ describe('the warn ring in the Automation list', () => {
     expect(noteOf('c')).toBe('Second note.');
   });
 
+  // A fix that changed a row you edited rings the row on or off, and
+  // its note wins over the prompt note.
+  it('rings a row a fix flagged while it is off too', () => {
+    const fix = 'A fix to Disarms and fading buffs changed Then send, a row you edited.';
+    const html = renderList({
+      sections: buildSections([
+        { ...entry('a', 'disarm.secondary', false), warn: fix },
+        { ...entry('b', 'my-capture', true), warn: fix },
+      ]),
+      warnNotes: new Map([['my-capture', HIDES_PROMPT_NOTE]]),
+    });
+    expect(rowClass(html, 'a')).toBe('st-auto-row is-warn');
+    expect(rowClass(html, 'b')).toBe('st-auto-row is-warn');
+    expect(html).toContain(`>${fix}<`);
+    expect(html).not.toContain('This trigger hides your prompt');
+  });
+
   it('says why a trigger carries it in plain sentences', () => {
     expect(HIDES_PROMPT_NOTE).toMatch(/^This trigger hides your prompt/);
     expect(HIDES_PROMPT_NOTE).not.toMatch(/[;:–—]| - /);
@@ -140,7 +158,7 @@ describe('collapsible groups in the Automation list', () => {
     expect(button).toContain('aria-expanded="false"');
     expect(button).not.toContain('aria-controls');
     expect(button).toContain(
-      '<span class="st-auto-fold-count">2<span class="st-visually-hidden"> triggers</span></span>',
+      '<span class="st-auto-fold-count">2<span class="visually-hidden"> triggers</span></span>',
     );
     expect(html).not.toContain('data-uid="c1"');
     expect(html).not.toContain('data-uid="c2"');
@@ -151,7 +169,7 @@ describe('collapsible groups in the Automation list', () => {
 
   it('counts one item in the singular', () => {
     const html = renderList({ sections, selected: 'u', folded: new Set(['g:idle']) });
-    expect(heading(html, 'g:idle')).toContain('>1<span class="st-visually-hidden"> trigger</span>');
+    expect(heading(html, 'g:idle')).toContain('>1<span class="visually-hidden"> trigger</span>');
   });
 
   it('gives the ungrouped items at the top no heading to fold', () => {
@@ -233,17 +251,16 @@ describe('the switch on a group heading', () => {
     expect(renderList({ sections })).not.toContain('data-group-switch');
   });
 
-  it('waits while the loadouts decide the group, and says which', () => {
+  it('still turns a group the loadouts decide, and says which', () => {
     const html = renderList({ sections, groupSwitches: switches });
     const idle = switchOf(html, 'idle') ?? '';
-    expect(idle).toMatch(/disabled=""/);
+    expect(idle).not.toMatch(/disabled/);
     const note = /aria-describedby="([^"]+)"/.exec(idle)?.[1];
     expect(note).toBeTruthy();
     expect(html).toContain(
       `<p id="${note}" class="st-auto-groupnote">The Healer loadout leaves this group off.</p>`,
     );
-    // The heading carries the same note, since a switch that waits takes
-    // no focus.
+    // The heading carries the same note, so you hear it on either stop.
     const heading = /<button[^>]*data-fold="g:idle"[^>]*>/.exec(html)?.[0] ?? '';
     expect(heading).toContain(`aria-describedby="${note}"`);
     expect(switchOf(html, 'combat')).not.toMatch(/disabled|aria-describedby/);
@@ -261,7 +278,8 @@ describe('the switch on a group heading', () => {
     const html = renderList({ sections, groupSwitches: turned });
     const idle = switchOf(html, 'idle') ?? '';
     expect(idle).toMatch(/checked=""/);
-    expect(idle).toMatch(/disabled=""/);
+    expect(idle).not.toMatch(/disabled/);
+    expect(idle).toMatch(/aria-describedby="[^"]+"/);
     expect(html).toContain(
       'class="st-auto-groupnote">The Healer loadout turns this group off again when you next launch Vosh, switch profiles, or save Loadouts.</p>',
     );
@@ -287,5 +305,78 @@ describe('the switch on a group heading', () => {
         }),
       ),
     ).toEqual(['g:combat', 'combat']);
+    // A switch the loadouts decide takes Tab from its heading the same way.
+    expect(
+      tabbable(
+        renderList({
+          sections,
+          groupSwitches: switches,
+          selected: 'c1',
+          folded: new Set(['g:idle']),
+        }),
+      ),
+    ).toEqual(['g:idle', 'idle']);
+  });
+});
+
+// A suggested preset that is off wears the accent ring where the off ring
+// sits, and a reader hears Suggested, off.
+describe('the suggested ring in the Automation list', () => {
+  const html = renderList({
+    sections: buildSections([
+      { ...entry('a', 'Cures and heals', false), dot: 'suggested' },
+      { ...entry('b', 'Herb labels', false), anchor: 'presets:herb_labels' },
+      { ...entry('c', 'Your damage verbs', true), dot: 'suggested' },
+    ]),
+  });
+  const dot = (uid: string) => {
+    const row = new RegExp(`data-uid="${uid}"[^]*?</button>`).exec(html)?.[0] ?? '';
+    return {
+      dot: /class="(st-auto-dot[^"]*)"/.exec(row)?.[1],
+      heard: />(Enabled|Off|Suggested, off)</.exec(row)?.[1],
+    };
+  };
+
+  it('rings a suggested row only while it is off', () => {
+    expect(dot('a')).toEqual({ dot: 'st-auto-dot dot is-off is-accent', heard: 'Suggested, off' });
+    expect(dot('b')).toEqual({ dot: 'st-auto-dot dot is-off', heard: 'Off' });
+    expect(dot('c')).toEqual({ dot: 'st-auto-dot dot is-success', heard: 'Enabled' });
+  });
+
+  it('draws the ring in the accent where the off ring sits', () => {
+    expect(controlsCss).toMatch(/\.dot\.is-accent \{\s*--dot: var\(--accent\);\s*\}/);
+    expect(controlsCss).toMatch(
+      /\.dot\.is-off \{\s*background: transparent;\s*box-shadow: inset 0 0 0 1\.25px var\(--dot, var\(--tertiary\)\);\s*\}/,
+    );
+  });
+
+  it('puts a row anchor on the row a link opens', () => {
+    expect(html).toMatch(/data-uid="b"[^>]*data-st-anchor="presets:herb_labels"/);
+    expect(html).not.toMatch(/data-uid="a"[^>]*data-st-anchor/);
+  });
+});
+
+// A preset you edited wears a 12 px pencil just before its dot, and a
+// reader hears edited after its name.
+describe('the pencil of an edited preset', () => {
+  const html = renderList({
+    sections: buildSections([
+      { ...entry('a', 'Disarms and fading buffs', true), edited: true },
+      { ...entry('b', 'Herb labels', true) },
+    ]),
+  });
+  const row = (uid: string) => new RegExp(`data-uid="${uid}"[^]*?</button>`).exec(html)?.[0] ?? '';
+
+  it('draws the pencil before the dot and names the row edited', () => {
+    expect(row('a')).toMatch(
+      /Disarms and fading buffs<span class="visually-hidden">, edited<\/span><\/span><svg width="12" height="12"[^>]*class="st-auto-mark"[^]*?<\/svg><span class="st-auto-dot dot is-success"/,
+    );
+    expect(row('b')).not.toMatch(/st-auto-mark|edited/);
+  });
+
+  it('sets the pencil in the tertiary color right before the dot', () => {
+    expect(settingsCss).toMatch(
+      /\.st-auto-mark \{\s*flex: none;\s*margin-left: auto;\s*color: var\(--tertiary\);\s*\}\s*\.st-auto-mark \+ \.st-auto-dot \{\s*margin-left: 0;\s*\}/,
+    );
   });
 });

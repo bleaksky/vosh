@@ -1,4 +1,4 @@
-//! Per-profile TOML serialization. Phase 9.
+//! Per-profile TOML serialization.
 //!
 //! [`ProfileConfig`] is a serde-friendly snapshot of the parts of a
 //! [`crate::profile::live::Profile`] that survive across app launches.
@@ -15,10 +15,14 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 
 use crate::disk::atomic::{hold_unread, is_unread, write_with_backup};
+use crate::loadouts::preset_edits::PresetEdits;
 use crate::profile::live::{Macro, Profile, Timer};
 use crate::profile::set::ProfileSet;
 use crate::profile::shared::GlobalConfig;
-use crate::profile::ui::{coerce_affects_thresholds, UiConfig};
+use crate::profile::ui::{
+    coerce_affects_thresholds, coerce_input_echo_mark_text, read_input_echo_mark,
+    read_theme_follow, set_input_echo_mark, set_theme_follow, UiConfig,
+};
 use crate::tick::{TickConfig, TickSettings};
 
 #[derive(Debug, Error)]
@@ -85,15 +89,21 @@ pub(crate) struct ProfileConfig {
         with = "vosh_prompt::config::file_table"
     )]
     pub prompt: Option<vosh_prompt::PromptConfig>,
-    /// What each alert preset does, by preset id, the `[alerts]` table
-    /// of Alerts Q5. Whether a preset rings is in `ui.enabled_presets`,
+    /// What each alert preset does, by preset id, the `[alerts]` table.
+    /// Whether a preset rings is in `ui.enabled_presets`,
     /// as for any preset. Left out while it holds none, and a build that
-    /// knows no alert skips it (D14).
+    /// knows no alert skips it, so a rollback still loads the file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub alerts: BTreeMap<String, AlertParts>,
-    /// Vosh dials again after the link drops while you play (Alerts Q13
-    /// and Q14). On for every profile, so the file says
-    /// `reconnect = false` only once you turn it off.
+    /// Your edits to the presets, the `[preset_edits]` table, beside
+    /// `ui.enabled_presets` as `[alerts]` is. Left out while it holds
+    /// none, and a build that knows no edit
+    /// skips it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub preset_edits: PresetEdits,
+    /// Vosh dials again after the link drops while you play. On for
+    /// every profile, so the file says `reconnect = false` only once
+    /// you turn it off.
     #[serde(default, skip_serializing_if = "OnSwitch::is_on")]
     pub reconnect: OnSwitch,
 }
@@ -147,10 +157,9 @@ impl GroupFolders {
 /// target triggers under `room_triggers`. Builds up to 0.8.0 read
 /// `triggers` with `line` and `prompt` as the only targets, and a `room`
 /// or a `room_target` there would fail the whole file, so a rollback
-/// would start on defaults (D14).
-/// They skip the key they do not know, and a load here puts the two
-/// lists back together, so the field holds every trigger in memory. Use
-/// it on a `Vec<Trigger>` field with
+/// would start on defaults. They skip the key they do not know, and a
+/// load here puts the two lists back together, so the field holds every
+/// trigger in memory. Use it on a `Vec<Trigger>` field with
 /// `#[serde(flatten, with = "trigger_lists")]`.
 pub(crate) mod trigger_lists {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -245,6 +254,7 @@ impl ProfileConfig {
             group_folders: profile.group_folders.clone(),
             prompt: None,
             alerts: profile.alerts.clone(),
+            preset_edits: profile.preset_edits.clone(),
             reconnect: profile.reconnect,
         };
         config.set_prompt(profile.prompt.clone());
@@ -380,6 +390,7 @@ impl ProfileConfig {
             .collect();
         profile.group_folders.clone_from(&self.group_folders);
         profile.alerts.clone_from(&self.alerts);
+        profile.preset_edits.clone_from(&self.preset_edits);
         profile.reconnect = self.reconnect;
 
         warnings
@@ -396,6 +407,7 @@ impl ProfileConfig {
         self.triggers.clear();
         self.macros.clear();
         self.alerts.clear();
+        self.preset_edits.clear();
     }
 
     /// Write the profile file at `path`. The first save that writes a
@@ -422,6 +434,12 @@ impl ProfileConfig {
     pub(crate) fn from_toml(text: &str) -> Result<Self, ConfigError> {
         let mut config: ProfileConfig = toml::from_str(text)?;
         config.merge_legacy_prompt();
+        let mode = read_theme_follow(config.ui.follow_system_appearance, &config.ui.theme_follow);
+        set_theme_follow(&mut config.ui, mode);
+        let mark = read_input_echo_mark(config.ui.input_echo_caret, &config.ui.input_echo_mark);
+        set_input_echo_mark(&mut config.ui, mark);
+        config.ui.input_echo_mark_text =
+            coerce_input_echo_mark_text(std::mem::take(&mut config.ui.input_echo_mark_text));
         // A hand edit can set almost gone above running out. Read it as
         // running out, as a save would write it.
         (
@@ -634,6 +652,45 @@ mod tests {
         let mut config = ProfileConfig::from_profile(&profile);
         config.clear_catalog_items();
         let leftover = &config.alerts;
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn the_preset_edits_round_trip_and_leave_the_file_alone_while_empty() {
+        use crate::loadouts::preset_edits::{EditRow, PresetEdit};
+        let mut profile = Profile::default();
+        let text = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+        assert!(!text.contains("preset_edits"), "{text}");
+        let send = EditRow {
+            value: "".into(),
+            was: "get 1.;wield 1.".into(),
+            seen: Some("get 1.;dual 1.".into()),
+        };
+        let edit = PresetEdit {
+            triggers: BTreeMap::from([(
+                "disarm.secondary".into(),
+                BTreeMap::from([("send".into(), send)]),
+            )]),
+            ..PresetEdit::default()
+        };
+        profile.preset_edits.insert("disarm_buff_fade".into(), edit);
+        let text = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+        assert!(
+            text.contains(
+                "[preset_edits.disarm_buff_fade.triggers.\"disarm.secondary\".send]\n\
+                 value = \"\"\nwas = \"get 1.;wield 1.\"\nseen = \"get 1.;dual 1.\"\n"
+            ),
+            "{text}"
+        );
+        let mut again = Profile::default();
+        ProfileConfig::from_toml(&text)
+            .unwrap()
+            .apply_to(&mut again);
+        assert_eq!(again.preset_edits, profile.preset_edits);
+        // Loadout mode keeps them in catalog.toml.
+        let mut config = ProfileConfig::from_profile(&profile);
+        config.clear_catalog_items();
+        let leftover = &config.preset_edits;
         assert!(leftover.is_empty(), "{leftover:?}");
     }
 
@@ -1061,7 +1118,8 @@ mod prompt_tests {
     fn a_launch_with_no_profile_file_starts_fresh() {
         let dir = tempfile::tempdir().unwrap();
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-        assert!(!set.active_path().exists());
+        // A profile the index lists with no file of its own.
+        std::fs::remove_file(set.active_path()).unwrap();
         let mut live = Profile::default();
         let leftover = &load_at_launch(&set, &mut live);
         assert!(leftover.is_empty(), "{leftover:?}");

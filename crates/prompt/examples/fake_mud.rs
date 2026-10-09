@@ -1,5 +1,5 @@
 //! A fake Aabahran on a local port, for scripted runs of the app with a
-//! scratch HOME (section 9 of the build spec).
+//! scratch HOME.
 //!
 //! It serves the test kit's fake game, one [`Mud`] per connection, so the
 //! app meets the same pulses the tests read. Run it with

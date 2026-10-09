@@ -9,8 +9,7 @@
 export const MAP_BAND_ROOM_ROWS = 2;
 
 /** The most rows the band holds: the room's two rows and two people,
- *  the approved board's room and two people with the terrain row added
- *  under the room. Every row here is height the drawing gives up,
+ *  with the terrain row under the room. Every row here is height the drawing gives up,
  *  filled or not. */
 export const MAP_BAND_MAX_ROWS = MAP_BAND_ROOM_ROWS + 2;
 

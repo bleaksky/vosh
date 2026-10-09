@@ -1,7 +1,7 @@
-// The four alert tones (Alerts Q4). A trigger's Alert row, an alert
-// preset and mud.alert each name one, and the main window plays it when
-// the session rings the alert. Web Audio draws them the way it draws the
-// tick in tickSound.ts, so Vosh ships no sound file.
+// The four alert tones. A trigger's Alert row, an alert preset and
+// mud.alert each name one, and the main window plays it when the session
+// rings the alert. Web Audio draws them the way it draws the tick in
+// tickSound.ts, so Vosh ships no sound file.
 //
 // While the main window hides on macOS, Rust plays a system sound in the
 // tone's place (system_sound in src-tauri/src/alert/mac.rs). Each tone
@@ -11,7 +11,7 @@
 
 type AudioWindow = typeof window & { webkitAudioContext?: typeof AudioContext };
 
-/** The tones an alert can name, in the order Alerts Q4 gives them. */
+/** The tones an alert can name, in order. */
 export const ALERT_TONES = [
   { value: 'chime', label: 'Chime' },
   { value: 'bell', label: 'Bell' },

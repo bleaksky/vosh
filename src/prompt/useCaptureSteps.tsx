@@ -1,8 +1,7 @@
 // The prompt card's capture steps, which tell Vosh how to read your
-// prompt: the codes the game sent (P3), your setting when the game sent
-// none (P2), or the line another game prints (P15) and the names of its
-// numbers. A capture they save takes the card on to the designs to start
-// from (P4).
+// prompt: the codes the game sent, your setting when the game sent
+// none, or the line another game prints and the names of its numbers. A
+// capture they save takes the card on to the designs to start from.
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -85,10 +84,11 @@ export function useCaptureSteps({
   const [pointed, setPointed] = useState<PointedLine | null>(null);
   const [pickFrom, setPickFrom] = useState(0);
   const [newest, setNewest] = useState<PromptCheckRead | null>(null);
-  // The game's newest line, which P2 marks whole while no row shows it.
+  // The game's newest line, which the setting step marks whole while no
+  // row shows it.
   const [newestLine, setNewestLine] = useState<string | null>(null);
-  // The line B2 proposes, and the one P15 names, as the terminal marks
-  // them.
+  // The line Vosh proposes as your prompt, and the one you name, as the
+  // terminal marks them.
   const [pointShown, setPointShown] = useState<ScreenAsk | null>(null);
   const [lineTriggers, setLineTriggers] = useState<PromptLineTrigger[]>([]);
 
@@ -107,7 +107,7 @@ export function useCaptureSteps({
     setLineTriggers([]);
   }, []);
 
-  /** Change codes… in More: P2 with the codes the profile holds. */
+  /** Change codes… in More: the setting step with the codes the profile holds. */
   const changeCodes = () => {
     setEntryCodes(
       config?.capture.kind === 'aabahran'
@@ -125,8 +125,8 @@ export function useCaptureSteps({
     setStep(codeReaderStep(gameSent && game !== null));
   };
 
-  // The codes P3 reads: the ones the game sent on the new build, or the
-  // ones you told Vosh on P2.
+  // The codes Vosh reads: the ones the game sent on the new build, or
+  // the ones you told it.
   const codes: CodesRequest | null =
     gameSent && game && !request
       ? {
@@ -139,7 +139,8 @@ export function useCaptureSteps({
       : request;
 
   /** Save a capture, and the first time this profile reads your prompt,
-   *  name the Line triggers that matched it (D6). */
+   *  name the Line triggers that matched it, since they no longer see
+   *  it. */
   const saveCapture = (next: PromptCapture) => {
     if (!config) return;
     const first = firstCapture(config.capture);

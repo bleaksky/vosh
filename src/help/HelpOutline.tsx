@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { helpItemId, type OutlineEntry } from './helpNav';
 import { scrollWithin } from '../lib/scrollWithin';
 
-// On this page (the HelpLongTopic board): beside a long reference list,
-// a row per item in mono 11.5 on the 24 px pitch. The item you are
-// reading carries the selected row fill, and a click scrolls to the item
-// and flashes it the way a Settings search hit flashes its row.
+// On this page: beside a long reference list, a row per item in mono
+// 11.5 on the 24 px pitch. The item you are reading carries the selected
+// row fill, and a click scrolls to the item and flashes it the way a
+// Settings search hit flashes its row.
 
 /** How far under the band an item sits once the outline scrolls to
  *  it, and the line that decides which item you are reading. */

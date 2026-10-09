@@ -20,12 +20,12 @@ import { Button, Row, Segmented } from '../../ui';
 import { useShown } from '../shownProfile';
 import { useGalleryVitals, usePanelText } from './usePanelVitals';
 
-// Customize vitals under Text (board 5 of the Vitals Styles review):
-// your text decides which vitals show, their order, their colors and
-// how values read, so the section holds Your vitals text and the
-// preview of Settings, Input, Prompt, with Now, Low health, Fight and
-// Lament, drawn on the panel ground at your panel's width as the footer
-// draws it. The preview never changes the vitals on screen.
+// Customize vitals under Text: your text decides which vitals show,
+// their order, their colors and how values read, so the section holds
+// Your vitals text and the preview of Settings, Input, Prompt, with
+// Now, Low health, Fight and Lament, drawn on the panel ground at your
+// panel's width as the footer draws it. The preview never changes the
+// vitals on screen.
 
 /** Whether the Forsaken Lands rules hold for `session`, which brings
  *  the Lament preview. */
@@ -100,7 +100,7 @@ export function VitalsTextRows({ config }: { config: UiConfig }) {
     <>
       <Row
         label="Your vitals text"
-        description="Write your vitals with the codes your prompt uses. Your text decides which vitals show, their order, their colors and how values read."
+        description="Write your vitals with the codes your prompt uses. Your text decides which vitals show, their order, their colors, and how values read."
         anchor="vitals-text"
       >
         {/* The card for your text opens over the main window's terminal. */}

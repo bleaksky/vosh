@@ -5,13 +5,13 @@ import { Field } from '../../ui';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { pluginNameOk, takenPluginName } from './pluginName';
 
-// New plugin (board 2): the confirm recipe in the primary tone with one
+// New plugin: the confirm recipe in the primary tone with one
 // Name field. Create stays off until the name keeps the rule and is not
 // one of your plugins, then makes the folder and hands the page the
 // list with it, which opens the new plugin's page.
 
 /** The hint under the field, which says the rule. */
-const NAME_HINT = 'Letters, digits and underscores.';
+const NAME_HINT = 'Letters, digits, and underscores.';
 
 interface Props {
   /** Your plugins, whose names are taken. */

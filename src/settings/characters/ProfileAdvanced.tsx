@@ -7,8 +7,8 @@ import { CommitField } from './CommitField';
 
 // The quiet Advanced row at the end of the Characters page, the recipe
 // Automation and Appearance use. It holds the one thing the Tracked
-// affects chips need and the board has no place for: a label and an
-// order for each affect. The login claim stays with the board's own
+// affects chips need and the page has no place for: a label and an
+// order for each affect. The login claim stays with the page's own
 // rows, the login toggle and the World select, so its rules hold.
 
 interface Props {

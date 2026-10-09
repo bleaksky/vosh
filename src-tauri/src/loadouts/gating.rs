@@ -22,6 +22,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
+use super::presets::hold_profile_keys;
 use super::set::LoadoutSet;
 use crate::profile::live::Profile;
 
@@ -78,13 +79,16 @@ pub(crate) fn loadout_hold(set: &LoadoutSet, group: &str) -> Option<LoadoutHold>
 /// explicit dormancy wins, otherwise the union rules run (including
 /// the no-opinion guard). Every apply point (startup, profile switch,
 /// active-list change) routes through here so the deactivate-all kill
-/// switch cannot be undone by a later rebuild.
+/// switch cannot be undone by a later rebuild. The preset macros then
+/// take the hold of the macro groups as they now stand, see
+/// [`hold_profile_keys`].
 pub(crate) fn apply_effective_state(set: &LoadoutSet, profile: &mut Profile) {
     if set.dormant {
         apply_dormant_state(profile);
     } else {
         apply_loadout_state(set, profile);
     }
+    hold_profile_keys(profile);
 }
 
 /// Disable every group in every store: the deactivate-all "keep the

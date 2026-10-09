@@ -12,13 +12,15 @@ import { subscribeProfilesChanged } from '../ipc/profiles';
 import { THEME_PREFS_FIELDS } from '../ipc/theme';
 import {
   fetchUiConfig,
-  shownStyle,
   subscribeUiConfigReplaced,
-  subscribeVitalsOptionsChanged,
-  subscribeVitalsTextChanged,
   type UiConfig,
   type UiFields,
 } from '../ipc/uiConfig';
+import {
+  shownStyle,
+  subscribeVitalsOptionsChanged,
+  subscribeVitalsTextChanged,
+} from '../ipc/uiConfigVitals';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
 import {
@@ -26,11 +28,13 @@ import {
   setColorVision,
   subscribeThemeChanges,
   subscribeThemePrefs,
+  themeFollowOf,
 } from '../theme/theme';
 import { showAfterThemePaint } from '../lib/reveal';
 import { customToAppTheme, setCustomThemes } from '../theme/themes';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
-import { isMacPlatform } from '../lib/shortcuts';
+import { settingsShortcutOf } from '../lib/appMenu';
+import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import {
   leavesSettingsPage,
   resolveSettingsTarget,
@@ -49,23 +53,27 @@ import { useSettingsClose } from './useSettingsClose';
 import { settingsSaveHolds } from './useSettingsAutoSave';
 import { vitalsStylePick } from '../panel/vitalsView';
 import { WindowControls } from '../ui/WindowControls';
-import { ChevronRightIcon } from '../ui';
+import { ChevronRightIcon, CoachRing } from '../ui';
 import type { LeaveGuard, SettingsPageProps } from './pageTypes';
 import { GeneralPage } from './general/GeneralPage';
+import { LogsPage } from './logs/LogsPage';
 import { LayoutPage } from './layout/LayoutPage';
+import { VitalsPage } from './vitals/VitalsPage';
 import { InputPage } from './input/InputPage';
+import { PromptPage } from './prompt/PromptPage';
 import { AutomationPage } from './automation/AutomationPage';
 import { CharactersPage } from './characters/CharactersPage';
 import { AppearancePage } from './appearance/AppearancePage';
+import { AccessibilityPage } from './accessibility/AccessibilityPage';
 import { ScriptsPage } from './scripts/ScriptsPage';
 
-// The Settings window (the approved Settings boards). A 200 px sidebar
-// with search and the seven group nav, and a content column with the
+// The Settings window. A 200 px sidebar with search and the nav of
+// eleven groups in four clusters, and a content column with the
 // breadcrumb in the 32 px band over the group's page. With two or more
 // sessions open, the band names the session and the profile Settings
-// edits at its right (ShownSession.tsx). On macOS the
-// native traffic lights sit over the sidebar. Windows and Linux draw
-// minimize, maximize, and close at the right of the band.
+// edits at its right (ShownSession.tsx). On macOS the native traffic
+// lights sit over the sidebar. Windows and Linux draw minimize,
+// maximize, and close at the right of the band.
 //
 // Every way into Settings names a target (src/lib/settingsNav.ts): the
 // nav, a search hit, a deep link from the main window. The frame shows
@@ -81,11 +89,15 @@ interface GroupPage {
 }
 
 const PAGES: Record<SettingsGroup, GroupPage> = {
-  // The session logs page pins its toolbar over the results.
-  general: { Page: GeneralPage, selfScroll: (target) => settingsSubpage(target) !== null },
+  general: { Page: GeneralPage },
   appearance: { Page: AppearancePage },
+  accessibility: { Page: AccessibilityPage },
   layout: { Page: LayoutPage },
+  vitals: { Page: VitalsPage },
+  prompt: { Page: PromptPage },
   input: { Page: InputPage },
+  // The log view and the scene page pin their toolbars over the lines.
+  logs: { Page: LogsPage, selfScroll: (target) => settingsSubpage(target) !== null },
   automation: { Page: AutomationPage, selfScroll: true },
   // A plugin's page pins its editor and Output to the window.
   scripts: { Page: ScriptsPage, selfScroll: (target) => settingsSubpage(target) !== null },
@@ -178,6 +190,29 @@ export function SettingsWindow() {
     go(resolveSettingsTarget(target));
     void getCurrentWindow().setFocus();
   });
+
+  // The Settings keys, Cmd and Option on macOS and Ctrl and Shift
+  // elsewhere with 1 to 4, open their page here as they do from the
+  // main window. No macro runs in this window, so the key always works.
+  // Taking the key keeps the macOS menu row from opening the page a
+  // second time. Each id is the palette's `settings-<link>`. A key a
+  // field already took, like a macro key being recorded, stays there.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!primary) return;
+      const id = settingsShortcutOf(
+        { key: shortcutKey(e), code: e.code, shift: e.shiftKey, alt: e.altKey },
+        mac,
+      );
+      if (!id) return;
+      e.preventDefault();
+      if (!e.repeat) go(resolveSettingsTarget(id.slice('settings-'.length)));
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mac, go]);
 
   // Scroll to the anchor the target names once the page draws it, or
   // to the top for a bare group.
@@ -275,26 +310,26 @@ export function SettingsWindow() {
   }, []);
 
   // Another window can change the theme (the palette's Choose theme).
-  // subscribeThemeChanges repaints this window. While follow system
-  // appearance is off the id is your manual pick, so the config copy
-  // takes it and Appearance shows it. While follow is on the id is only
-  // the pair entry the OS shows, and the theme fields below carry the
-  // pick. This window's own save comes back too, so while a save holds
-  // the theme fields the copy keeps what you picked.
+  // subscribeThemeChanges repaints this window. While Switch themes is
+  // off the id is your manual pick, so the config copy takes it and
+  // Appearance shows it. While it follows the system or the game the id
+  // is only the entry the OS or the game shows, and the theme fields
+  // below carry the pick. This window's own save comes back too, so
+  // while a save holds the theme fields the copy keeps what you picked.
   useTauriEvent(subscribeThemeChanges, (themeId) => {
     const current = configRef.current;
-    if (!current || current.follow_system_appearance) return;
+    if (!current || themeFollowOf(current) !== 'off') return;
     if (settingsSaveHolds(THEME_PREFS_FIELDS)) return;
     setConfig((prev) =>
-      prev && !prev.follow_system_appearance && prev.theme !== themeId
+      prev && themeFollowOf(prev) === 'off' && prev.theme !== themeId
         ? { ...prev, theme: themeId }
         : prev,
     );
   });
 
-  // The four theme fields another window saved. A palette pick while
-  // follow is on fills the light or dark entry, and the config copy
-  // takes it the same way.
+  // The seven theme fields another window saved. A palette pick while
+  // Switch themes follows the system or the game fills a slot of its
+  // pair, and the config copy takes it the same way.
   useTauriEvent(subscribeThemePrefs, (prefs) => {
     if (settingsSaveHolds(THEME_PREFS_FIELDS)) return;
     applyThemePrefs(prefs);
@@ -342,14 +377,20 @@ export function SettingsWindow() {
   });
 
   // MUD text in Settings (patterns, commands, host and port) uses your
-  // terminal font through --font-mud, the way the main window does.
+  // terminal font through --font-mud, the way the main window does,
+  // and the caret samples draw one cell of it at your size.
   const fontFamily = config?.font_family;
+  const fontSize = config?.font_size;
   useEffect(() => {
     if (!fontFamily) return;
     const rendered = renderFontStack(fontFamily);
     loadFontStack(rendered);
     document.documentElement.style.setProperty('--app-font-family', rendered);
   }, [fontFamily]);
+  useEffect(() => {
+    if (!fontSize) return;
+    document.documentElement.style.setProperty('--app-font-size', `${fontSize}px`);
+  }, [fontSize]);
 
   const group = nav.target.group;
   const { Page, selfScroll: scrollsSelf } = PAGES[group];
@@ -359,7 +400,7 @@ export function SettingsWindow() {
   const subpage = settingsSubpage(nav.target);
 
   return (
-    <div className="st-app">
+    <div className="st-app window-edge">
       <Sidebar group={group} onNavigate={go} pathB={pathB} mac={mac} />
       <main className="st-main">
         <header className="st-header" data-tauri-drag-region="">
@@ -409,6 +450,7 @@ export function SettingsWindow() {
           />
         </div>
       </main>
+      <CoachRing />
     </div>
   );
 }

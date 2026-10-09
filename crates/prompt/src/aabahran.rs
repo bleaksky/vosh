@@ -1,14 +1,15 @@
 //! What Vosh knows about Aabahran alone.
 //!
-//! The PROMPT line compiler (section 3) lives here. It is pure. The
+//! The PROMPT line compiler lives here. It is pure. The
 //! session feeds it your settings and matches lines with what it returns.
 //!
 //! - [`lex`] stores a setting you typed as `do_prompt` does, and reads
 //!   it in the two passes the game prints it in.
 //! - [`codes`] holds every value code, the field it fills and the
 //!   pattern Vosh reads it with.
-//! - `colors` holds the backtick colors the game sends and rebuilds
-//!   your codes from them.
+//! - [`colors`] holds the backtick colors the game sends and rebuilds
+//!   your codes from them, for your PROMPT setting and for a text the
+//!   writing card reads back.
 //! - [`shapes`] compiles your settings into the shapes Vosh recognizes
 //!   your prompt by, with the settle flag of each.
 //! - [`observer`] reads the lines the game answers `prompt` and
@@ -21,7 +22,7 @@
 //! are.
 
 pub mod codes;
-pub(crate) mod colors;
+pub mod colors;
 pub mod damage;
 pub mod lex;
 pub mod observer;

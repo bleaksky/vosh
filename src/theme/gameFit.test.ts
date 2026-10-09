@@ -42,7 +42,7 @@ import {
 import { GAME_CHANNEL_SLOTS } from './gameChannels';
 import { BUILTIN_THEMES, findTheme, typicalStart, visionFitOf, type XtermPalette } from './themes';
 
-// Triad as the Themes review drew it, the one palette that passes every
+// Triad as it ships, the one palette that passes every
 // check as it stands.
 const TRIAD: XtermPalette = {
   background: '#150c22',
@@ -145,7 +145,7 @@ describe('fit', () => {
     expect(needsFit({ ...findTheme('tango-dark').xterm, red: 'crimson' })).toBe(false);
   });
 
-  // The lifts the Themes review's survey gave Tango Dark, the fit
+  // The lifts the fit survey gave Tango Dark, the fit
   // themes.ts ships for it. The search draws its steps from a fixed
   // generator, so the same palette fits to the same colors every time.
   it('fits Tango Dark to the survey colors', { timeout: 30_000 }, () => {
@@ -383,8 +383,7 @@ describe('color vision', () => {
       expect(seenBy('#000000', vision), vision).toBe('#000000');
       expect(seenBy('#ffffff', vision), vision).toBe('#ffffff');
     }
-    // Triad's scarlet turns olive for a deuteranope and a protanope, as
-    // board 9 of the Themes review draws it.
+    // Triad's scarlet turns olive for a deuteranope and a protanope.
     expect(seenBy('#fe6457', 'deuteranopia')).toBe('#b3a353');
     expect(seenBy('#fe6457', 'protanopia')).toBe('#8d8255');
     expect(seenBy('#fe6457', 'tritanopia')).toBe('#ff4262');
@@ -503,7 +502,7 @@ describe.runIf(import.meta.env.VOSH_FIT_THEMES)('the fits themes.ts ships', () =
   for (const theme of BUILTIN_THEMES) {
     it(theme.id, { timeout: 30_000 }, async () => {
       await breathe();
-      // Solarized Dark keeps out of the fit (Q20), so it ships none.
+      // Solarized Dark keeps out of the fit, so it ships none.
       if (theme.fitGameColors === false) {
         expect(theme.fitted).toBeUndefined();
         return;

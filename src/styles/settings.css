@@ -1,10 +1,7 @@
-/* Settings window (milestone 2). The frame, the sidebar, the content
-   column, the sections, cards and rows, and each page. Every rule sits
-   under an st- class and reads the One Window tokens. The controls the
-   pages draw live in controls.css. Geometry follows the approved
-   boards SettingsAppearance, SettingsAutomation, and SettingsCharacters.
-   The root is not under .settings-app. That wrapper and .settings-btn
-   live in migration.css, for the migration wizard ImportPanel opens. */
+/* Settings window. The frame, the sidebar, the content column, the
+   sections, cards and rows, and each page. Every rule sits under an st-
+   class and reads the shared tokens. The controls the pages draw live
+   in controls.css. */
 
 /* ── Root ──────────────────────────────────────────────────────────── */
 
@@ -32,40 +29,6 @@
   .st-app {
     overflow: clip;
   }
-}
-
-/* Window edge for the frameless window on Windows and Linux. macOS
-   draws the titled frame's own rim and corners, and WebView2 cannot
-   composite behind rounded corners, so Windows stays square. */
-.st-app::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--edge);
-  pointer-events: none;
-}
-
-[data-platform='macos'] .st-app,
-[data-platform='windows'] .st-app {
-  border-radius: 0;
-}
-
-[data-platform='macos'] .st-app::after {
-  display: none;
-}
-
-.st-visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 
 /* ── Sidebar ───────────────────────────────────────────────────────── */
@@ -143,9 +106,6 @@
 }
 
 .st-search-keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
   margin-left: 6px;
 }
 
@@ -182,6 +142,12 @@
   text-align: left;
   text-decoration: none;
   cursor: default;
+}
+
+/* The first group of a cluster. The gap replaces the 1 px margin, so
+   eleven rows and three gaps end at 538 px, inside the 600 px window. */
+.st-nav-item[data-cluster] {
+  margin-top: 13px;
 }
 
 .st-nav-item svg {
@@ -289,9 +255,8 @@
 }
 
 /* The session and the profile Settings edits, right of the breadcrumb
-   on the title button's measures, while two or more sessions are open
-   (board 7 of the Sessions review). A press on it drags the window like
-   the rest of the band. */
+   on the title button's measures, while two or more sessions are open.
+   A press on it drags the window like the rest of the band. */
 .st-who {
   display: flex;
   align-items: center;
@@ -306,7 +271,7 @@
   pointer-events: none;
 }
 
-.st-who .shell-dot {
+.st-who .dot {
   margin-right: 6px;
 }
 
@@ -322,16 +287,11 @@
   color: var(--tertiary);
 }
 
-/* Another session on the same profile, after a hairline (board 9). */
+/* Another session on the same profile, after a hairline. */
 .st-who-also {
   margin-left: 8px;
   padding-left: 8px;
   box-shadow: inset 1px 0 0 var(--divider);
-}
-
-/* A page holds the profile while the selected session plays another. */
-.st-who .shell-dot.is-held {
-  background: var(--warn);
 }
 
 .st-who-note {
@@ -561,8 +521,8 @@
   margin-top: 12px;
 }
 
-/* A row whose control waits on something else, as P13 draws the Draw
-   row without a capture: the label in the tertiary tone and the control
+/* A row whose control waits on something else, as the Draw row does
+   without a capture: the label in the tertiary tone and the control
    at 40 percent. */
 .st-row.is-disabled .st-row-label {
   color: var(--tertiary);
@@ -574,7 +534,7 @@
 
 /* Draw your own prompt: Customize… then the switch, 12 apart. Without a
    capture the switch waits at 40 percent, and Customize… stays whole,
-   since it opens the card that reads your prompt (P13). */
+   since it opens the card that reads your prompt. */
 .st-draw-row .st-row-control {
   gap: 12px;
 }
@@ -694,8 +654,10 @@
   min-width: 120px;
 }
 
+/* The count gives way to the buttons once a picked log adds Copy as
+   text and Save a scene…, and ends in an ellipsis. */
 .st-logs-count {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
   margin-left: 12px;
   overflow: hidden;
@@ -710,15 +672,30 @@
   color: var(--danger-text);
 }
 
-.st-logs-copy {
+.st-logs-save {
   margin-left: 12px;
+}
+
+.st-logs-copy {
+  margin-left: 8px;
 }
 
 .st-logs-scope {
   margin-left: 12px;
 }
 
-.st-logs-copy + .st-logs-scope {
+.st-logs-save + .st-logs-scope,
+.st-logs-copy + .st-logs-scope,
+.st-logs-scene + .st-logs-scope {
+  margin-left: 8px;
+}
+
+/* Save a scene… joins the copy button once you pick a log. */
+.st-logs-scene {
+  margin-left: 12px;
+}
+
+.st-logs-copy + .st-logs-scene {
   margin-left: 8px;
 }
 
@@ -819,6 +796,137 @@
   color: inherit;
 }
 
+/* ── Save a scene ─────────────────────────────────────────────────── */
+
+/* The scene page. The toolbar holds the log, From and To, and the
+   format. The options card sits above the preview, so an 80 column line
+   fits on one row. */
+.sc-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sc-time {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-to {
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.sc-body {
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Prompts and Your commands side by side with a 1 px line between, and
+   the channels on a row of their own under both. */
+.sc-opts {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.sc-opts > .sc-opt-right::before {
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  right: auto;
+  width: 1px;
+  height: auto;
+}
+
+.sc-opts > .sc-opt-wide {
+  grid-column: 1 / -1;
+}
+
+/* The chips sit on the row, right aligned, and wrap when the window
+   narrows. */
+.sc-opt-wide .st-row-control {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.sc-opt-wide .st-chips {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+/* The preview: the log view's rows, with what the scene leaves out drawn
+   quiet and named on the right. */
+.sc-prev {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sc-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sc-prev .st-logs-line {
+  min-height: 0;
+  padding: 0;
+}
+
+.sc-prev .st-logs-text {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.sc-prev .st-logs-time {
+  line-height: 16px;
+}
+
+.sc-prev .st-logs-line.is-out .st-logs-text {
+  opacity: 0.32;
+}
+
+/* A time starts the scene on its line, and a Shift click ends it there. */
+.sc-time-pick {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.sc-time-pick:hover {
+  color: var(--secondary);
+}
+
+.sc-time-pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.sc-why {
+  flex: none;
+  margin-left: 8px;
+  color: var(--tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.sc-note {
+  margin: 0 0 8px;
+  color: var(--tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
 /* ── Appearance ────────────────────────────────────────────────────── */
 
 /* The import hint and button at the right of the Theme heading. A deep
@@ -853,7 +961,7 @@
 }
 
 /* The Vision switch above the tiles, its label then the segments 12
-   apart, as board 9 of the Themes review sets it. */
+   apart. */
 .st-gallery-bar {
   display: flex;
   flex-wrap: wrap;
@@ -865,6 +973,7 @@
 .st-gallery-grid {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
 }
@@ -971,13 +1080,19 @@
   outline-offset: 2px;
 }
 
+/* A name wraps to two lines at most, centered under its tile, and ends
+   in an ellipsis past that (Q25 A of the R21 and R25 review). Every
+   built in name but High Contrast Light fits on one. */
 .st-theme-name {
-  display: block;
+  display: -webkit-box;
   max-width: 100%;
   margin-top: 8px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  text-align: center;
+  white-space: normal;
   color: var(--secondary);
   font-size: 11px;
   line-height: 15px;
@@ -997,11 +1112,11 @@
   text-wrap: pretty;
 }
 
-/* The vitals Style gallery (board 2 of the Vitals Styles review): six
-   tiles, two a row 12 apart, as the theme gallery lays its tiles. Each
-   tile is 120 px of panel ground on a 1 px edge, and the footer inside
-   draws at your panel's width, scaled to the tile from the center. Its
-   name sits 8 px below it, and the caption shares the theme caption. */
+/* The vitals Style gallery: six tiles, two a row 12 apart, as the theme
+   gallery lays its tiles. Each tile is 120 px of panel ground on a 1 px
+   edge, and the footer inside draws at your panel's width, scaled to
+   the tile from the center. Its name sits 8 px below it, and the
+   caption shares the theme caption. */
 .st-vitals-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1077,11 +1192,10 @@
   color: var(--tertiary);
 }
 
-/* Customize vitals (boards 2 to 5 of the Vitals Styles review). The
-   head names the list, 10 over and 4 under. Each vital is a 40 px row:
-   the grip, the name, its color and its switch, 12 apart, with a
-   hairline between rows inset 16. A vital you turned off keeps its row,
-   its name tertiary. */
+/* Customize vitals. The head names the list, 10 over and 4 under. Each
+   vital is a 40 px row: the grip, the name, its color and its switch,
+   12 apart, with a hairline between rows inset 16. A vital you turned
+   off keeps its row, its name tertiary. */
 .st-block.st-vitals-head {
   padding: 10px 16px 4px;
 }
@@ -1183,14 +1297,14 @@
   opacity: 0.45;
 }
 
-/* The color list: the pane menu 232 wide, Default on a dashed ring, and
+/* The color list: the menu 232 wide, Default on a dashed ring, and
    after a color its mark in the tertiary tone and the check on your
    pick. */
-.pane-menu.st-vital-colors {
+.menu.st-vital-colors {
   width: 232px;
 }
 
-.pane-menu-swatch.is-default {
+.menu-swatch.is-default {
   box-shadow: none;
   outline: 1.25px dashed var(--tertiary);
   outline-offset: -1.25px;
@@ -1209,7 +1323,7 @@
   line-height: 16px;
 }
 
-.pane-menu-item:focus .st-vital-color-mark {
+.menu-item:focus .st-vital-color-mark {
   color: var(--secondary);
 }
 
@@ -1394,16 +1508,14 @@
 }
 
 /* A profile a session plays. Every row keeps the slot so names line
-   up. */
+   up, and the dot takes 6 px of the row so the names sit where they
+   did. */
 .st-profile-dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
+  margin: 0 -1px;
 }
 
-.st-profile-dot.is-active {
-  background: var(--accent);
+.st-profile-dot:not(.is-accent) {
+  visibility: hidden;
 }
 
 .st-profile-name {
@@ -1491,10 +1603,9 @@
   display: none;
 }
 
-/* What a profile export holds, in the import sheet (board 5 of the
-   Scripts design): label and value pairs 24 high in two columns, with
-   Runs Lua and Plugins across both. Under the Lua warning the pairs
-   start at once. */
+/* What a profile export holds, in the import sheet: label and value
+   pairs 24 high in two columns, with Runs Lua and Plugins across both.
+   Under the Lua warning the pairs start at once. */
 .st-import-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1596,12 +1707,12 @@
   outline-offset: 2px;
 }
 
-/* Suggestions hang under the field on the floating recipe (SPEC 7). */
+/* Suggestions hang under the field on the floating recipe. */
 .st-suggest {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 20;
+  z-index: var(--z-overlay);
   min-width: 200px;
   max-height: 222px;
   margin: 0;
@@ -1631,7 +1742,7 @@
 }
 
 .st-suggest-item[aria-selected='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 /* Panel layout: the 180×110 schematic and a column beside it that
@@ -1705,21 +1816,24 @@
 
 /* ── Input (SettingsInput) ───────────────────────────────────────── */
 
-/* The caret shapes, each drawn at the command line's real size, 7.8 by
-   17, in the secondary color, and in the accent while chosen. */
+/* The caret shapes, each one cell of your terminal font like the
+   command line's caret, in the secondary color, and in the accent while
+   chosen. */
 .st-caret {
   position: relative;
   display: block;
-  width: 7.8px;
-  height: 17px;
+  font-family: var(--app-font-family);
+  font-size: var(--app-font-size);
+  width: var(--caret-w);
+  height: var(--caret-h);
 }
 
 .st-caret-shape {
   position: absolute;
   top: 0;
   left: 0;
-  width: 7.8px;
-  height: 17px;
+  width: var(--caret-w);
+  height: var(--caret-h);
   background: currentColor;
 }
 
@@ -1733,17 +1847,17 @@
 }
 
 .st-caret-half_block {
-  top: 8.5px;
-  height: 8.5px;
+  top: calc(var(--caret-h) - round(down, var(--caret-h) / 2, 1px));
+  height: round(down, var(--caret-h) / 2, 1px);
 }
 
 .st-caret-underline {
-  top: 15px;
+  top: calc(var(--caret-h) - 2px);
   height: 2px;
 }
 
 .st-caret-underline_thick {
-  top: 13px;
+  top: calc(var(--caret-h) - 4px);
   height: 4px;
 }
 
@@ -1921,7 +2035,7 @@
   margin: 0 11px 0 4px;
 }
 
-/* Why a group's switch waits: the loadouts decide it. 12/400 tertiary,
+/* Which loadouts decide a group and when they turn it back. 12/400 tertiary,
    under the heading's name and above its rows. */
 .st-auto-groupnote {
   margin: 0;
@@ -2018,19 +2132,21 @@
   color: var(--tertiary);
 }
 
-/* On is a filled success dot, off a hollow tertiary ring. */
+/* On is a filled success dot, off a hollow ring. A preset suggested
+   for your world wears the accent ring while it is off. */
 .st-auto-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin-left: auto;
-  border-radius: 4px;
-  background: var(--success);
 }
 
-.st-auto-dot.is-off {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.25px var(--tertiary);
+/* The pencil of an item you edited sits just before its dot. */
+.st-auto-mark {
+  flex: none;
+  margin-left: auto;
+  color: var(--tertiary);
+}
+
+.st-auto-mark + .st-auto-dot {
+  margin-left: 0;
 }
 
 /* MUD text in the list and cards: alias names, macro keys, commands. */
@@ -2052,19 +2168,19 @@
 
 /* A quiet button with no ring in the secondary color, like Edit all
    as JSON… and Clear over the Scripts Console. */
-.st-button.st-auto-quiet {
+.btn.st-auto-quiet {
   padding: 0 10px;
   box-shadow: none;
   color: var(--secondary);
   font-weight: 400;
 }
 
-.st-button.st-auto-quiet:hover {
+.btn.st-auto-quiet:hover {
   color: var(--text);
 }
 
 /* Detail column. The card takes the width the list leaves, 376 at the
-   board's 880, and the column scrolls when Advanced opens. */
+   window's 880, and the column scrolls when Advanced opens. */
 .st-auto-detail {
   flex: 1 1 376px;
   min-width: 0;
@@ -2152,17 +2268,11 @@
 }
 
 .st-warn-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin-top: 3.5px;
-  border-radius: 4px;
-  background: var(--warn);
 }
 
 /* The way to fix it, at the end of a warn note. */
-.st-card-note.is-warn > .st-button {
+.st-card-note.is-warn > .btn {
   flex: none;
   align-self: center;
   margin-left: auto;
@@ -2175,6 +2285,131 @@
   white-space: nowrap;
 }
 
+/* A link inside a card's text, in the quiet tone of Edit all as JSON…
+   with a hairline underline. */
+.st-auto-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  cursor: default;
+}
+
+.st-auto-link:hover {
+  color: var(--text);
+}
+
+.st-auto-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* A row of a preset trigger you changed says what the preset has, under
+   the label for a switch or a number and under the field for text. */
+.st-auto-changed {
+  display: block;
+}
+
+.st-auto-changed:not(:first-child) {
+  margin-top: 4px;
+}
+
+.st-auto-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.st-auto-card .st-row-control:has(> .st-auto-stack) {
+  flex: 0 1 240px;
+  min-width: 96px;
+}
+
+.st-auto-stack > .st-auto-grow {
+  flex: none;
+}
+
+/* How many rows under a closed Advanced hold an edit. */
+.st-auto-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-auto-count > svg {
+  color: var(--tertiary);
+}
+
+/* The way back to a preset's color under a swatch you changed. */
+.st-auto-under {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+/* A row a preset fix changed under your edit: what the preset now has
+   in warn, then Take the fix and Keep mine on the 24 px chip recipe. */
+.st-auto-fix {
+  display: block;
+}
+
+.st-auto-fix-line {
+  color: var(--warn-text);
+}
+
+/* A swatch's new color keeps its chip beside its name. */
+.st-auto-fix-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.st-auto-fix-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* A swatch a preset fix changed under your color wears the warn ring. */
+.st-color-cell.is-warn .st-color,
+.st-color-cell.is-warn .st-select-input {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.st-auto-link.is-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.st-auto-chip {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--key-ring);
+}
+
 .st-auto-unit {
   flex: none;
   color: var(--secondary);
@@ -2183,7 +2418,7 @@
   white-space: nowrap;
 }
 
-/* The Keys row of a macro preset (Scripts board 7). Each key on a
+/* The Keys row of a macro preset. Each key on a
    keycap 4 before the command it sends, in the game's font, and the
    pairs 12 apart. A pair your macro holds takes the warn ring. */
 .st-auto-keys {
@@ -2205,7 +2440,7 @@
   line-height: 16px;
 }
 
-.st-auto-keypair.is-warn .st-keycap {
+.st-auto-keypair.is-warn .keycap {
   border-color: var(--warn);
   color: var(--warn-text);
 }
@@ -2221,6 +2456,47 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+/* A preset's sample as the terminal draws it, on the terminal ground, in
+   the theme's colors. Each run sets --sample-fg to its color. */
+.st-auto-sample {
+  padding: 6px 10px;
+  border-radius: var(--r-row);
+  background: var(--xterm-bg);
+  box-shadow: inset 0 0 0 1px var(--sep);
+  font: 12px/17px var(--font-mud);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A line too long for the box wraps three cells in, under the words
+   after a ## mark. */
+.st-auto-sample-line {
+  padding-left: 3ch;
+  text-indent: -3ch;
+}
+
+.st-auto-sample,
+.st-auto-sample-line > span {
+  color: var(--sample-fg, var(--text));
+}
+
+.st-auto-sample .is-bold {
+  font-weight: 700;
+}
+
+/* What a character says never shows. A bar in the run's color at a third
+   of its strength stands in for the words, at the cap height of the
+   face. */
+.st-auto-sample-bar {
+  display: inline-block;
+  height: 0.62em;
+  margin: 0 0.04em;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.32;
+  vertical-align: 0.02em;
 }
 
 /* A block's label and description with a control beside them, as the
@@ -2258,7 +2534,7 @@
 }
 
 /* The button that plays the alert tone, 24 square and 8 px before the
-   Sound select, as board 1 of the Alerts review draws it. */
+   Sound select. */
 .st-icon-button.st-auto-play {
   width: 24px;
   height: 24px;
@@ -2412,12 +2688,11 @@
 
 /* Last in the sheet, after every Settings rule it might tie with. */
 
-/* Settings, Input, Prompt (P12, P13, and the Settings specimens on P0
-   and P14). The game prompt block sets two label and code rows in an
-   88 px label column, each 28 tall and 8 below the line above, then
-   the meta 8 below them: 10 + 35 + 8 + 28 + 8 + 28 + 8 + 15 + 10 = 150.
-   On the new build the codes read as text at a field's text position,
-   10 in, with no field ground or ring. */
+/* Settings, Input, Prompt. The game prompt block sets two label and
+   code rows in an 88 px label column, each 28 tall and 8 below the line
+   above, then the meta 8 below them: 10 + 35 + 8 + 28 + 8 + 28 + 8 + 15
+   + 10 = 150. On the new build the codes read as text at a field's text
+   position, 10 in, with no field ground or ring. */
 .st-prompt-codes {
   margin: 0;
 }
@@ -2464,7 +2739,7 @@
   white-space: nowrap;
 }
 
-/* Its counts and times set in proportional figures, as P12 draws them. */
+/* Its counts and times set in proportional figures. */
 .st-prompt-meta {
   margin: 8px 0 0;
   color: var(--secondary);
@@ -2483,23 +2758,13 @@
   white-space: normal;
 }
 
-.st-prompt-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  margin-top: 3.5px;
-  border-radius: 4px;
-  background: var(--warn);
-}
-
 /* The command that fixes codes that run together, at the block's full
    600, the card's command box otherwise. */
 .pc-command.st-prompt-command {
   width: 600px;
 }
 
-/* The line you pointed at, for a pattern (A4's capture row): the line
+/* The line you pointed at, for a pattern: the line
    in the terminal face at meta size with each value Vosh reads in the
    selection token, then when Vosh last read it. */
 .st-prompt-line {
@@ -2525,7 +2790,7 @@
   white-space: nowrap;
 }
 
-/* No prompt has matched (P14): the sentence in warn after its 8 px dot,
+/* No prompt has matched: the sentence in warn after its 8 px dot,
    wrapping in the text column. */
 .st-prompt-line-meta.is-warn {
   display: flex;
@@ -2563,8 +2828,8 @@
   left: 10px;
 }
 
-/* A part of your design no value fills, ringed in the Settings preview as
-   the card rings it on your prompt (P14). */
+/* A part of your design no value fills, ringed in the Settings preview
+   as the card rings it on your prompt. */
 .st-prompt-preview-warn {
   position: absolute;
   border-radius: var(--r-key);
@@ -2572,7 +2837,7 @@
   pointer-events: none;
 }
 
-/* ── Scripts (Scripts and Panels, boards 2 and 4) ──────────────────── */
+/* ── Scripts ───────────────────────────────────────────────────────── */
 
 /* A plugin row names the plugin in the MUD font, as its folder reads,
    and keeps its description to one line. */
@@ -2620,7 +2885,7 @@
 }
 
 /* The more button of the row whose menu is open keeps the selected row
-   fill while the menu shows (board 4). */
+   fill while the menu shows. */
 .st-plugin-row .st-icon-button[aria-expanded='true'] {
   background: var(--selrow);
   box-shadow: var(--st-selrow-ring);
@@ -2734,13 +2999,13 @@
   pointer-events: none;
 }
 
-/* A plugin's page (boards 1 and 3): the file and On for this profile,
+/* A plugin's page: the file and On for this profile,
    then the stop note while Vosh holds the plugin off, the editor and
    Output, 12 apart over the save bar. In the 880 by 600 window the
    editor shows 14 lines of 18.2 px, or 12 under the note, and Output
    takes the rest of the column. A taller or shorter window grows or
    shrinks the editor alone, so Output keeps the lines it shows at 600,
-   the stop line of board 3 among them. */
+   the stop line among them. */
 .st-plugin-page {
   display: flex;
   flex-direction: column;
@@ -2775,7 +3040,7 @@
 /* Output fills what the editor leaves, its lines scroll inside the
    well, and the field sits at the foot of it. The space over the first
    line scrolls with the lines, so a well a few pixels short of its
-   lines, as board 1's is at 600, hides that space before any text. It
+   lines, as it is at 600, hides that space before any text. It
    never drops under its head and its 8 px gap, the newest two lines,
    and the field with its margins. */
 .st-plugin-output {

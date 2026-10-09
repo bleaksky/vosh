@@ -1,6 +1,6 @@
-// The five alert presets, the Alerts category of the Presets page
-// (Alerts Q5, board 2). They hold no triggers. Rust listens for each one
-// in src-tauri/src/alert/presets.rs, and the profile's `[alerts]` table
+// The five alert presets, the Alerts category of the Presets page. They
+// hold no triggers. Rust listens for each one in
+// src-tauri/src/alert/presets.rs, and the profile's `[alerts]` table
 // says what each does. They sit apart from the library in presets.ts,
 // which installs triggers and macros, so the wizard and Get started
 // never offer them.
@@ -11,8 +11,8 @@ export interface AlertPreset {
   id: string;
   name: string;
   description: string;
-  /** What the game or the link tells Vosh that rings it, in plain
-   *  words. */
+  /** The GMCP package and values, or the source, Rust listens to for
+   *  it, which the card shows in mono. */
   listensTo: string;
   /** Rust passes the banner the words of a tell or of the line, so
    *  Banner shows has a choice to make. The other three ring a title
@@ -27,28 +27,28 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
     id: 'alert_tells',
     name: 'Tells you get',
     description: 'Gets your attention when someone sends you a tell.',
-    listensTo: "The game's word that a tell reached you",
+    listensTo: 'Comm.Channel, tell, received',
     words: true,
   },
   {
     id: 'alert_name',
     name: 'Your name',
     description: 'Gets your attention when a line from the game names you.',
-    listensTo: 'Each line the game sends',
+    listensTo: 'Game lines, Char.Status name',
     words: true,
   },
   {
     id: 'alert_attacked',
     name: 'Being attacked',
     description: 'Gets your attention when someone starts a fight with you.',
-    listensTo: "The game's word that a fight began on you",
+    listensTo: 'Char.Combat, new target',
     words: false,
   },
   {
     id: 'alert_low_health',
     name: 'Low health',
     description: 'Gets your attention when your health falls under 20 percent.',
-    listensTo: 'Your health as the game reports it',
+    listensTo: 'Char.Vitals, hp under 20%',
     words: false,
   },
   {
@@ -56,7 +56,7 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
     name: 'Connection',
     description:
       'Gets your attention when your link to the game drops, when the game waits for you to log in, and when Vosh stops trying.',
-    listensTo: 'Your link to the game',
+    listensTo: 'Session link',
     words: false,
   },
 ];

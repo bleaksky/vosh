@@ -243,6 +243,9 @@ async fn move_session(
     let before = c.prompt.revision();
     c.prompt.follow_latest(chrono::Local::now().fixed_offset());
     crate::prompt::keep_table(&mut p, &c, before);
+    // The native grid leaves out the mark the next profile gives, as the
+    // page does once it hears of the switch.
+    crate::input::keep_echo_mark(session.id, crate::input::echo_mark(&p.ui));
     // Under both locks, so no plugin of the profile you left answers a
     // line or a packet for the next one.
     let plugins = match state.app_data.get() {
@@ -521,6 +524,36 @@ pub(crate) mod tests {
         assert_eq!(live_affects(&state).await, ["Haste"]);
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(reloaded.active_name(), "Healer");
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn a_switch_hands_the_native_grid_the_mark_of_the_next_profile() {
+        use crate::native::grid;
+
+        // The grid map is shared with the other tests.
+        let _grid = grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        let session = state.selected_session();
+        let mut config = ProfileConfig::default();
+        config.ui.input_echo_mark = "gt".into();
+        config.save(&healer_file(dir.path())).unwrap();
+        let echo = |mark: &str, command: &str| {
+            let mut out = vosh_prompt::stage::Output::new(false);
+            out.text(b"Your choice> ");
+            grid::feed_session_output(session.id, &out, None);
+            grid::feed_local(session.id, format!("{mark}{command}\r\n").as_bytes());
+        };
+        let gt = "\x1b[90m> \x1b[0m";
+        // The chevron of the profile you leave keeps the mark you typed.
+        echo(gt, "1");
+        super::switch_live_profile(&state, &session, "Healer")
+            .await
+            .unwrap();
+        echo(gt, "2");
+        let rows = grid::screen_rows(session.id).unwrap().rows;
+        assert_eq!(rows[..2], ["Your choice> > 1", "Your choice> 2"]);
     }
 
     #[tokio::test]

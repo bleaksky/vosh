@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { bandCut, bandRowsTop, type CellSize } from './pinnedDock';
+import { bandRowsTop, type CellSize } from './pinnedDock';
+import { fitBand, lineColumns, linesPlain } from './bandFit';
 import {
   dockMapper,
   endPlace,
@@ -19,18 +20,16 @@ import { onOutput } from '../ipc/terminal';
 import { getPinnedBand } from '../stores/session/pinnedPromptStore';
 import { getSelected } from '../stores/session/sessionsStore';
 import { setPromptReach } from '../stores/session/promptReachStore';
-import { shownColumns } from '../terminal/sgrCells';
 import type { PromptCardHost } from './PromptCard';
 
-// The prompt card's marks on your prompt (section 7, steps 6 and 10, and
-// the 2026-09-30 addendum, items 2 to 4): the part you picked with the
-// accent tint and a 1 px accent ring, the caret where what you add goes,
-// a ↵ after each row a line break ends, and the warn ring on a part Vosh
-// cannot fill. While the card reads your codes the tint sits on each
-// value Vosh reads in the game's own line. They are DOM over the terminal,
-// tints and 1 px rings that leave the glyphs readable. The edit band under
-// them is the renderer's own band pass, never a fill here. They draw only
-// while the terminal shows its newest rows.
+// The prompt card's marks on your prompt: the part you picked with the
+// accent tint and a 1 px accent ring, the caret where what you add
+// goes, a ↵ after each row a line break ends, and the warn ring on a
+// part Vosh cannot fill. While the card reads your codes the tint sits
+// on each value Vosh reads in the game's own line. They are DOM over
+// the terminal, tints and 1 px rings that leave the glyphs readable.
+// The edit band under them is the renderer's own band pass, never a
+// fill here. They draw only while the terminal shows its newest rows.
 //
 // A click on a part of your prompt picks it, a click past its last cell
 // puts the caret there, and a click on a ↵ picks the line break. Clicks
@@ -99,13 +98,18 @@ export function PromptMarks({
       if (!dock || !band || !cell) return null;
       const r = dock.getBoundingClientRect();
       const rows = Number(dock.getAttribute('data-rows')) || 1;
-      const cut = bandCut(band.text, rows);
-      const shown = cut.rows.length;
+      // The rows and the spans as the band fitted them to the terminal's
+      // columns (src/prompt/bandFit.ts).
+      const fit = fitBand(band.text, band.spans, rows, cell.cols);
+      const shown = fit.lines.length;
       const plain = bandPlain(band.text).split('\n');
+      linesPlain(fit.lines).forEach((line, i) => {
+        plain[fit.first + i] = line;
+      });
       const mapper = dockMapper({
         left: r.left,
         rowsTop: r.top + bandRowsTop(rows, shown, cell.height),
-        first: cut.first,
+        first: fit.first,
         shown,
         cellW: cell.width,
         cellH: cell.height,
@@ -126,7 +130,7 @@ export function PromptMarks({
       }
       const lineBreaks = new Set(design.pieces.filter((p) => p.kind === 'nl').map((p) => p.piece));
       const layout = layoutMarks({
-        spans: band.spans,
+        spans: fit.spans,
         lineBreaks,
         mapper,
         grid: { cellW: cell.width, cellH: cell.height },
@@ -142,7 +146,7 @@ export function PromptMarks({
       };
       // The band reaches to the last glyph of its widest row, as the
       // dock counts it.
-      const widest = Math.max(0, ...cut.rows.map((row) => Math.min(shownColumns(row), cell.cols)));
+      const widest = Math.max(0, ...fit.lines.map(lineColumns));
       return { layout, hit, textRight: r.left + widest * cell.width };
     }
     const term = host.terminal();
@@ -308,7 +312,8 @@ export function PromptMarks({
       // their own presses.
       if (
         target &&
-        (card()?.contains(target) || target.closest('.pc-menu, [role="dialog"], .pc-mark-return'))
+        (card()?.contains(target) ||
+          target.closest('[data-menu-surface], [role="dialog"], .pc-mark-return'))
       ) {
         return;
       }

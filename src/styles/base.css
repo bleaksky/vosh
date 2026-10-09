@@ -1,5 +1,6 @@
-/* The base. The box-sizing reset, html and body in Inter, and thin
-   scrollbars in the theme's colors on every platform. */
+/* The base. The box-sizing reset, html and body in the UI face, thin
+   scrollbars in the theme's colors on every platform, the window edge
+   every window root wears, and the one visually hidden class. */
 
 * {
   box-sizing: border-box;
@@ -13,11 +14,10 @@ body,
   height: 100%;
   background: transparent;
   color: var(--text);
-  /* Inter draws only text outside every window root, until D23
-     retires it with the migration wizard. Each window root sets
-     --font-ui, and the terminal and the panes set their own faces. The
-     13 px holds whatever terminal size you pick. */
-  font-family: var(--font-chrome);
+  /* The system UI face draws text outside every window root. Each
+     window root sets --font-ui too, and the terminal and the panes set
+     their own faces. The 13 px holds whatever terminal size you pick. */
+  font-family: var(--font-ui);
   font-size: 13px;
 }
 
@@ -63,4 +63,45 @@ body {
 
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* The window edge for the frameless windows on Windows and Linux. The
+   main, Settings, Help and snoop roots wear it, drawn over the bands
+   and the panes but under every floating surface. macOS gives each
+   window a titled frame that rounds the corners, draws the rim and
+   masks the page, so the page draws neither. WebView2 cannot composite
+   behind a rounded frameless window, so Windows stays square with the
+   hairline. The platform rules weigh two classes, so they beat each
+   root's own radius in the sheets that load later. It paints on the
+   edge layer, under every card and menu. */
+.window-edge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-edge);
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--edge);
+  pointer-events: none;
+}
+
+[data-platform='macos'] .window-edge,
+[data-platform='windows'] .window-edge {
+  border-radius: 0;
+}
+
+[data-platform='macos'] .window-edge::after {
+  display: none;
+}
+
+/* Words a screen reader hears and the page does not show. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

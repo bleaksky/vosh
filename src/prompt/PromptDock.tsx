@@ -5,14 +5,13 @@ import {
   BAND_LIFT,
   BAND_OUTSET_X,
   BAND_OUTSET_Y,
-  bandRows,
   dockHeight,
   dockRows,
   lentRows,
   type CellSize,
 } from './pinnedDock';
-import { shownColumns } from '../terminal/sgrCells';
-import { usePinnedPrompt } from '../stores/session/pinnedPromptStore';
+import { fitBand, lineColumns, type BandSpan } from './bandFit';
+import { usePinnedBand } from '../stores/session/pinnedPromptStore';
 import { usePromptReach } from '../stores/session/promptReachStore';
 import { useBandEnv } from './useBandEnv';
 import { useBlinkShown } from '../lib/blink';
@@ -55,10 +54,13 @@ import type { Cell } from '../terminal/sgrCells';
 // the pane holds with a one row band, so a fight sends it no new size
 // (src/terminal/terminalRows.ts).
 //
-// The band is drawn as the boards draw the edit band: --selrow, radius 4,
-// 4 px past the text on each side and 2 px above and below its rows, its
-// bottom 9.5 px above the input band. Each character sits on the
-// terminal's own cell grid, so the columns line up with the text above.
+// The band is drawn as the edit band is: --selrow, radius 4, 4 px past
+// the text on each side and 2 px above and below its rows, its bottom
+// 9.5 px above the input band. Each character sits on the terminal's
+// own cell grid, so the columns line up with the text above. A row with
+// %{right} ends its right part on the band's last column, and a row too
+// wide for the band closes the push's gap before anything is cut
+// (src/prompt/bandFit.ts).
 
 interface PromptDockProps {
   state: PromptShowState;
@@ -80,13 +82,14 @@ export function PromptDock({
   renderer,
   blinkText,
 }: PromptDockProps) {
-  const pin = usePinnedPrompt();
+  const band = usePinnedBand();
   const reach = usePromptReach();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
   return (
     <PinnedBand
       state={state}
-      pin={pin}
+      pin={band?.text ?? null}
+      spans={band?.spans ?? NO_SPANS}
       cell={cell}
       fontSize={fontSize}
       env={env}
@@ -106,6 +109,9 @@ function blinks(cell: Cell): boolean {
 interface PinnedBandProps {
   state: PromptShowState;
   pin: string | null;
+  /** Where each piece of your design landed on the pin, which says
+   *  where a %{right} pushed. */
+  spans?: readonly BandSpan[];
   cell: CellSize;
   fontSize: number;
   env: BandEnv;
@@ -117,10 +123,13 @@ interface PinnedBandProps {
   blinkText?: boolean;
 }
 
+const NO_SPANS: readonly BandSpan[] = [];
+
 /** The dock drawn from what it is handed. Exported for its test. */
 export function PinnedBand({
   state,
   pin,
+  spans = NO_SPANS,
   cell,
   fontSize,
   env,
@@ -128,17 +137,19 @@ export function PinnedBand({
   blinkText = false,
 }: PinnedBandProps) {
   const zone = Math.max(1, state.zone);
-  const rows = useMemo(() => (pin ? bandRows(pin, zone) : []), [pin, zone]);
-  const blinking = useMemo(() => rows.some((row) => row.some(blinks)), [rows]);
+  const limit = Math.max(1, cell.cols);
+  const rows = useMemo(
+    () => (pin ? fitBand(pin, spans, zone, limit).lines : []),
+    [pin, spans, zone, limit],
+  );
+  const blinking = useMemo(() => rows.some((row) => row.cells.some(blinks)), [rows]);
   const blinkHidden = !useBlinkShown(blinkText && blinking);
   const shown = dockRows(pin, zone, state.promptsOff);
   if (shown === 0) return null;
   const height = dockHeight(shown, cell.height);
   // How far the dock reaches up over the terminal: the rows it borrows.
   const reach = lentRows(shown) * cell.height;
-  const limit = Math.max(1, cell.cols);
-  const widths = rows.map((row) => Math.min(shownColumns(row), limit));
-  const cols = widths.reduce((most, w) => Math.max(most, w), 0);
+  const cols = rows.reduce((most, row) => Math.max(most, lineColumns(row)), 0);
   const band: CSSProperties = {
     left: -BAND_OUTSET_X,
     bottom: BAND_LIFT,
@@ -174,20 +185,19 @@ export function PinnedBand({
         cols > 0 && (
           <div className="prompt-band" style={band} data-prompt-band="">
             {rows.map((row, r) => {
-              const clipped = shownColumns(row) > limit;
-              const runs = bandRuns(row, env, clipped ? limit - 1 : limit);
+              const runs = bandRuns(row.cells, env, limit);
               const top = BAND_OUTSET_Y + r * cell.height;
               return (
                 <div key={r} className="prompt-band-row" style={{ top }}>
                   {runs.map((run, i) => (
                     <Run key={i} run={run} cell={cell} text={text} blinkHidden={blinkHidden} />
                   ))}
-                  {clipped && (
+                  {row.more !== null && (
                     <span
                       className="prompt-band-glyph prompt-band-more"
                       style={{
                         ...text,
-                        left: BAND_OUTSET_X + (limit - 1) * cell.width,
+                        left: BAND_OUTSET_X + row.more * cell.width,
                         width: cell.width,
                       }}
                     >

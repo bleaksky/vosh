@@ -1,7 +1,8 @@
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import { menuSetState, subscribeAppMenu } from '../ipc/windows';
 import SHORTCUTS from './appShortcuts.json';
-import { PANE_TYPES, type PaneType } from '../panel/paneLayout';
+import { isMacPlatform } from './shortcuts';
+import { isOfferedPaneType, PANE_TYPES, type OfferedPaneType } from '../panel/paneLayout';
 
 // The page side of the macOS menu bar (src-tauri/src/app/menu.rs). A
 // menu command reaches the main window as `vosh://app-menu` with the
@@ -13,15 +14,34 @@ import { PANE_TYPES, type PaneType } from '../panel/paneLayout';
 //
 // The shortcut specs live in appShortcuts.json, which the Rust menu
 // reads too, so the menu, the palette keycaps, and the keydown handler
-// can never disagree about a key.
+// can never disagree about a key. Most specs read the same on every
+// platform. One that differs names a spec for macOS and one for Windows
+// and Linux, since Mod+Ctrl collapses to one Ctrl there.
 
 export type AppShortcutId = keyof typeof SHORTCUTS;
 
-/** Every command with a shortcut, as a palette spec like `Mod+K`. */
-export const APP_SHORTCUTS: Readonly<Record<AppShortcutId, string>> = SHORTCUTS;
+/** A spec for every platform, or one for macOS and one for the rest. */
+type ShortcutSpec = string | { mac: string; other: string };
+
+/** Every command with a shortcut, as a palette spec like `Mod+K`. Read a
+ *  command by its id through appShortcut, which picks the platform's
+ *  spec. */
+export const APP_SHORTCUTS = SHORTCUTS;
+
+const SPECS: Readonly<Record<AppShortcutId, ShortcutSpec>> = SHORTCUTS;
+
+/** The spec for `id` on this platform, or on macOS with `mac`. */
+export function appShortcut(id: AppShortcutId, mac: boolean = isMacPlatform()): string {
+  const spec = SPECS[id];
+  return typeof spec === 'string' ? spec : mac ? spec.mac : spec.other;
+}
 
 /** Opens the session popover under the title, on what a request names. */
 export const SESSION_MENU_EVENT = 'vosh:session-menu';
+
+/** Opens Add a pane under the plus in the title band, as Show me on
+ *  the Chat and Group step of Get started does. */
+export const ADD_PANE_MENU_EVENT = 'vosh:add-pane-menu';
 
 /** A session New session… opened for its form: the session, the one
  *  selected before it, which Cancel goes back to, the profile in front
@@ -47,28 +67,33 @@ export type SessionMenuRequest =
 const WINDOW_SHORTCUTS: readonly AppShortcutId[] = [
   'connect',
   'panel',
+  'sessions-sidebar',
   'palette',
   'find',
   'settings',
   'help',
   'split',
+  'snoop',
   'session-new',
   'session-close',
   'close-window',
   'session-next',
   'session-previous',
+  'read-prompt',
 ];
 
-// The keys that act on sessions, otty's keys (Sessions Q11). A macro
-// bound to one of them keeps the key in the sessions on its profile,
-// where every other app key wins over a macro. Mod with a digit from 1
-// to 9 goes to a session by its place in the list, and is one of them.
+// The keys that act on sessions and the sessions sidebar's toggle. A
+// macro bound to one of them, or to a Settings key below, keeps the key
+// in the sessions on its profile, where every other app key wins over a
+// macro. Mod with a digit from 1 to 9 goes to a session by its place in
+// the list, and is one of them.
 const SESSION_SHORTCUTS = [
   'session-new',
   'session-close',
   'close-window',
   'session-next',
   'session-previous',
+  'sessions-sidebar',
 ] as const satisfies readonly AppShortcutId[];
 
 /** A key that acts on sessions. */
@@ -78,26 +103,71 @@ function isSessionShortcut(id: AppShortcutId): id is SessionShortcutId {
   return (SESSION_SHORTCUTS as readonly AppShortcutId[]).includes(id);
 }
 
+// The keys that open a Settings page, a digit from 1 to 4 for Timers,
+// Aliases, Triggers and Macros. macOS keeps Cmd with Shift and 3 or 4
+// for screenshots, so there they take Cmd and Option, and Ctrl and
+// Shift elsewhere. Both windows take them, and a macro keeps them in
+// the main window as it keeps a session key.
+const SETTINGS_SHORTCUTS = [
+  'settings-automation:timers',
+  'settings-automation:aliases',
+  'settings-automation:triggers',
+  'settings-automation:macros',
+] as const satisfies readonly AppShortcutId[];
+
+/** A key that opens a Settings page. */
+export type SettingsShortcutId = (typeof SETTINGS_SHORTCUTS)[number];
+
+/** An app key a macro can keep: a session key or a Settings key. */
+export type MacroKeptShortcutId = SessionShortcutId | SettingsShortcutId;
+
 // Shift with ] types } on a US layout, and other layouts put the
 // brackets on other keys, so the step keys match the physical keys.
 const PHYSICAL_KEYS: Record<string, string> = { '[': 'BracketLeft', ']': 'BracketRight' };
 
-// What Shift makes of each bracket on a US layout, so a macro saved from
-// Shift with a bracket key still reads as that key.
-const SHIFTED_KEYS: Record<string, string> = { '[': '{', ']': '}' };
+// What Shift makes of each bracket and digit on a US layout, so a macro
+// saved from Shift with one of those keys still reads as that key.
+const SHIFTED_KEYS: Record<string, string> = {
+  '[': '{',
+  ']': '}',
+  '1': '!',
+  '2': '@',
+  '3': '#',
+  '4': '$',
+};
 
-function specKey(spec: string): { key: string; shift: boolean } {
-  const parts = spec.split('+');
-  const key = (parts.pop() ?? '').toLowerCase();
-  return { key, shift: parts.some((p) => p.toLowerCase() === 'shift') };
+// What Option makes of each Settings digit on a US Mac layout, so a
+// macro saved from Cmd and Option with one still reads as that key.
+const OPTION_KEYS: Record<string, string> = {
+  '1': '¡',
+  '2': '™',
+  '3': '£',
+  '4': '¢',
+};
+
+/** A spec's key, lowercased, and whether it adds Shift or Alt, or Ctrl
+ *  beside Mod as macOS specs can. */
+function specKey(spec: string): { key: string; shift: boolean; ctrl: boolean; alt: boolean } {
+  const parts = spec.split('+').map((p) => p.toLowerCase());
+  const key = parts.pop() ?? '';
+  return {
+    key,
+    shift: parts.includes('shift'),
+    ctrl: parts.includes('ctrl'),
+    alt: parts.includes('alt'),
+  };
 }
 
 /** A primary modifier key press: `key` from shortcutKey (so lowercase),
- *  `code` the physical key. */
+ *  `code` the physical key. `ctrl` is Control held with Command on
+ *  macOS, which only a spec with Ctrl matches. `alt` is Option or Alt,
+ *  which only a Settings key on macOS takes. */
 export interface ShortcutPress {
   key: string;
   code: string;
   shift: boolean;
+  ctrl?: boolean;
+  alt?: boolean;
 }
 
 /** What a press does in the main window. */
@@ -109,50 +179,97 @@ export type ShortcutHit =
   /** Take the key and run nothing: Shift+R, which would otherwise
    *  reload the page on Windows. */
   | { kind: 'take' }
-  /** A session key a macro is bound to. The macro runs from the command
-   *  line, and nothing else takes the key. */
+  /** A session or Settings key a macro is bound to. The macro runs
+   *  from the command line, and nothing else takes the key. */
   | { kind: 'macro' };
+
+/** The Settings key a press is on this platform, or on macOS with
+ *  `mac`, or null. Option or Shift with a digit types ¡ or ! or another
+ *  character, which differs by layout, so the digit matches on the
+ *  physical key. Settings and the main window both read it. */
+export function settingsShortcutOf(
+  press: ShortcutPress,
+  mac: boolean = isMacPlatform(),
+): SettingsShortcutId | null {
+  if (press.ctrl === true) return null;
+  const alt = press.alt === true;
+  return (
+    SETTINGS_SHORTCUTS.find((id) => {
+      const spec = specKey(appShortcut(id, mac));
+      return spec.shift === press.shift && spec.alt === alt && press.code === `Digit${spec.key}`;
+    }) ?? null
+  );
+}
+
+/** A key that waits for what it acts on, and stays the page's until
+ *  then. */
+export type WaitingShortcutId = 'snoop' | 'read-prompt';
 
 /** What a primary modifier key press means in the main window. Null
  *  leaves the key to the page. `macroBound` says whether the selected
  *  session's profile binds a macro to this press, and is asked only for
- *  a session key. */
+ *  a session or Settings key. `offered` says whether a waiting key has
+ *  what it acts on: the snoop key a snoop the selected session has open,
+ *  the prompt key the screen reader, while it is on. Until then the key
+ *  stays the page's, so a macro on Ctrl+J or Ctrl+Shift+P on Windows and
+ *  Linux keeps working. `mac` picks the platform's specs. */
 export function resolveShortcut(
   press: ShortcutPress,
   macroBound: () => boolean = () => false,
+  offered: (id: WaitingShortcutId) => boolean = () => false,
+  mac: boolean = isMacPlatform(),
 ): ShortcutHit | null {
   const { key, code, shift } = press;
-  if (key === 'r' && shift) return { kind: 'take' };
+  const ctrl = press.ctrl === true;
+  const alt = press.alt === true;
   const digit = /^Digit([1-9])$/.exec(code);
-  if (digit && !shift) {
+  if (digit && ctrl) return null;
+  if (digit) {
+    const id = settingsShortcutOf(press, mac);
+    if (id) return macroBound() ? { kind: 'macro' } : { kind: 'run', id };
+    if (shift || alt) return null;
     return macroBound() ? { kind: 'macro' } : { kind: 'goto', place: Number(digit[1]) };
   }
+  // Alt is Option on macOS, which only the Settings keys take. On
+  // Windows and Linux Ctrl with Alt is AltGr, which types characters.
+  if (alt) return null;
+  if (key === 'r' && shift && !ctrl) return { kind: 'take' };
   for (const id of WINDOW_SHORTCUTS) {
-    const spec = specKey(APP_SHORTCUTS[id]);
+    const spec = specKey(appShortcut(id, mac));
     const physical = PHYSICAL_KEYS[spec.key];
-    if (spec.shift !== shift || (physical ? code !== physical : spec.key !== key)) continue;
+    if (spec.shift !== shift || spec.ctrl !== ctrl) continue;
+    if (physical ? code !== physical : spec.key !== key) continue;
+    if ((id === 'snoop' || id === 'read-prompt') && !offered(id)) return null;
     return isSessionShortcut(id) && macroBound() ? { kind: 'macro' } : { kind: 'run', id };
   }
   return null;
 }
 
-/** The session key a macro's key is too, by the macro's canonical key
+/** The app key a macro's key is too, by the macro's canonical key
  *  (automation/macroKeys.ts): Meta on macOS and Ctrl elsewhere, with a
- *  digit or one of the session keys. Settings names the clash with it.
- *  A bracket matches as Shift types it on a US layout too. */
-export function sessionKeyOfMacro(
+ *  digit, one of the session keys or one of the Settings keys. Ctrl with
+ *  Meta on macOS is the sessions toggle's key there. Settings
+ *  names the clash with it. A bracket or a shifted digit matches as
+ *  Shift types it on a US layout too, and a Settings digit on macOS as
+ *  Option types it there. */
+export function appKeyOfMacro(
   canonical: string,
   mac: boolean,
-): { kind: 'run'; id: SessionShortcutId } | { kind: 'goto'; place: number } | null {
-  const named = (key: string, shift: boolean) =>
-    mac ? `${shift ? 'Shift+' : ''}Meta+${key}` : `Ctrl+${shift ? 'Shift+' : ''}${key}`;
+): { kind: 'run'; id: MacroKeptShortcutId } | { kind: 'goto'; place: number } | null {
+  // The canonical order is Ctrl, Alt, Shift, Meta. Off macOS Mod is
+  // Ctrl, so a spec's own Ctrl adds nothing there.
+  const named = (key: string, shift: boolean, ctrl = false, alt = false) => {
+    const mods = `${alt ? 'Alt+' : ''}${shift ? 'Shift+' : ''}`;
+    return mac ? `${ctrl ? 'Ctrl+' : ''}${mods}Meta+${key}` : `Ctrl+${mods}${key}`;
+  };
   for (let place = 1; place <= 9; place += 1) {
     if (canonical === named(String(place), false)) return { kind: 'goto', place };
   }
-  for (const id of SESSION_SHORTCUTS) {
-    const { key, shift } = specKey(APP_SHORTCUTS[id]);
-    const keys = [key.toUpperCase(), SHIFTED_KEYS[key]].filter(Boolean);
-    if (keys.some((k) => canonical === named(k, shift))) return { kind: 'run', id };
+  for (const id of [...SESSION_SHORTCUTS, ...SETTINGS_SHORTCUTS]) {
+    const { key, shift, ctrl, alt } = specKey(appShortcut(id, mac));
+    const typed = shift ? SHIFTED_KEYS[key] : alt && mac ? OPTION_KEYS[key] : undefined;
+    const keys = typed ? [key.toUpperCase(), typed] : [key.toUpperCase()];
+    if (keys.some((k) => canonical === named(k, shift, ctrl, alt))) return { kind: 'run', id };
   }
   return null;
 }
@@ -165,7 +282,7 @@ export function commandRepeats(id: string): boolean {
 // ── Menu state ───────────────────────────────────────────────────────
 
 export interface MenuPaneState {
-  pane: PaneType;
+  pane: OfferedPaneType;
   /** Checked. The pane shows in the open panel. */
   visible: boolean;
   /** Listed. Staff queues waits for the MUD to offer it. */
@@ -197,6 +314,9 @@ export interface MenuState {
   /** You keep the sessions sidebar showing, checked in View, though a
    *  narrow window can fold it. */
   sessionsShown: boolean;
+  /** How many snoop tabs the selected session has, live or ended. View
+   *  lists Go to snoop while there is one. */
+  snoops: number;
 }
 
 export interface MenuStateInput {
@@ -218,6 +338,7 @@ export interface MenuStateInput {
   theme: string;
   sessions: number;
   sessionsShown: boolean;
+  snoops: number;
 }
 
 /** The menu's view of the window, the same checks the palette shows. */
@@ -229,7 +350,7 @@ export function buildMenuState(input: MenuStateInput): MenuState {
     worldName: world.length > 0 ? world : null,
     panelOpen: input.panelOpen,
     splitOpen: input.splitOpen,
-    panes: PANE_TYPES.map((pane) => {
+    panes: PANE_TYPES.filter(isOfferedPaneType).map((pane) => {
       const shown = input.shownPanes.includes(pane);
       return {
         pane,
@@ -242,6 +363,7 @@ export function buildMenuState(input: MenuStateInput): MenuState {
     theme: input.theme,
     sessions: input.sessions,
     sessionsShown: input.sessionsShown,
+    snoops: input.snoops,
   };
 }
 

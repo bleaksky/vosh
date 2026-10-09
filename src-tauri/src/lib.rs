@@ -26,6 +26,7 @@ mod sessions;
 #[cfg(test)]
 mod tests;
 mod tick;
+mod writing;
 
 use app::state::{AppState, SharedState};
 use app::system_fonts::handle_font_uri;
@@ -86,6 +87,10 @@ pub fn run() {
                         | tauri_plugin_window_state::StateFlags::MAXIMIZED
                         | tauri_plugin_window_state::StateFlags::FULLSCREEN,
                 )
+                // A snoop window keeps its place in its session's profile
+                // (app/windows.rs), so the plugin neither restores nor
+                // saves one.
+                .with_filter(|label| !label.starts_with("snoop-"))
                 .build(),
         )
         .manage(state.clone())

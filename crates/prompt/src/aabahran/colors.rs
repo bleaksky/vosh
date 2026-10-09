@@ -10,7 +10,8 @@
 //! through `send_to_char`, so a line such as `Current prompt:` carries
 //! colors where you typed backtick codes. Vosh writes each color back as
 //! the first code `process_color` lists for it, so the field shows what
-//! you typed, or a code the game turns into the same bytes.
+//! you typed, or a code the game turns into the same bytes. The writing
+//! card reads your description and a note's text back the same way.
 
 /// `color_table` in `ansi.h`. The game writes `ESC[0`, the entry and `m`.
 const TABLE: [&str; 65] = [
@@ -212,7 +213,7 @@ fn code(index: u8) -> Option<char> {
 /// comes back as the 256 code under 16 that writes the same bytes. A `~`
 /// comes back as `` `- `` and a backtick as `` `= ``, since the game
 /// keeps neither in a setting any other way. Any other escape drops.
-pub(crate) fn rebuild(shown: &str) -> String {
+pub fn rebuild(shown: &str) -> String {
     let mut out = String::with_capacity(shown.len());
     let mut chars = shown.chars().peekable();
     while let Some(c) = chars.next() {

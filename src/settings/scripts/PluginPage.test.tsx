@@ -128,7 +128,8 @@ const row = (name: string, patch: Partial<PluginRow> = {}): PluginRow => ({
 
 const STOP = 'Vosh stopped wait_full at main.lua line 5 after 100 ms.';
 
-// The Output ring with board 1's vitals_alert lines and board 3's stop.
+// The Output ring with the lines of vitals_alert and the stop of
+// wait_full.
 const RING: LuaLine[] = [
   {
     ts_ms: at(21, 14, 3),
@@ -550,7 +551,7 @@ describe('New plugin', () => {
     expect(seen.dialog?.title).toBe('New plugin');
     expect(seen.dialog?.tone).toBe('primary');
     expect(seen.dialog?.confirmDisabled).toBe(true);
-    expect(hint(m.container)).toBe('Letters, digits and underscores.');
+    expect(hint(m.container)).toBe('Letters, digits, and underscores.');
     await m.fire(name, 'onChange', { target: { value: 'wait full' } });
     expect(seen.dialog?.confirmDisabled).toBe(true);
     await m.fire(name, 'onChange', { target: { value: 'Wait_Full' } });
@@ -558,7 +559,7 @@ describe('New plugin', () => {
     expect(hint(m.container)).toBe('You already have a plugin named wait_full.');
     await m.fire(name, 'onChange', { target: { value: 'weather_pane' } });
     expect(seen.dialog?.confirmDisabled).toBe(false);
-    expect(hint(m.container)).toBe('Letters, digits and underscores.');
+    expect(hint(m.container)).toBe('Letters, digits, and underscores.');
     await m.unmount();
   });
 

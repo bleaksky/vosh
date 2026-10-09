@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SessionRow } from '../ipc/session';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuRequest } from '../lib/appMenu';
-import { shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { worldName } from '../lib/knownWorlds';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { returnToCommandLine } from '../panel/paneActions';
@@ -14,30 +14,32 @@ import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
 import { RenameSessionForm } from './RenameSessionForm';
 import { SessionRowBody, WaitingCount } from './SessionRowBody';
-import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { pointAt, pointerLeft } from '../ui/menuAim';
+import { ShellMenu } from './ShellMenu';
 
-// The session popover under the title button, by board 4 of the
-// Sessions review: Connect to the selected session's world or
-// Disconnect, Edit connection, Rename session, and New session. Edit
-// connection swaps the list for a host, port and TLS form in the same
-// popover. Rename session turns the selected row's name into a field
-// while the sessions sidebar shows (board 9), and swaps in a form with
-// one Name field while it does not, as with one session. New session
-// opens a session and comes back on that session's own form. Disconnect
-// is destructive, so it sits last in the danger tone and is never the
-// row focus lands on. While a redial waits after a drop the popover
-// offers both, Connect to dial now and Disconnect to end the tries.
+// The session popover under the title button: Connect to the selected
+// session's world or Disconnect, Edit connection, Rename session, and
+// New session. Edit connection swaps the list for a host, port and TLS
+// form in the same popover. Rename session turns the selected row's
+// name into a field while the sessions sidebar shows, and swaps in a
+// form with one Name field while it does not, as with one session. New
+// session opens a session and comes back on that session's own form.
+// Disconnect is destructive, so it sits last in the danger tone and is
+// never the row focus lands on. While a redial waits after a drop the
+// popover offers both, Connect to dial now and Disconnect to end the
+// tries.
 //
 // While the sidebar is folded with two or more sessions open, in a
 // narrow window or after Hide sessions, the popover lists every session
-// at its top under SESSIONS, board 8, in the sidebar's two line rows
-// (S7 of the Sessions Sidebar review, board 05). The selected one wears
-// the check in the right column, a session behind the count of what
-// waits there, and any other one the key that brings it to the front. A
-// click brings that session to the front. The list takes the sidebar's
-// place, so under the pointer each row shows the close button in the
-// right column, which closes that session as the sidebar's does (Q13). A
-// list too long for the window scrolls, and the rows under it stay put.
+// at its top under SESSIONS, in the sidebar's two line rows. The
+// selected one wears the check in the right column, a session behind
+// the count of what waits there, and any other one the key that brings
+// it to the front. A click brings that session to the front. The list
+// takes the sidebar's place, so under the pointer each row shows the
+// close button in the right column, which closes that session as the
+// sidebar's does. A list too long for the window scrolls, and the rows
+// under it stay put.
 
 const MENU_WIDTH = 272;
 
@@ -156,8 +158,10 @@ export function SessionMenu({
     >
       {listSessions && (
         <>
-          <p className="shell-menu-head">Sessions</p>
-          <div className="shell-menu-sessions">
+          <li role="none" className="menu-head">
+            Sessions
+          </li>
+          <li role="none" className="shell-menu-sessions">
             {rows.map((row, i) => (
               <SessionItem
                 key={row.id}
@@ -169,37 +173,31 @@ export function SessionMenu({
                 onCloseSession={() => run(() => onCloseSession?.(row.id))}
               />
             ))}
-          </div>
-          <ShellMenuSeparator />
+          </li>
+          <MenuSeparator />
         </>
       )}
       {!live && (
-        <ShellMenuItem
-          shortcut={shortcutLabel(APP_SHORTCUTS.connect)}
-          onSelect={() => run(connection.connect)}
-        >
+        <MenuItem keys={APP_SHORTCUTS.connect} onSelect={() => run(connection.connect)}>
           Connect to {worldName(target.host)}
-        </ShellMenuItem>
+        </MenuItem>
       )}
-      <ShellMenuItem onSelect={() => setMode('edit')}>Edit connection…</ShellMenuItem>
-      <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
+      <MenuItem onSelect={() => setMode('edit')}>Edit connection…</MenuItem>
+      <MenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
         Rename session…
-      </ShellMenuItem>
-      {/* Board 05 draws no line here while the list sits above, so
+      </MenuItem>
+      {/* No line here while the list sits above, so
         five rows fit whole at 720 by 450. */}
-      {!listSessions && <ShellMenuSeparator />}
-      <ShellMenuItem
-        shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}
-        onSelect={() => run(openNewSession)}
-      >
+      {!listSessions && <MenuSeparator />}
+      <MenuItem keys={APP_SHORTCUTS['session-new']} onSelect={() => run(openNewSession)}>
         New session…
-      </ShellMenuItem>
+      </MenuItem>
       {(live || redialing) && (
         <>
-          <ShellMenuSeparator />
-          <ShellMenuItem danger onSelect={() => run(connection.disconnect)}>
+          <MenuSeparator />
+          <MenuItem danger onSelect={() => run(connection.disconnect)}>
             Disconnect
-          </ShellMenuItem>
+          </MenuItem>
         </>
       )}
     </ShellMenu>
@@ -220,32 +218,58 @@ interface ItemProps {
  *  it, 44 high on the menu's recipe, with its close button beside it. */
 function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: ItemProps) {
   const look = rowLook(useSessionRow(row.id), row, current);
+  const keys = place <= 9 ? `Mod+${place}` : null;
   const end = current ? (
-    <CheckIcon className="pane-menu-check" />
+    <CheckIcon className="menu-check" />
   ) : look.count > 0 ? (
     <WaitingCount count={look.count} />
   ) : (
-    place <= 9 && <kbd className="shell-menu-kbd">{shortcutLabel(`Mod+${place}`)}</kbd>
+    keys && (
+      <kbd className="menu-keys" aria-hidden="true">
+        {shortcutLabel(keys)}
+      </kbd>
+    )
   );
+  // The pointer on the row gives it the focus, so the pointer and the
+  // arrow keys share one highlight.
+  const point = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const el = e.currentTarget;
+    pointAt(el, () => {
+      if (document.activeElement !== el) el.focus();
+    });
+  };
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const focusRow = () => {
+    const el = rowRef.current;
+    if (el && document.activeElement !== el) el.focus();
+  };
   return (
     <div className="shell-menu-session-slot">
       <button
+        ref={rowRef}
         type="button"
         role="menuitem"
         className="shell-menu-session"
         aria-current={current ? 'true' : undefined}
+        aria-keyshortcuts={keys ? ariaKeyshortcuts(keys) : undefined}
+        tabIndex={-1}
+        onPointerEnter={point}
+        onPointerMove={point}
+        onPointerLeave={(e) => pointerLeft(e.currentTarget)}
         onClick={onSelect}
       >
         <SessionRowBody row={row} rows={rows} mark={look.mark} end={end} />
       </button>
       {/* A sibling of the row, since a button holds no button. It shows
         only under the pointer, so the arrow keys pass it by, and ⌘W
-        closes the session in front from the keyboard. */}
+        closes the session in front from the keyboard. Pointing at it
+        lights its row. */}
       <button
         type="button"
         className="shell-menu-session-close"
         aria-label="Close session"
         tabIndex={-1}
+        onPointerEnter={focusRow}
         onClick={onCloseSession}
       >
         <CloseIcon />

@@ -121,8 +121,9 @@ pub(crate) async fn profile_import_read(
     file_name: String,
     text: String,
 ) -> Result<ImportPreview, String> {
+    let loadout_mode = state.global_catalog.lock().await.is_some();
     let set = state.loaded_profile_set().await?;
-    preview(&set, &file_name, &text)
+    preview(&set, &file_name, &text, loadout_mode)
 }
 
 /// Import `text`, the Vosh profile export you picked as `file_name`, as a

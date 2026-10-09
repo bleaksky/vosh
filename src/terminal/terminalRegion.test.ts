@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import { ECHO_CARET } from '../input/maskedInput';
+import { DEFAULT_ECHO_MARK, echoMark } from '../input/maskedInput';
 import { LiftTracker } from './xterm/liftBands';
 import {
   closePinRow,
@@ -116,6 +116,44 @@ describe('RegionWriter', () => {
     writer.local('look\r\n');
     await parsed(writer);
     expect(screen(term)).toEqual(['You are hungry.', '<1020hp 800m> ', 'look']);
+  });
+
+  it('colors your target again in the people of a look when their packet comes a read later', async () => {
+    const { term, writer } = setup(60);
+    const villager = 'A Blackwatch villager scurries about.';
+    const resting = 'Tolliver is resting here.';
+    writer.output({ text: `[Exits: south]\r\n${mark(1)}${villager}\r\n${resting}\r\n` });
+    writer.output(replace(1, `${villager}\r\n\x1b[91m${resting}\x1b[0m\r\n`));
+    writer.output({ text: 'Maren arrives from the south.\r\n' });
+    await parsed(writer);
+    expect(screen(term)).toEqual([
+      '[Exits: south]',
+      villager,
+      resting,
+      'Maren arrives from the south.',
+    ]);
+    const buffer = term.buffer.active;
+    expect(
+      buffer
+        .getLine(buffer.baseY + 1)
+        ?.getCell(0)
+        ?.isFgDefault(),
+    ).toBeTruthy();
+    expect(
+      buffer
+        .getLine(buffer.baseY + 2)
+        ?.getCell(0)
+        ?.getFgColor(),
+    ).toBe(9);
+    // Once anything landed after the people, they stay as they show.
+    writer.output(replace(1, `\x1b[91m${villager}\x1b[0m\r\n${resting}\r\n`));
+    await parsed(writer);
+    expect(
+      buffer
+        .getLine(buffer.baseY + 1)
+        ?.getCell(0)
+        ?.isFgDefault(),
+    ).toBeTruthy();
   });
 
   it('counts the rows xterm wrapped the region into', async () => {
@@ -319,6 +357,49 @@ describe('RegionWriter', () => {
   });
 });
 
+describe('RegionWriter lines Vosh prints about itself', () => {
+  const line = (text: string): RegionOutput => ({ text: `${text}\r\n`, fresh: true });
+
+  it('starts a row of its own after a prompt that came after your echo', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: 'room\r\n' });
+    writer.local('#walk stop\r\n');
+    writer.output({ text: '<1020hp 800m> ' });
+    writer.output(line('[walk] You are not walking.'));
+    await parsed(writer);
+    expect(screen(term)).toEqual([
+      'room',
+      '#walk stop',
+      '<1020hp 800m> ',
+      '[walk] You are not walking.',
+    ]);
+  });
+
+  it('adds no blank row at the start of a row or after held line ends', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: '<1020hp 800m> ' });
+    writer.local('#walk stop\r\n');
+    writer.output(line('[walk] You are not walking.'));
+    writer.output({ text: 'room', hold: '\r\n' });
+    writer.output(line('[lua] boom'));
+    await parsed(writer);
+    expect(screen(term)).toEqual([
+      '<1020hp 800m> #walk stop',
+      '[walk] You are not walking.',
+      'room',
+      '[lua] boom',
+    ]);
+  });
+
+  it('leaves the echo of a command Vosh draws itself after the prompt', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: '<1020hp 800m> ' });
+    writer.output({ text: 'kick goblin\r\n' });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['<1020hp 800m> kick goblin']);
+  });
+});
+
 describe('RegionWriter held line ends', () => {
   const cursor = (term: Terminal) => [term.buffer.active.cursorY, term.buffer.active.cursorX];
 
@@ -380,7 +461,7 @@ describe('RegionWriter held line ends', () => {
     const after = async (line: string, reply: string) => {
       const { term, writer } = setup();
       writer.output({ text: 'room', hold: '\r\n\r\n', pinRow: true });
-      writer.local(`${ECHO_CARET}${line}\r\n`);
+      writer.local(`${DEFAULT_ECHO_MARK}${line}\r\n`);
       writer.output({ text: reply, hold: '\r\n\r\n'.slice(reply ? 0 : 2), pinRow: true });
       await parsed(writer);
       const rows = screen(term);
@@ -954,15 +1035,18 @@ describe('a run of repeated lines the session collapses', () => {
   });
 });
 
-// Mark your commands draws a grey › before your echo, unless the row it
-// lands on already ends in > before the cursor, as a game's own prompt
-// does. The same rules as the native grid's, in
+// Mark before your commands draws a mark, the grey › by default, before your
+// echo, unless the row it lands on already ends in > before the cursor,
+// as a game's own prompt does. The same rules as the native grid's, in
 // src-tauri/src/native/grid/regions.rs. The game lines are Aabahran's own,
 // from tables.c, update.c and the prompt fixtures.
 describe('the mark before your echo', () => {
   const sends: [string, (writer: RegionWriter, command: string) => void][] = [
-    ['typed', (writer, command) => writer.local(`${ECHO_CARET}${command}\r\n`)],
-    ['quick key', (writer, command) => writer.output({ text: `${ECHO_CARET}${command}\r\n` })],
+    ['typed', (writer, command) => writer.local(`${DEFAULT_ECHO_MARK}${command}\r\n`)],
+    [
+      'quick key',
+      (writer, command) => writer.output({ text: `${DEFAULT_ECHO_MARK}${command}\r\n` }),
+    ],
   ];
   const motd = 'Prepare yourself. For you are about to <Enter> the Forsaken Lands!';
 
@@ -1048,10 +1132,46 @@ describe('the mark before your echo', () => {
     });
   }
 
+  // Every mark you can pick drops by its own length, typed or a quick
+  // key, and keeps its place on a fresh row. Off has nothing to drop.
+  const picks: [string, string, string][] = [
+    ['the greater than sign', echoMark({ mark: 'gt', text: '', color: null }), '> '],
+    ['your own text', echoMark({ mark: 'own', text: 'you:', color: null }), 'you: '],
+    ['a colored chevron', echoMark({ mark: 'chevron', text: '', color: '#c6a46a' }), '› '],
+    ['Off', echoMark({ mark: 'off', text: 'you:', color: null }), ''],
+  ];
+  for (const [pick, picked, drawn] of picks) {
+    it(`drops ${pick} after your prompt and keeps it on a fresh row`, async () => {
+      const { term, writer } = setup();
+      writer.setEchoMark(picked);
+      writer.output({ text: `${mark(1)}<1020hp 800m 930mv> ` });
+      writer.local(`${picked}look\r\n`);
+      writer.output({ text: `${picked}kick\r\n` });
+      writer.output({ text: 'You are hungry.\r\n' });
+      writer.local(`${picked}look\r\n`);
+      await parsed(writer);
+      expect(screen(term)).toEqual([
+        '<1020hp 800m 930mv> look',
+        `${drawn}kick`,
+        'You are hungry.',
+        `${drawn}look`,
+      ]);
+    });
+  }
+
+  it('keeps a chevron the game sends once you pick another mark', async () => {
+    const { term, writer } = setup();
+    writer.setEchoMark(echoMark({ mark: 'gt', text: '', color: null }));
+    writer.output({ text: '<1020hp 800m 930mv> ' });
+    writer.output({ text: `${DEFAULT_ECHO_MARK}look\r\n` });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['<1020hp 800m 930mv> › look']);
+  });
+
   it('drops before a bare line end at a login prompt', async () => {
     const { term, writer } = setup();
     writer.output({ text: '\n\rYour choice> ' });
-    writer.local(`${ECHO_CARET}\r\n`);
+    writer.local(`${DEFAULT_ECHO_MARK}\r\n`);
     writer.output({ text: '\n\rYour choice> ' });
     await parsed(writer);
     expect(screen(term)).toEqual(['', 'Your choice> ', '', 'Your choice> ']);

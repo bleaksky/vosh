@@ -1,8 +1,7 @@
-// What Settings, Input shows in its Prompt section (section 7 step 12 of
-// the prompt build spec, boards P12 and P13, with the Settings specimens
-// on P0 and P14): which form the game prompt block takes, the meta under
-// it, the Draw your own prompt row's sentence, and the preview's height
-// and choices. Pure, so the section stays about layout.
+// What Settings, Input shows in its Prompt section: which form the game
+// prompt block takes, the meta under it, the Draw your own prompt row's
+// sentence, and the preview's height and choices. Pure, so the section
+// stays about layout.
 
 import { clockTime, lastSeenLine } from './cardRules';
 import { parseSgrCells, type Cell } from '../terminal/sgrCells';
@@ -16,7 +15,7 @@ import type { PromptPreviewName } from '../ipc/promptDesign';
 import type { GamePromptSeen } from '../stores/gmcp/gamePromptStore';
 
 /** How the game prompt block reads your prompt.
- *  - `codes`: the codes the game sent this session, as text (D25).
+ *  - `codes`: the codes the game sent this session, as text.
  *  - `fields`: your codes in fields, on The Forsaken Lands while the game
  *    sent none this session.
  *  - `line`: the line you pointed at, for a pattern.
@@ -94,13 +93,12 @@ export function gameDescription(world: string | null): string {
  *  point at its line. */
 export const POINT_DESCRIPTION = 'Point at it in Customize prompt and Vosh reads its numbers.';
 
-/** The sentence while you have prompts off in the game (section 3). */
+/** The sentence while you have prompts off in the game. */
 export const PROMPTS_OFF =
   'You turned prompts off in the game. Type prompt in the game to turn them back on.';
 
 /** The sentence once three prompts in a row came that Vosh could not
- *  read (section 5, P14), with when it last read one, as `#prompt` says
- *  it. */
+ *  read, with when it last read one, as `#prompt` says it. */
 export function notMatchingLine(lastMatchAt: string | null): string {
   const at = lastMatchAt ? new Date(lastMatchAt) : null;
   const since = at && !Number.isNaN(at.getTime()) ? clockTime(at) : 'you connected';
@@ -149,9 +147,8 @@ export function codesMeta(input: {
   if (input.notMatching) return { tone: 'warn', text: input.notMatching, fixes: [] };
   if (report?.error) return { tone: 'warn', text: report.error.message, fixes: [] };
   const reads = capture.kind !== 'none';
-  // Codes that run together need fixing once Vosh reads them (P0's
-  // Healer after P3b). Before that the block says only where they came
-  // from (P13).
+  // Codes that run together need fixing once Vosh reads them. Before
+  // that the block says only where they came from.
   const together = reads ? report?.warnings.find((w) => w.kind === 'run_together') : undefined;
   if (together) return { tone: 'warn', text: together.message, fixes: report?.fixes ?? [] };
 
@@ -183,8 +180,7 @@ export function lastReadLine(lastMatchAt: string | null): string | null {
 }
 
 /** The sentence under Draw your own prompt: what it waits on without a
- *  capture (P13), or what it replaces, on or off, as P0 draws the row off
- *  for Healer once it has a capture. */
+ *  capture, or what it replaces, on or off, once it has a capture. */
 export function drawDescription(input: {
   capture: boolean;
   gameSent: boolean;
@@ -198,7 +194,7 @@ export function drawDescription(input: {
 }
 
 /** The preview output: 28 tall for one line, 17.5 more for each line
- *  past it (P12). */
+ *  past it. */
 export function previewHeight(rows: number): number {
   return 28 + 17.5 * Math.max(0, rows - 1);
 }

@@ -2,14 +2,14 @@ import { useId } from 'react';
 import { pluginReveal, type PluginManifest } from '../../ipc/scripts';
 import { errorText } from '../../lib/text';
 import { Button, Card, CardNote, Field, FieldArea, Row, Select } from '../../ui';
-import { revealLabel } from './pluginState';
+import { revealLabel } from '../../lib/revealLabel';
 
-// The Manifest tab of a plugin's page (board 1). The fields Vosh keeps
-// in manifest.toml, edited in the page's draft. The name is the
-// folder's and reads only. Version, Author and Runs first take the
-// Automation card's 240 px field column, and Description stacks under
-// its label. Folder shows where the plugin lives and opens it in the
-// system's file manager.
+// The Manifest tab of a plugin's page. The fields Vosh keeps in
+// manifest.toml, edited in the page's draft. The name is the folder's
+// and reads only. Version, Author and Runs first take the Automation
+// card's 240 px field column, and Description stacks under its label.
+// Folder shows where the plugin lives and opens it in the system's file
+// manager.
 
 /** The card's first line. */
 export const MANIFEST_NOTE =

@@ -1,5 +1,4 @@
-// Which piece of your prompt a pointer is on (the prompt build spec,
-// section 7 step 6, and the 2026-09-30 addendum item 4).
+// Which piece of your prompt a pointer is on.
 //
 // In the text and lifted, your prompt is the open row, a region the
 // session marked. Each renderer knows where that region starts in its own
@@ -17,15 +16,18 @@
 // the terminal's cell grid, from the text's left edge, so a point maps
 // straight to a row and column of the band and from there to a span. In
 // terminal area coordinates that is col = floor((x - 16) / cellW), the
-// area's padding being 16. A cell past the last whole one, where the dock
-// draws an ellipsis, maps to nothing.
+// area's padding being 16. The band first fits each row to the
+// terminal's columns, moving the part after a %{right} and cutting what
+// does not fit (src/prompt/bandFit.ts), and the spans move with it. A
+// cell the band cut, and the ellipsis in its place, map to nothing.
 //
 // Spans count cells, as the band does: a wide character takes two and a
 // combining mark none (cellWidth in sgrCells.ts).
 
 import { bandCut, bandRowsTop, type CellSize } from './pinnedDock';
-import { cellWidth, parseSgrCells, shownColumns } from '../terminal/sgrCells';
+import { cellWidth, parseSgrCells } from '../terminal/sgrCells';
 import type { PromptSpan } from '../ipc/promptDesign';
+import { fitBand, type BandSpan } from './bandFit';
 import type { TerminalCursor } from '../ipc/terminal';
 import { wrapBreaks } from '../terminal/wordWrap';
 
@@ -271,7 +273,7 @@ export function dockCellAt(
  *  The dock shows the band's last `zone` rows, so the spans are cut the
  *  same way. */
 export function dockPieceAt(
-  band: { text: string; spans: readonly PieceSpan[] } | null,
+  band: { text: string; spans: readonly BandSpan[] } | null,
   zone: number,
   cell: CellSize,
   x: number,
@@ -280,14 +282,10 @@ export function dockPieceAt(
   if (!band) return null;
   const at = dockCellAt(band.text, zone, cell, x, y);
   if (!at) return null;
-  const { rows: shown, first } = bandCut(band.text, Math.max(1, zone));
-  const limit = Math.max(1, cell.cols);
-  // A row too wide for the terminal ends on an ellipsis in its last cell.
-  const usable = shownColumns(shown[at.row]) > limit ? limit - 1 : limit;
-  if (at.col >= usable) return null;
+  const { spans, first } = fitBand(band.text, band.spans, zone, cell.cols);
   // The band puts each cell at its own column, so a column is a cell of
-  // the row before any wrap, as the spans count them.
-  return pieceAt(band.spans, first + at.row, at.col);
+  // the row as the band fitted it, as the moved spans count them.
+  return pieceAt(spans, first + at.row, at.col);
 }
 
 /** The band's rows as plain text joined by `\n`, combining marks with the

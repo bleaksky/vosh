@@ -16,7 +16,7 @@ import { labelForKey } from '../../automation/macroKeys';
 import { presetById } from '../../automation/presets';
 import { listMacros, subscribeMacrosChanged, type Macro } from '../../ipc/automation';
 import { isMacPlatform } from '../../lib/shortcuts';
-import { useMacroList } from '../../stores/config/macroListStore';
+import { useMacroList } from './macroListStore';
 import { Card, CardNote, Field, Row, Toggle } from '../../ui';
 import { GroupField, KeyCaptureField } from './fields';
 import { DraftEditor } from './DraftEditor';
@@ -106,8 +106,7 @@ function MacroDetail({ value: m, update, fresh, revealInList }: DetailProps<Macr
 
   const set = (patch: Partial<MacroRecord>) => update((v) => ({ ...v, ...patch }));
   // A key the session keys share stays with this macro in the sessions
-  // on its profile (Sessions Q11), and the card says what it does
-  // elsewhere.
+  // on its profile, and the card says what it does elsewhere.
   const clash = macroClashNote(m.key, isMacPlatform());
 
   return (

@@ -29,6 +29,7 @@ import {
 } from './chipsGrid';
 import { affectHours, affectsEmptyText, affectWords } from '../paneText';
 import { usePaneText } from '../paneTextSize';
+import { VisuallyHidden } from '../../ui';
 
 // Board Affects C, Grouped chips. What to recast first: the tracked
 // affects you miss and the ones running out, then the rest you track,
@@ -43,10 +44,10 @@ import { usePaneText } from '../paneTextSize';
 // the left toward empty as the hours run down, over the affect's own
 // cast (gaugeFraction, from the fulls the backend keeps), with a
 // hairline to show the chip's full width. One running out takes the
-// board's yellow, and red once it is almost gone, over the whole chip,
+// warn yellow, and red once it is almost gone, over the whole chip,
 // at the hours you set, two and one unless you change them. Its gauge
 // shows stronger over that while it drains. Other chips keep the
-// board's hairline ring, and a harmful one its danger ring.
+// hairline ring, and a harmful one its danger ring.
 //
 // Draining chips (fill drain) is the same pane, and only a chip running
 // out draws differently: no tint over the whole chip, a hairline for
@@ -268,7 +269,7 @@ function Chip({
     <li className={cls} style={style}>
       <span className="pane-chip-name">
         {row.name}
-        {words && <span className="pane-sr">{words}</span>}
+        {words && <VisuallyHidden>{words}</VisuallyHidden>}
       </span>
       {hours && (
         <span className={`pane-chip-hours${tone ? ` is-${tone}` : ''}`} aria-hidden="true">
@@ -302,7 +303,7 @@ function MissingChip({
     <li ref={ref} className="pane-chip pane-chip-missing">
       <span className="pane-chip-name">
         {row.name}
-        <span className="pane-sr">{affectWords(row.state, row.ticks)}</span>
+        <VisuallyHidden>{affectWords(row.state, row.ticks)}</VisuallyHidden>
       </span>
       <span className="pane-chip-hours" aria-hidden="true">
         {hours}

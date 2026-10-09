@@ -2,7 +2,7 @@
 //! characters share in loadout mode. Vosh runs in loadout mode while the
 //! file is on disk.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::path::Path;
 
@@ -13,11 +13,13 @@ use vosh_automation::alias::{Alias, AliasStore};
 use vosh_automation::trigger::{Trigger, TriggerStore};
 
 use super::gating::apply_effective_state;
-use super::presets::hold_taken_keys;
+use super::preset_edits::PresetEdits;
+use super::presets::{hold_profile_keys, hold_taken_keys};
 use super::set::LoadoutSet;
 use super::LoadoutStoreError;
 use crate::disk::atomic::write_with_backup;
 use crate::disk::paths::catalog_path;
+use crate::profile::file::ProfileConfig;
 use crate::profile::live::{Macro, Profile};
 
 /// The global catalog. Every alias, trigger, macro lives here as a
@@ -28,7 +30,7 @@ pub(crate) struct GlobalCatalog {
     #[serde(default)]
     pub aliases: Vec<Alias>,
     /// Every trigger. Room triggers go under `room_triggers` on disk, so
-    /// an older build still reads the file (D14), see
+    /// an older build still reads the file, see
     /// [`crate::profile::file::trigger_lists`].
     #[serde(flatten, with = "crate::profile::file::trigger_lists")]
     pub triggers: Vec<Trigger>,
@@ -48,20 +50,50 @@ pub(crate) struct GlobalCatalog {
     /// out while it holds none.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub alerts: BTreeMap<String, AlertParts>,
+    /// Your edits to the presets, the `[preset_edits]` table a profile
+    /// file holds in per profile mode. Every character shares the preset
+    /// triggers here, so they share one set of edits too. Left out while
+    /// it holds none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub preset_edits: PresetEdits,
 }
 
 impl GlobalCatalog {
     /// The catalog as the live profile holds it: its aliases, triggers,
-    /// macros, enabled presets and alert presets. A save in loadout mode
-    /// writes this.
+    /// macros, enabled presets, alert presets and preset edits. A save in
+    /// loadout mode writes this. Its preset macros take the hold with no
+    /// group left out, so the file never says which character saved last,
+    /// and each profile lays its own groups over it, see
+    /// [`hold_profile_keys`].
     pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
+        let mut macros = profile.macros.clone();
+        hold_taken_keys(&mut macros, &BTreeSet::new());
         Self {
             aliases: profile.aliases.list().into_iter().cloned().collect(),
             triggers: profile.triggers.list(),
-            macros: profile.macros.clone(),
+            macros,
             enabled_presets: Some(profile.ui.enabled_presets.clone()),
             alerts: profile.alerts.clone(),
+            preset_edits: profile.preset_edits.clone(),
         }
+    }
+
+    /// Give `file`, the file of a profile no session plays, the presets
+    /// as the catalog runs them: its list of presets that are on, your
+    /// edits to them, and the preset triggers as installed, your edits in
+    /// them. An export of that profile then carries the
+    /// presets you play, as an export of an open one does. A catalog that
+    /// has not taken the list yet leaves the file's own.
+    pub(crate) fn lay_presets_over_file(&self, file: &mut ProfileConfig) {
+        let Some(list) = &self.enabled_presets else {
+            return;
+        };
+        file.ui.enabled_presets.clone_from(list);
+        file.preset_edits.clone_from(&self.preset_edits);
+        let presets = self.triggers.iter().filter(|t| t.preset.is_some());
+        file.triggers
+            .retain(|t| !presets.clone().any(|p| p.name == t.name));
+        file.triggers.extend(presets.cloned());
     }
 }
 
@@ -113,17 +145,19 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
         macros.retain(|x| x.key != m.key || x.preset != m.preset);
         macros.push(m);
     }
-    hold_taken_keys(&mut macros);
     p.macros = macros;
+    p.on_catalog = true;
     // The presets that are on belong to the catalog with the preset
     // triggers, so the profile's own list gives way to it.
     if let Some(list) = &catalog.enabled_presets {
         p.ui.enabled_presets.clone_from(list);
-        // So does what each alert preset does.
+        // So do what each alert preset does and your edits to them all.
         p.alerts.clone_from(&catalog.alerts);
+        p.preset_edits.clone_from(&catalog.preset_edits);
     }
-    if let Some(set) = set {
-        apply_effective_state(set, p);
+    match set {
+        Some(set) => apply_effective_state(set, p),
+        None => hold_profile_keys(p),
     }
 }
 
@@ -133,14 +167,17 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
 /// comes in, so `p` keeps the edits it has yet to save and the stops Vosh
 /// put on the items that did not change. A macro is known by its key and
 /// preset, as your macro and a preset macro can share a key. The group
-/// state of `set`, the loadouts as `p` gates on them, then applies, since
-/// the change may bring a group.
+/// state of `set`, the loadouts as `p` gates on them, then applies to
+/// each group the change brings. A group `p` already had keeps its state,
+/// so a turn of its switch or `#group` lasts until the next launch,
+/// profile switch or Loadouts save, as its note says.
 pub(crate) fn lay_catalog_change_over(
     p: &mut Profile,
     before: &GlobalCatalog,
     after: &GlobalCatalog,
     set: Option<&LoadoutSet>,
 ) {
+    let had = GroupsHad::of(p);
     let (gone, came) = changes(&before.aliases, &after.aliases, |a| a.name.as_str());
     for name in gone {
         p.aliases.remove(name);
@@ -172,7 +209,6 @@ pub(crate) fn lay_catalog_change_over(
             None => p.macros.push(changed.clone()),
         }
     }
-    hold_taken_keys(&mut p.macros);
     if after.enabled_presets != before.enabled_presets {
         if let Some(list) = &after.enabled_presets {
             p.ui.enabled_presets.clone_from(list);
@@ -181,8 +217,60 @@ pub(crate) fn lay_catalog_change_over(
     if after.alerts != before.alerts {
         p.alerts.clone_from(&after.alerts);
     }
-    if let Some(set) = set {
-        apply_effective_state(set, p);
+    if after.preset_edits != before.preset_edits {
+        p.preset_edits.clone_from(&after.preset_edits);
+    }
+    match set {
+        Some(set) => {
+            apply_effective_state(set, p);
+            had.put_back(p);
+            // The groups put back may give a key back to your macro.
+            hold_profile_keys(p);
+        }
+        None => hold_profile_keys(p),
+    }
+}
+
+/// Each group a profile has in each store, with whether it is on.
+struct GroupsHad {
+    aliases: Vec<(String, bool)>,
+    triggers: Vec<(String, bool)>,
+    macros: Vec<(String, bool)>,
+}
+
+impl GroupsHad {
+    fn of(p: &Profile) -> Self {
+        let macros = p
+            .macros
+            .iter()
+            .filter_map(|m| m.group.clone())
+            .map(|g| {
+                let on = !p.disabled_macro_groups.contains(&g);
+                (g, on)
+            })
+            .collect();
+        Self {
+            aliases: p.aliases.groups(),
+            triggers: p.triggers.groups(),
+            macros,
+        }
+    }
+
+    /// Turn each group back to the state it had.
+    fn put_back(self, p: &mut Profile) {
+        for (name, on) in self.aliases {
+            p.aliases.set_group_enabled(&name, on);
+        }
+        for (name, on) in self.triggers {
+            p.triggers.set_group_enabled(&name, on);
+        }
+        for (name, on) in self.macros {
+            if on {
+                p.disabled_macro_groups.remove(&name);
+            } else {
+                p.disabled_macro_groups.insert(name);
+            }
+        }
     }
 }
 
@@ -325,6 +413,44 @@ mod tests {
         assert_eq!(q.alerts.len(), 1);
     }
 
+    #[test]
+    fn the_preset_edits_move_with_the_list_of_presets_that_are_on() {
+        use crate::loadouts::preset_edits::{EditRow, PresetEdit};
+        let off = PresetEdit {
+            triggers: std::collections::BTreeMap::from([(
+                "buff.sanctuary".into(),
+                std::collections::BTreeMap::from([(
+                    "enabled".into(),
+                    EditRow {
+                        value: false.into(),
+                        was: true.into(),
+                        seen: None,
+                    },
+                )]),
+            )]),
+            ..PresetEdit::default()
+        };
+        let catalog = GlobalCatalog {
+            enabled_presets: Some(vec!["disarm_buff_fade".into()]),
+            preset_edits: std::collections::BTreeMap::from([("disarm_buff_fade".into(), off)]),
+            ..GlobalCatalog::default()
+        };
+        let mut p = Profile::default();
+        lay_catalog_over(&mut p, &catalog, None);
+        assert_eq!(p.preset_edits, catalog.preset_edits);
+        assert_eq!(
+            GlobalCatalog::from_profile(&p).preset_edits,
+            catalog.preset_edits
+        );
+        // A change another open profile saved reaches this one.
+        let after = GlobalCatalog {
+            preset_edits: std::collections::BTreeMap::new(),
+            ..catalog.clone()
+        };
+        lay_catalog_change_over(&mut p, &catalog, &after, None);
+        assert!(p.preset_edits.is_empty(), "{:?}", p.preset_edits);
+    }
+
     /// A macro of yours on `key`, or one the preset `preset` added.
     fn bind(key: &str, command: &str, preset: Option<&str>) -> Macro {
         Macro {
@@ -372,12 +498,52 @@ mod tests {
         // holds d off.
         let mut after = before.clone();
         after.macros.push(bind("Numpad3", "rec", None));
-        hold_taken_keys(&mut after.macros);
+        hold_taken_keys(&mut after.macros, &BTreeSet::new());
         lay_catalog_change_over(&mut p, &before, &after, None);
         assert_eq!(sends(&p), [("n", true), ("d", false), ("rec", true)]);
         // It deletes rec again, and d takes the key back.
         lay_catalog_change_over(&mut p, &after, &before, None);
         assert_eq!(sends(&p), [("n", true), ("d", true)]);
+    }
+
+    #[test]
+    fn a_save_from_another_profile_keeps_the_groups_you_turned() {
+        let mut kick = Alias::new("kk", "kick %1");
+        kick.group = Some("combat".into());
+        let mut north = bind("Numpad8", "n", None);
+        north.group = Some("movement".into());
+        let before = GlobalCatalog {
+            aliases: vec![kick],
+            macros: vec![north],
+            ..GlobalCatalog::default()
+        };
+        let dormant = LoadoutSet {
+            dormant: true,
+            ..LoadoutSet::default()
+        };
+        let mut p = Profile::default();
+        lay_catalog_over(&mut p, &before, Some(&dormant));
+        // The loadouts hold both groups off, and you turn them on.
+        p.aliases.set_group_enabled("combat", true);
+        p.disabled_macro_groups.remove("movement");
+        // Another open profile saves a trigger in a new group.
+        let mut buff = Trigger::new(
+            "sanc",
+            "You feel righteous.",
+            vosh_automation::trigger::TriggerAction::Send {
+                template: "smile".into(),
+            },
+        );
+        buff.group = Some("buffs".into());
+        let after = GlobalCatalog {
+            triggers: vec![buff],
+            ..before.clone()
+        };
+        lay_catalog_change_over(&mut p, &before, &after, Some(&dormant));
+        assert!(p.aliases.is_group_enabled("combat"));
+        assert!(p.disabled_macro_groups.is_empty());
+        // The group it brings takes the state the loadouts give it.
+        assert!(!p.triggers.is_group_enabled("buffs"));
     }
 
     #[test]

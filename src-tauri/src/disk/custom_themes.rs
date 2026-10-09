@@ -119,7 +119,8 @@ fn holds_every_theme(shared: &[CustomTheme], held: &[CustomTheme], landed: &[Str
             .all(|(theme, id)| shared.iter().any(|s| s.id == *id && same_colors(s, theme)))
 }
 
-/// Point `ui`'s theme, light theme, and dark theme at the ids its own
+/// Point `ui`'s theme and the themes of its light, dark, day and night
+/// slots at the ids its own
 /// custom themes `held` landed under, so a theme that moved to a fresh id
 /// stays the one that profile shows.
 pub(crate) fn follow_moved_ids(ui: &mut UiConfig, held: &[CustomTheme], landed: &[String]) {
@@ -127,7 +128,13 @@ pub(crate) fn follow_moved_ids(ui: &mut UiConfig, held: &[CustomTheme], landed: 
     for (theme, id) in held.iter().zip(landed) {
         moved.entry(theme.id.as_str()).or_insert(id.as_str());
     }
-    for field in [&mut ui.theme, &mut ui.light_theme, &mut ui.dark_theme] {
+    for field in [
+        &mut ui.theme,
+        &mut ui.light_theme,
+        &mut ui.dark_theme,
+        &mut ui.day_theme,
+        &mut ui.night_theme,
+    ] {
         if let Some(id) = moved.get(field.as_str()) {
             if *id != field.as_str() {
                 *field = (*id).to_string();
@@ -495,12 +502,14 @@ mod tests {
         }
     }
 
-    /// A profile file that picked `id` as its theme and its dark theme
-    /// while it held `themes`, the way the old Themes tab saved it.
+    /// A profile file that picked `id` as its theme, its dark theme and
+    /// its day and night themes while it held `themes`.
     fn write_profile_pick(set: &ProfileSet, name: &str, id: &str, themes: Vec<CustomTheme>) {
         let mut config = ProfileConfig::default();
         config.ui.theme = id.into();
         config.ui.dark_theme = id.into();
+        config.ui.day_theme = id.into();
+        config.ui.night_theme = id.into();
         config.ui.custom_themes = themes;
         config.save(&set.profile_path(name)).unwrap();
     }
@@ -542,6 +551,8 @@ mod tests {
             assert!(file.ui.custom_themes.is_empty(), "{name} kept its list");
             assert_eq!(file.ui.theme, id, "{name}");
             assert_eq!(file.ui.dark_theme, id, "{name}");
+            assert_eq!(file.ui.day_theme, id, "{name}");
+            assert_eq!(file.ui.night_theme, id, "{name}");
         }
     }
 

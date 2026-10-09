@@ -330,7 +330,7 @@ impl Stage {
             return;
         };
         // An edit can change which lines above the last one your design
-        // reads, and so which of them show as sent (D7).
+        // reads, and so which of them show as sent.
         let heads = block.heads_shown_with_text();
         let heads_moved = heads != self.open_heads;
         let (body, live) = row_bodies(block, view);
