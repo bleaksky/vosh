@@ -46,6 +46,17 @@ import {
   type VitalsStyle,
   type VitalsValues,
 } from './uiConfigVitals';
+import {
+  coerceEchoMarkText,
+  normalizeInputCursorStyle,
+  normalizeInputEchoMark,
+  normalizeInputLineBackground,
+  normalizeInputLineSize,
+  optionalColor,
+  type InputCursorStyle,
+  type InputEchoMark,
+  type InputLineBackground,
+} from './uiConfigInput';
 
 export interface SystemFontEntry {
   family: string;
@@ -59,28 +70,6 @@ export async function listSystemFonts(): Promise<SystemFontEntry[]> {
   } catch {
     return [];
   }
-}
-
-/** Caret shapes the command line can paint. Each one renders inside the
- *  same anchor box as the default block, so switching shapes never
- *  reflows the input row. */
-export const INPUT_CURSOR_STYLES = [
-  'block',
-  'block_outline',
-  'half_block',
-  'underline',
-  'underline_thick',
-  'pipe',
-  'pipe_thick',
-] as const;
-
-export type InputCursorStyle = (typeof INPUT_CURSOR_STYLES)[number];
-
-/** Coerce an unknown caret shape back to the default block. */
-export function normalizeInputCursorStyle(value: unknown): InputCursorStyle {
-  return INPUT_CURSOR_STYLES.includes(value as InputCursorStyle)
-    ? (value as InputCursorStyle)
-    : 'block';
 }
 
 /** Terminal row spacing. Each id maps to the multiple of the glyph
@@ -208,9 +197,19 @@ export interface UiConfig {
    *  locally like typed commands, so under lag the keybind visibly
    *  registered before the world responds. */
   echo_macros: boolean;
-  /** When true (default), each command you send echoes after a grey
-   *  `›` and a space, Mark your commands under Input in Settings. */
-  input_echo_caret: boolean;
+  /** The mark each command you send echoes after, one of
+   *  INPUT_ECHO_MARKS. `›` by default. */
+  input_echo_mark: InputEchoMark;
+  /** Your own mark, at most four characters, kept while another mark is
+   *  picked. Rust coerces it. */
+  input_echo_mark_text: string;
+  /** Hex color of the mark. Null means the theme's bright black. */
+  input_echo_mark_color: string | null;
+  /** Draw the echo of each command faint, the mark unchanged. Off by
+   *  default. */
+  input_echo_dim: boolean;
+  /** Start the line you type in with the same mark. On by default. */
+  input_line_mark: boolean;
   /** Milliseconds to wait between lines when sending a multi-line
    *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
    *  flood filter does not kick. Clamped server-side to [0, 10000]. */
@@ -230,6 +229,34 @@ export interface UiConfig {
   writing_ask_post: boolean;
   /** Shape of the command-line caret. Defaults to the ember block. */
   input_cursor_style: InputCursorStyle;
+  /** The caret blinks. On by default, and Reduce motion still holds it
+   *  steady. */
+  input_caret_blink: boolean;
+  /** Hex color of the caret. Null means the theme accent. */
+  input_caret_color: string | null;
+  /** Hex color of what you type. Null means the theme text. */
+  input_line_color: string | null;
+  /** The command line's background, one of INPUT_LINE_BACKGROUNDS. */
+  input_line_background: InputLineBackground;
+  /** Your own background color, kept while another background is
+   *  picked. */
+  input_line_background_color: string | null;
+  /** Size in px of what you type. 0 follows your terminal size. */
+  input_line_size: number;
+  /** Color the command line as you type, by what Vosh knows the first
+   *  word to be. Off by default. */
+  input_type_colors: boolean;
+  /** Hex color of a line that starts with an alias. Null means the
+   *  theme's cyan. */
+  input_type_alias_color: string | null;
+  /** Hex color of a line that starts with a Vosh # command. Null means
+   *  the theme's magenta. */
+  input_type_hash_color: string | null;
+  /** Hex color of a chat line. Null means the theme's yellow. */
+  input_type_chat_color: string | null;
+  /** Hex color of a # command Vosh does not know. Null means the theme's
+   *  danger color. */
+  input_type_unknown_color: string | null;
   /** How the vitals under the panel's panes lay out, one of
    *  VITALS_DENSITIES. */
   vitals_density: VitalsDensity;
@@ -401,12 +428,27 @@ export interface RawUiConfig {
   split_divider_color?: string | null;
   input_echo_color?: string | null;
   echo_macros?: boolean;
-  input_echo_caret?: boolean;
+  input_echo_mark?: string;
+  input_echo_mark_text?: string;
+  input_echo_mark_color?: string | null;
+  input_echo_dim?: boolean;
+  input_line_mark?: boolean;
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
   writing_offer?: boolean;
   writing_ask_post?: boolean;
   input_cursor_style?: string;
+  input_caret_blink?: boolean;
+  input_caret_color?: string | null;
+  input_line_color?: string | null;
+  input_line_background?: string;
+  input_line_background_color?: string | null;
+  input_line_size?: number;
+  input_type_colors?: boolean;
+  input_type_alias_color?: string | null;
+  input_type_hash_color?: string | null;
+  input_type_chat_color?: string | null;
+  input_type_unknown_color?: string | null;
   vitals_density?: string;
   vitals_values?: string;
   vitals_meter?: string;
@@ -535,7 +577,17 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         ? cfg.input_echo_color
         : null,
     echo_macros: cfg.echo_macros !== false,
-    input_echo_caret: cfg.input_echo_caret !== false,
+    input_echo_mark: normalizeInputEchoMark(cfg.input_echo_mark),
+    input_echo_mark_text:
+      typeof cfg.input_echo_mark_text === 'string'
+        ? coerceEchoMarkText(cfg.input_echo_mark_text)
+        : '',
+    input_echo_mark_color:
+      typeof cfg.input_echo_mark_color === 'string' && cfg.input_echo_mark_color.length > 0
+        ? cfg.input_echo_mark_color
+        : null,
+    input_echo_dim: cfg.input_echo_dim === true,
+    input_line_mark: cfg.input_line_mark !== false,
     paste_line_delay_ms:
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
@@ -544,6 +596,17 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     writing_offer: cfg.writing_offer !== false,
     writing_ask_post: cfg.writing_ask_post !== false,
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
+    input_caret_blink: cfg.input_caret_blink !== false,
+    input_caret_color: optionalColor(cfg.input_caret_color),
+    input_line_color: optionalColor(cfg.input_line_color),
+    input_line_background: normalizeInputLineBackground(cfg.input_line_background),
+    input_line_background_color: optionalColor(cfg.input_line_background_color),
+    input_line_size: normalizeInputLineSize(cfg.input_line_size),
+    input_type_colors: cfg.input_type_colors === true,
+    input_type_alias_color: optionalColor(cfg.input_type_alias_color),
+    input_type_hash_color: optionalColor(cfg.input_type_hash_color),
+    input_type_chat_color: optionalColor(cfg.input_type_chat_color),
+    input_type_unknown_color: optionalColor(cfg.input_type_unknown_color),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),

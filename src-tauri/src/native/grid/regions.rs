@@ -255,12 +255,12 @@ impl TermGrid {
         }
     }
 
-    /// Your echo `bytes` without the grey mark Mark your commands draws
-    /// first, when the row it lands on already ends in `>`. Anything else
-    /// comes back as it is. The page's twin is `withoutMark` in
-    /// terminalRegion.ts.
+    /// Your echo `bytes` without the mark it starts with, every byte of
+    /// it, when the row it lands on already ends in `>`. Anything else
+    /// comes back as it is, and with the mark off nothing goes. The page's
+    /// twin is `withoutMark` in terminalRegion.ts.
     fn without_mark<'a>(&self, bytes: &'a [u8]) -> &'a [u8] {
-        match bytes.strip_prefix(crate::input::ECHO_CARET.as_bytes()) {
+        match bytes.strip_prefix(self.echo_mark.as_slice()) {
             Some(rest) if self.ends_in_prompt() => rest,
             _ => bytes,
         }

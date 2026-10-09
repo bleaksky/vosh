@@ -14,6 +14,8 @@ import { themeFor, washFieldsFor } from './paneTheme';
 import { getCurrentThemeId } from '../theme/theme';
 import { OutputShaper } from './outputShaper';
 import { RegionWriter } from './terminalRegion';
+import { echoMark } from '../input/maskedInput';
+import { getEchoMarkOptions, subscribeEchoMarkOptions } from '../stores/config/echoMarkStore';
 import { nativeSurfaceEnabled } from './terminalRenderer';
 import { BandLayer, LiftTracker, markLifted } from './xterm/liftBands';
 import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalRows';
@@ -249,6 +251,12 @@ export function Terminal({
     // parsed what it holds. A copy that fills anew from the scrollback
     // gets a writer of its own (see the mirror below).
     let writer = new RegionWriter(term);
+    // The writer leaves your mark out after a prompt that ends in >, so
+    // it holds the mark the command line echoes with, now and after each
+    // Settings save or profile switch.
+    const echoMarkNow = () => echoMark(getEchoMarkOptions());
+    writer.setEchoMark(echoMarkNow());
+    const stopEchoMark = subscribeEchoMarkOptions(() => writer.setEchoMark(echoMarkNow()));
     const localDecoder = new TextDecoder('utf-8', { fatal: false });
     // The newest output of the prompt stage the writer took, in the order
     // the session sent them.
@@ -427,6 +435,7 @@ export function Terminal({
       const top = term.buffer.active.viewportY;
       writer.dispose();
       writer = new RegionWriter(term);
+      writer.setEchoMark(echoMarkNow());
       if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
       writer.local('\x1bc');
       shaper = new OutputShaper(term.cols, fields, washed);
@@ -706,6 +715,7 @@ export function Terminal({
       unsubGridSize?.();
       underlayWatch.disconnect();
       refillRef.current = null;
+      stopEchoMark();
       writer.dispose();
       bandsRef.current?.dispose();
       bandsRef.current = null;

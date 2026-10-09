@@ -474,23 +474,26 @@ fn in_front<R: tauri::Runtime>(app: &AppHandle<R>, open: &Arc<OpenProfile>) -> b
         .is_some_and(|state| state.in_front(open))
 }
 
-/// The trigger and alias list revisions, the prompt table's, and the
-/// counts of macro group toggles and of group toggles in any list, at
-/// one moment.
+/// The trigger and alias list revisions, the session's plugin aliases',
+/// the prompt table's, and the counts of macro group toggles and of
+/// group toggles in any list, at one moment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ListRevisions {
     triggers: u64,
     aliases: u64,
+    plugin_aliases: u64,
     prompt: u64,
     macro_groups: u64,
     groups: u64,
 }
 
 impl ListRevisions {
-    /// The revisions of `profile`'s lists, and of the prompt table the
-    /// engine on `c` holds, which the profile keeps a copy of.
+    /// The revisions of `profile`'s lists, of the aliases the plugins on
+    /// `c` made, and of the prompt table the engine on `c` holds, which
+    /// the profile keeps a copy of.
     pub(crate) fn of(profile: &Profile, c: &Connection) -> Self {
         Self {
+            plugin_aliases: c.plugin_aliases.revision(),
             prompt: c.prompt.revision(),
             ..Self::of_lists(profile)
         }
@@ -503,6 +506,7 @@ impl ListRevisions {
         Self {
             triggers: profile.triggers.revision(),
             aliases: profile.aliases.revision(),
+            plugin_aliases: 0,
             prompt: 0,
             macro_groups: profile.macro_group_toggles,
             groups: profile.group_toggles,
@@ -526,7 +530,8 @@ impl ListChanges {
     pub(crate) fn between(before: ListRevisions, after: ListRevisions) -> Self {
         Self {
             triggers: before.triggers != after.triggers,
-            aliases: before.aliases != after.aliases,
+            aliases: before.aliases != after.aliases
+                || before.plugin_aliases != after.plugin_aliases,
             prompt: before.prompt != after.prompt,
             macro_groups: before.macro_groups != after.macro_groups,
             groups: before.groups != after.groups,

@@ -80,6 +80,9 @@ export interface WritingRequest {
   kind: WritingKind;
   /** The offer to take, when the card opens from the notice. */
   offer?: number;
+  /** Open on the text the game's editor holds, from the command line's
+   *  pill. */
+  fromEditor?: boolean;
   /** Each request counts, so the open card hears a repeat. */
   n: number;
 }
@@ -263,6 +266,10 @@ export function WritingCard({
     switchTo(request.kind, d);
     if (request.offer !== undefined) {
       jobs.take(request.offer, { kind: request.kind, action: 'read', name });
+      return;
+    }
+    if (request.fromEditor) {
+      jobs.takeEditor({ kind: request.kind, action: 'read', name });
       return;
     }
     readIfNoDraft(request.kind, d);

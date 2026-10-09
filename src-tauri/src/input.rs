@@ -9,7 +9,7 @@ mod automation;
 pub(crate) mod profile;
 mod prompt;
 mod script;
-mod slash;
+pub(crate) mod slash;
 pub(crate) mod target;
 mod tick;
 mod vars;
@@ -603,7 +603,7 @@ fn process_line(
         let expansion = format!("{} {}", qk.verb, target);
         let mut inner = process_line(state, profile, c, &expansion, from, replaced, lua);
         // Echo the resolved line like any other typed command, with the
-        // caret and the Sent command color. The frontend suppresses its
+        // mark and the Command color. The frontend suppresses its
         // own echo for quick-keys, so this is the only echo that lands.
         inner.echo.insert(0, command_echo(&expansion, &profile.ui));
         return inner;
@@ -710,32 +710,77 @@ fn fires_quick_key(c: &Connection, line: &str) -> bool {
         && quick_key(c, head).is_some()
 }
 
-/// The echo of a command you send, as the command line draws it: a grey
-/// `›` and a space while Mark your commands is on, then the command in
-/// the Sent command color when one is set. Mirrors `planSubmit` and
-/// `colorizeEcho` in src/input/maskedInput.ts, so a quick key echoes like a
-/// typed command. An empty line echoes as itself.
+/// The echo of a command you send, as the command line draws it: the
+/// mark from [`echo_mark`], then the command in the Command color when
+/// one is set, faint when Dim sent commands is on. The mark keeps its own
+/// color and never dims. Mirrors `commandEcho` and `echoMark` in
+/// src/input/maskedInput.ts, so a quick key echoes like a typed command.
+/// The bytes for each case sit in fixtures/input/echo-marks.json. An
+/// empty line echoes as itself.
 pub(crate) fn command_echo(line: &str, ui: &crate::profile::ui::UiConfig) -> String {
     if line.is_empty() {
         return String::new();
     }
-    let caret = if ui.input_echo_caret { ECHO_CARET } else { "" };
-    match ui.input_echo_color.as_deref().and_then(echo_rgb) {
-        Some((r, g, b)) => format!("{caret}\x1b[38;2;{r};{g};{b}m{line}\x1b[0m"),
-        None => format!("{caret}{line}"),
+    let mark = echo_mark(ui);
+    let color = ui.input_echo_color.as_deref().and_then(echo_rgb);
+    match (ui.input_echo_dim, color) {
+        (true, Some((r, g, b))) => format!("{mark}\x1b[2;38;2;{r};{g};{b}m{line}\x1b[0m"),
+        (true, None) => format!("{mark}\x1b[2m{line}\x1b[0m"),
+        (false, Some((r, g, b))) => format!("{mark}\x1b[38;2;{r};{g};{b}m{line}\x1b[0m"),
+        (false, None) => format!("{mark}{line}"),
     }
 }
 
-/// The grey `›` and space before each command you send, in the theme's
-/// bright black (SGR 90). The same bytes as `ECHO_CARET` in
-/// src/input/maskedInput.ts. Each renderer leaves it out when the row your
-/// echo lands on already ends in `>`, as a game's prompt such as
-/// `Account name> ` does (`TermGrid::local_write` and
-/// `TermGrid::session_output` in the native grid, and the page's
-/// `RegionWriter`).
-pub(crate) const ECHO_CARET: &str = "\x1b[90m\u{203a} \x1b[0m";
+/// The mark before each command you send, empty while it is off or your
+/// own text is blank: the Mark color, or the theme's bright black (SGR
+/// 90) when none is set, then `›`, `>` or your own text, then a space and
+/// a reset. Each renderer leaves it out when the row your echo lands on
+/// already ends in `>`, as a game's prompt such as `Account name> ` does
+/// (`TermGrid::local_write` and `TermGrid::session_output` in the native
+/// grid, which strips these bytes, and the page's `RegionWriter`).
+pub(crate) fn echo_mark(ui: &crate::profile::ui::UiConfig) -> String {
+    let text = match ui.input_echo_mark.as_str() {
+        "off" => return String::new(),
+        "gt" => ">",
+        "own" => ui.input_echo_mark_text.as_str(),
+        _ => "\u{203a}",
+    };
+    if text.is_empty() {
+        return String::new();
+    }
+    match ui.input_echo_mark_color.as_deref().and_then(echo_rgb) {
+        Some((r, g, b)) => format!("\x1b[38;2;{r};{g};{b}m{text} \x1b[0m"),
+        None => format!("\x1b[90m{text} \x1b[0m"),
+    }
+}
 
-/// The red, green and blue of a Sent command color, the six hex digits
+/// Tell the native grid of `session` the `mark` [`echo_mark`] gave, so
+/// the grid leaves out exactly that mark after a prompt that ends in `>`.
+pub(crate) fn keep_echo_mark(session: crate::sessions::SessionId, mark: String) {
+    #[cfg(any(native_surface, test))]
+    crate::native::grid::set_echo_mark(session, mark.into_bytes());
+    #[cfg(not(any(native_surface, test)))]
+    let _ = (session, mark);
+}
+
+/// Tell the native grid of every session on `open` the mark its profile
+/// gives, after a `#profile reset` or `#profile load` laid it over.
+pub(crate) async fn keep_profile_echo_mark(
+    state: &AppState,
+    open: &Arc<crate::profile::open::OpenProfile>,
+) {
+    let sessions = state.all_sessions();
+    let (players, mark) = {
+        let p = open.lock().await;
+        let players: Vec<_> = p.players(&sessions).map(|s| s.id).collect();
+        (players, echo_mark(&p.ui))
+    };
+    for session in players {
+        keep_echo_mark(session, mark.clone());
+    }
+}
+
+/// The red, green and blue of a Command or Mark color, the six hex digits
 /// at its start after an optional `#`, or None when it does not read.
 fn echo_rgb(color: &str) -> Option<(u8, u8, u8)> {
     let hex = color.trim();

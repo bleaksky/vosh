@@ -58,6 +58,12 @@ export function useCardRequests({
       ...(offer !== undefined ? { offer } : {}),
     }));
   }, []);
+  // The editor pill's Open in the writing card, on the text the game's
+  // editor holds now.
+  const openWritingFromEditor = useCallback((kind: WritingKind) => {
+    setPromptCard(null);
+    setWritingCard((prev) => ({ kind, n: (prev?.n ?? 0) + 1, fromEditor: true }));
+  }, []);
   // Your race and level, which decide the boards you write on and a
   // werebeast's beast.
   const charStatus = useCharStatus();
@@ -126,6 +132,7 @@ export function useCardRequests({
     writingCard,
     openPromptCard,
     openWriting,
+    openWritingFromEditor,
     charStatus,
     writeKinds,
     cardBand,

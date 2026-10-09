@@ -395,9 +395,76 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
 
   // Input.
   {
+    label: 'Mark before your commands',
+    description: 'Vosh leaves it out after a prompt that already ends in >.',
+    keywords: 'echo caret arrow prefix mark symbol sent input',
+    target: at('input', 'sent', 'mark-commands'),
+  },
+  {
+    label: 'Mark color',
+    keywords: 'echo mark caret color grey',
+    target: at('input', 'sent', 'mark-color'),
+  },
+  {
+    label: 'Command color',
+    keywords: 'echo local command typed sent color',
+    target: at('input', 'sent', 'sent-color'),
+  },
+  {
+    label: 'Dim sent commands',
+    description: 'Your commands draw faint, so the game’s lines stand out.',
+    keywords: 'echo faint dim grey sent',
+    target: at('input', 'sent', 'sent-dim'),
+  },
+  {
+    label: 'Use the same mark in the command line',
+    description: 'The line you type in starts with your mark.',
+    keywords: 'prompt glyph mark command line',
+    target: at('input', 'sent', 'mark-line'),
+  },
+  {
+    label: 'Show the commands your macros send',
+    keywords: 'macro echo keys',
+    target: at('input', 'sent', 'echo-macros'),
+  },
+  {
     label: 'Caret shape',
     keywords: 'cursor block outline underline pipe command line',
     target: at('input', 'command-line', 'caret'),
+  },
+  {
+    label: 'Caret blinks',
+    keywords: 'cursor blink flash steady',
+    target: at('input', 'command-line', 'caret-blink'),
+  },
+  {
+    label: 'Caret color',
+    keywords: 'cursor color accent',
+    target: at('input', 'command-line', 'caret-color'),
+  },
+  {
+    label: 'Text color',
+    keywords: 'command line input typed color foreground',
+    target: at('input', 'command-line', 'line-color'),
+  },
+  {
+    label: 'Background',
+    keywords: 'command line input band tint background',
+    target: at('input', 'command-line', 'line-bg'),
+  },
+  {
+    label: 'Size',
+    keywords: 'command line input font size bigger smaller',
+    target: at('input', 'command-line', 'line-size'),
+  },
+  // The four colors show only while the switch is on, so search names
+  // the switch.
+  {
+    label: 'Color commands as you type',
+    description:
+      'Aliases, Vosh commands and chat each take a color, and a # command Vosh doesn’t know turns red.',
+    keywords: 'syntax highlight fish color alias hash chat unknown',
+    target: at('input', 'command-line', 'type-colors'),
   },
   {
     label: 'Keep last command',
@@ -424,23 +491,6 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'Turn this off and Post posts your note at once, unless a report would record a room other than the one you began it in.',
     keywords: 'writing card note post confirm ask sure',
     target: at('input', 'writing', 'writing-ask-post'),
-  },
-  {
-    label: 'Mark your commands',
-    description:
-      'Draws a grey › before each command you send, except after a prompt that already ends in >.',
-    keywords: 'echo caret arrow prefix typed input sent',
-    target: at('input', 'command-line', 'mark-commands'),
-  },
-  {
-    label: 'Sent command color',
-    keywords: 'echo local command typed input',
-    target: at('input', 'command-line', 'sent-color'),
-  },
-  {
-    label: 'Show the commands your macros send',
-    keywords: 'macro echo keys',
-    target: at('input', 'command-line', 'echo-macros'),
   },
   {
     label: 'Wait between pasted lines',

@@ -1,6 +1,6 @@
 use super::profile::{load_profile_file, slash_profile, PROFILE_SAVE_BUSY};
 use super::script::slash_script;
-use super::slash::{parse_braced_pattern, HELP_TEXT};
+use super::slash::{parse_braced_pattern, HELP_TEXT, SLASH_COMMANDS};
 use super::target::{read_room_chars, set_room_chars};
 use super::*;
 use crate::profile::file::ProfileConfig;
@@ -1892,21 +1892,41 @@ fn a_quick_key_echoes_like_a_typed_command() {
     set_room_chars(&mut c, vec![rc("ogre", true)]);
     let _ = process_on(&mut p, &mut c, "tar 1");
     let _ = process_on(&mut p, &mut c, "#qkey gg kick");
-    // The caret is on by default, before the command in the
+    // The chevron is on by default, before the command in the
     // terminal's own color.
     assert_eq!(
         process_on(&mut p, &mut c, "gg").echo,
         vec!["\x1b[90m\u{203a} \x1b[0mkick ogre".to_string()]
     );
-    // The Sent command color wraps the command, never the caret.
+    // The Command color wraps the command, never the mark.
     p.ui.input_echo_color = Some("#88AAff".into());
     assert_eq!(
         process_on(&mut p, &mut c, "gg").echo,
         vec!["\x1b[90m\u{203a} \x1b[0m\x1b[38;2;136;170;255mkick ogre\x1b[0m".to_string()]
     );
-    // With the caret off the command echoes bare.
-    p.ui.input_echo_caret = false;
     p.ui.input_echo_color = None;
+    // The greater than sign, and your own text in the Mark color.
+    crate::profile::ui::set_input_echo_mark(&mut p.ui, "gt".into());
+    assert_eq!(
+        process_on(&mut p, &mut c, "gg").echo,
+        vec!["\x1b[90m> \x1b[0mkick ogre".to_string()]
+    );
+    crate::profile::ui::set_input_echo_mark(&mut p.ui, "own".into());
+    p.ui.input_echo_mark_text = "you:".into();
+    p.ui.input_echo_mark_color = Some("#c6a46a".into());
+    assert_eq!(
+        process_on(&mut p, &mut c, "gg").echo,
+        vec!["\x1b[38;2;198;164;106myou: \x1b[0mkick ogre".to_string()]
+    );
+    // Dim sent commands dims the command and leaves the mark.
+    p.ui.input_echo_dim = true;
+    assert_eq!(
+        process_on(&mut p, &mut c, "gg").echo,
+        vec!["\x1b[38;2;198;164;106myou: \x1b[0m\x1b[2mkick ogre\x1b[0m".to_string()]
+    );
+    // With the mark off the command echoes bare.
+    crate::profile::ui::set_input_echo_mark(&mut p.ui, "off".into());
+    p.ui.input_echo_dim = false;
     assert_eq!(
         process_on(&mut p, &mut c, "gg").echo,
         vec!["kick ogre".to_string()]
@@ -1928,19 +1948,43 @@ fn a_typed_line_fires_a_quick_key_as_the_pipeline_reads_it() {
     }
 }
 
-#[test]
-fn the_caret_is_the_one_the_command_line_draws() {
-    let page = include_str!("../../../src/input/maskedInput.ts");
-    assert!(page.contains(r"export const ECHO_CARET = '\x1b[90m\u203a \x1b[0m';"));
-    assert_eq!(ECHO_CARET, "\x1b[90m\u{203a} \x1b[0m");
+/// The cases in fixtures/input/echo-marks.json.
+#[derive(serde::Deserialize)]
+struct EchoMarks {
+    cases: Vec<EchoMarkCase>,
+}
+
+#[derive(serde::Deserialize)]
+struct EchoMarkCase {
+    about: String,
+    ui: crate::profile::ui::UiConfig,
+    command: String,
+    echo: String,
 }
 
 #[test]
-fn a_sent_command_color_that_does_not_read_leaves_the_command_plain() {
-    let mut ui = crate::profile::ui::UiConfig {
-        input_echo_caret: false,
-        ..crate::profile::ui::UiConfig::default()
-    };
+fn each_mark_echoes_the_bytes_the_shared_cases_give() {
+    let file: EchoMarks =
+        serde_json::from_str(include_str!("../../../fixtures/input/echo-marks.json")).unwrap();
+    assert!(!file.cases.is_empty());
+    for case in file.cases {
+        // Your own text as a file read or a Settings save keeps it.
+        let mut ui = case.ui;
+        ui.input_echo_mark_text =
+            crate::profile::ui::coerce_input_echo_mark_text(ui.input_echo_mark_text);
+        assert_eq!(
+            command_echo(&case.command, &ui),
+            case.echo,
+            "{}",
+            case.about
+        );
+    }
+}
+
+#[test]
+fn a_command_color_that_does_not_read_leaves_the_command_plain() {
+    let mut ui = crate::profile::ui::UiConfig::default();
+    crate::profile::ui::set_input_echo_mark(&mut ui, "off".into());
     for color in ["", "red", "#12345", "#12g456", "rgb(1,2,3)"] {
         ui.input_echo_color = Some(color.into());
         assert_eq!(command_echo("look", &ui), "look", "{color}");
@@ -2122,6 +2166,56 @@ fn unknown_slash_returns_error_echo() {
     let leftover = &r.bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
     assert!(r.echo.iter().any(|l| l.contains("unknown slash command")));
+}
+
+#[test]
+fn slash_commands_list_every_name_the_dispatcher_runs() {
+    for name in SLASH_COMMANDS {
+        let mut p = Profile::default();
+        let r = process(&mut p, &format!("#{name}"));
+        assert!(
+            !r.echo.iter().any(|l| l.contains("unknown slash command")),
+            "#{name}: {:?}",
+            r.echo
+        );
+    }
+}
+
+#[test]
+fn slash_a_word_outside_the_list_is_unknown() {
+    assert!(!SLASH_COMMANDS.contains(&"walkies"));
+    let mut p = Profile::default();
+    let r = process(&mut p, "#walkies");
+    assert!(r.echo.iter().any(|l| l.contains("unknown slash command")));
+}
+
+#[test]
+fn slash_commands_list_every_arm_of_the_dispatcher() {
+    // Each `"name" =>` arm of the match, plus `#walk`, which runs first.
+    let source = include_str!("slash.rs");
+    let start = source.find("match cmd {").expect("the dispatcher match");
+    let end = start + source[start..].find("other =>").expect("the unknown arm");
+    let mut arms: Vec<&str> = vec!["walk"];
+    for line in source[start..end].lines() {
+        let Some((names, _)) = line.trim().split_once("=>") else {
+            continue;
+        };
+        for name in names.split('|') {
+            if let Some(name) = name
+                .trim()
+                .strip_prefix('"')
+                .and_then(|n| n.strip_suffix('"'))
+            {
+                if !name.is_empty() {
+                    arms.push(name);
+                }
+            }
+        }
+    }
+    let mut listed = SLASH_COMMANDS.to_vec();
+    arms.sort_unstable();
+    listed.sort_unstable();
+    assert_eq!(arms, listed);
 }
 
 #[test]

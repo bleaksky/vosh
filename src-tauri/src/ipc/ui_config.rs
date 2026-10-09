@@ -62,12 +62,30 @@ pub(crate) struct UiConfigPayload {
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
     pub echo_macros: bool,
-    pub input_echo_caret: bool,
+    /// `off`, `chevron`, `gt` or `own`.
+    pub input_echo_mark: String,
+    pub input_echo_mark_text: String,
+    pub input_echo_mark_color: Option<String>,
+    pub input_echo_dim: bool,
+    pub input_line_mark: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
     pub writing_offer: bool,
     pub writing_ask_post: bool,
     pub input_cursor_style: String,
+    pub input_caret_blink: bool,
+    pub input_caret_color: Option<String>,
+    pub input_line_color: Option<String>,
+    /// `theme`, `tint` or `own`.
+    pub input_line_background: String,
+    pub input_line_background_color: Option<String>,
+    /// 0 follows the terminal size.
+    pub input_line_size: u32,
+    pub input_type_colors: bool,
+    pub input_type_alias_color: Option<String>,
+    pub input_type_hash_color: Option<String>,
+    pub input_type_chat_color: Option<String>,
+    pub input_type_unknown_color: Option<String>,
     pub vitals_density: String,
     pub vitals_values: String,
     pub vitals_meter: String,
@@ -157,12 +175,27 @@ impl UiConfigPayload {
             split_divider_color: ui.split_divider_color.clone(),
             input_echo_color: ui.input_echo_color.clone(),
             echo_macros: ui.echo_macros,
-            input_echo_caret: ui.input_echo_caret,
+            input_echo_mark: ui.input_echo_mark.clone(),
+            input_echo_mark_text: ui.input_echo_mark_text.clone(),
+            input_echo_mark_color: ui.input_echo_mark_color.clone(),
+            input_echo_dim: ui.input_echo_dim,
+            input_line_mark: ui.input_line_mark,
             paste_line_delay_ms: ui.paste_line_delay_ms,
             spellcheck_prompt: ui.spellcheck_prompt,
             writing_offer: ui.writing_offer,
             writing_ask_post: ui.writing_ask_post,
             input_cursor_style: ui.input_cursor_style.clone(),
+            input_caret_blink: ui.input_caret_blink,
+            input_caret_color: ui.input_caret_color.clone(),
+            input_line_color: ui.input_line_color.clone(),
+            input_line_background: ui.input_line_background.clone(),
+            input_line_background_color: ui.input_line_background_color.clone(),
+            input_line_size: ui.input_line_size,
+            input_type_colors: ui.input_type_colors,
+            input_type_alias_color: ui.input_type_alias_color.clone(),
+            input_type_hash_color: ui.input_type_hash_color.clone(),
+            input_type_chat_color: ui.input_type_chat_color.clone(),
+            input_type_unknown_color: ui.input_type_unknown_color.clone(),
             vitals_density: ui.vitals_density.clone(),
             vitals_values: ui.vitals_values.clone(),
             vitals_meter: ui.vitals_meter.clone(),
@@ -253,12 +286,29 @@ pub(crate) enum UiField {
     SplitDividerColor(Option<String>),
     InputEchoColor(Option<String>),
     EchoMacros(bool),
-    InputEchoCaret(bool),
+    /// Mark before your commands keeps `input_echo_caret` in step for an older
+    /// build.
+    InputEchoMark(String),
+    InputEchoMarkText(String),
+    InputEchoMarkColor(Option<String>),
+    InputEchoDim(bool),
+    InputLineMark(bool),
     PasteLineDelayMs(u32),
     SpellcheckPrompt(bool),
     WritingOffer(bool),
     WritingAskPost(bool),
     InputCursorStyle(String),
+    InputCaretBlink(bool),
+    InputCaretColor(Option<String>),
+    InputLineColor(Option<String>),
+    InputLineBackground(String),
+    InputLineBackgroundColor(Option<String>),
+    InputLineSize(u32),
+    InputTypeColors(bool),
+    InputTypeAliasColor(Option<String>),
+    InputTypeHashColor(Option<String>),
+    InputTypeChatColor(Option<String>),
+    InputTypeUnknownColor(Option<String>),
     VitalsDensity(String),
     VitalsValues(String),
     VitalsMeter(String),
@@ -324,16 +374,23 @@ async fn set_fields(
     profile: Option<String>,
 ) -> Result<Vec<(SessionId, VitalsText)>, String> {
     let sessions = state.all_sessions();
-    let (open, drawn, resized) = {
+    let (open, drawn, resized, marked) = {
         let mut p = state.lock_named(profile).await?;
         let text = p.ui.vitals_text.clone();
         let lines = p.ui.scrollback_lines;
+        let mark = crate::input::echo_mark(&p.ui);
         apply_fields(&mut p.ui, fields);
         // A new Scrollback size reaches every session on the profile.
         let resized: Vec<_> = if p.ui.scrollback_lines == lines {
             Vec::new()
         } else {
             p.players(&sessions).cloned().collect()
+        };
+        // So does a new mark or mark color, for the native grid.
+        let mark = Some(crate::input::echo_mark(&p.ui)).filter(|now| *now != mark);
+        let marked: Vec<_> = match mark {
+            Some(mark) => p.players(&sessions).map(|s| (s.id, mark.clone())).collect(),
+            None => Vec::new(),
         };
         let mut drawn = Vec::new();
         if p.ui.vitals_text != text {
@@ -345,11 +402,19 @@ async fn set_fields(
                 }
             }
         }
-        (p.open().clone(), drawn, (resized, p.ui.scrollback_lines))
+        (
+            p.open().clone(),
+            drawn,
+            (resized, p.ui.scrollback_lines),
+            marked,
+        )
     };
     let (resized, lines) = resized;
     for session in resized {
         crate::logs::keep_scrollback_lines(&session, lines).await;
+    }
+    for (session, mark) in marked {
+        crate::input::keep_echo_mark(session, mark);
     }
     persist_profile(state, &open).await;
     Ok(drawn)
@@ -401,7 +466,15 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             }
             UiField::InputEchoColor(v) => ui.input_echo_color = cfg::normalize_optional_color(v),
             UiField::EchoMacros(v) => ui.echo_macros = v,
-            UiField::InputEchoCaret(v) => ui.input_echo_caret = v,
+            UiField::InputEchoMark(v) => cfg::set_input_echo_mark(ui, v),
+            UiField::InputEchoMarkText(v) => {
+                ui.input_echo_mark_text = cfg::coerce_input_echo_mark_text(v);
+            }
+            UiField::InputEchoMarkColor(v) => {
+                ui.input_echo_mark_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputEchoDim(v) => ui.input_echo_dim = v,
+            UiField::InputLineMark(v) => ui.input_line_mark = v,
             UiField::PasteLineDelayMs(v) => {
                 ui.paste_line_delay_ms = cfg::coerce_paste_line_delay_ms(v);
             }
@@ -410,6 +483,29 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::WritingAskPost(v) => ui.writing_ask_post = v,
             UiField::InputCursorStyle(v) => {
                 ui.input_cursor_style = cfg::coerce_input_cursor_style(v);
+            }
+            UiField::InputCaretBlink(v) => ui.input_caret_blink = v,
+            UiField::InputCaretColor(v) => ui.input_caret_color = cfg::normalize_optional_color(v),
+            UiField::InputLineColor(v) => ui.input_line_color = cfg::normalize_optional_color(v),
+            UiField::InputLineBackground(v) => {
+                ui.input_line_background = cfg::coerce_input_line_background(v);
+            }
+            UiField::InputLineBackgroundColor(v) => {
+                ui.input_line_background_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputLineSize(v) => ui.input_line_size = cfg::coerce_input_line_size(v),
+            UiField::InputTypeColors(v) => ui.input_type_colors = v,
+            UiField::InputTypeAliasColor(v) => {
+                ui.input_type_alias_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeHashColor(v) => {
+                ui.input_type_hash_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeChatColor(v) => {
+                ui.input_type_chat_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeUnknownColor(v) => {
+                ui.input_type_unknown_color = cfg::normalize_optional_color(v);
             }
             UiField::VitalsDensity(v) => ui.vitals_density = cfg::coerce_vitals_density(v),
             UiField::VitalsValues(v) => ui.vitals_values = cfg::coerce_vitals_values(v),
@@ -781,6 +877,57 @@ mod tests {
         );
     }
 
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn a_new_mark_reaches_the_native_grid_of_each_session_on_the_profile() {
+        use std::sync::Arc;
+
+        use crate::app::state::{AppState, SharedState};
+        use crate::native::grid;
+        use crate::profile::live::Profile;
+        use crate::profile::set::ProfileSet;
+
+        // The grid map is shared with the other tests.
+        let _grid = grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("Orla").unwrap();
+        let state: SharedState = Arc::new(AppState::default());
+        state.set_profiles(set).await;
+        let orla = state.add_open_profile("Orla", Profile::default());
+        let session = state.open_session(orla);
+        let echo = |mark: &str, command: &str| {
+            grid::feed_session_output(session.id, &text(b"Your choice> "), None);
+            grid::feed_local(session.id, format!("{mark}{command}\r\n").as_bytes());
+        };
+        let gt = "\x1b[90m> \x1b[0m";
+        // The grid leaves out the chevron until the mark changes.
+        echo(gt, "1");
+        let fields = vec![setter("input_echo_mark", &"gt".into())];
+        super::set_fields(&state, fields, Some("Orla".into()))
+            .await
+            .unwrap();
+        echo(gt, "2");
+        // A new mark color changes the bytes it leaves out.
+        let fields = vec![setter("input_echo_mark_color", &"#c6a46a".into())];
+        super::set_fields(&state, fields, Some("Orla".into()))
+            .await
+            .unwrap();
+        echo("\x1b[38;2;198;164;106m> \x1b[0m", "3");
+        let rows = grid::screen_rows(session.id).unwrap().rows;
+        assert_eq!(
+            rows[..3],
+            ["Your choice> > 1", "Your choice> 2", "Your choice> 3"]
+        );
+    }
+
+    /// Game output of `bytes`, as the session hands it to the grid.
+    fn text(bytes: &[u8]) -> vosh_prompt::stage::Output {
+        let mut out = vosh_prompt::stage::Output::new(false);
+        out.text(bytes);
+        out
+    }
+
     #[test]
     fn a_theme_pick_that_names_a_profile_writes_that_profile() {
         use std::sync::Arc;
@@ -1053,6 +1200,54 @@ mod tests {
         }
         ui.panel_font_size = 200;
         assert_eq!(through_payload(&ui).panel_font_size, 64);
+    }
+
+    #[test]
+    fn the_command_line_look_round_trips() {
+        let mut ui = UiConfig::default();
+        let back = through_payload(&ui);
+        assert!(back.input_caret_blink);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_size, 0);
+        ui.input_caret_blink = false;
+        ui.input_caret_color = Some("#c6a46a".into());
+        ui.input_line_color = Some("#d8dee9".into());
+        ui.input_line_background = "own".into();
+        ui.input_line_background_color = Some("#1d1f21".into());
+        ui.input_line_size = 18;
+        let back = through_payload(&ui);
+        assert!(!back.input_caret_blink);
+        assert_eq!(back.input_caret_color.as_deref(), Some("#c6a46a"));
+        assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
+        assert_eq!(back.input_line_background, "own");
+        assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
+        assert_eq!(back.input_line_size, 18);
+        ui.input_caret_color = Some("  ".into());
+        ui.input_line_background = "glass".into();
+        ui.input_line_size = 3;
+        let back = through_payload(&ui);
+        assert_eq!(back.input_caret_color, None);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_size, 6);
+    }
+
+    #[test]
+    fn coloring_as_you_type_round_trips() {
+        let mut ui = UiConfig::default();
+        let back = through_payload(&ui);
+        assert!(!back.input_type_colors);
+        assert_eq!(back.input_type_alias_color, None);
+        ui.input_type_colors = true;
+        ui.input_type_alias_color = Some("#8abeb7".into());
+        ui.input_type_hash_color = Some("#b294bb".into());
+        ui.input_type_chat_color = Some(" #f0c674 ".into());
+        ui.input_type_unknown_color = Some(String::new());
+        let back = through_payload(&ui);
+        assert!(back.input_type_colors);
+        assert_eq!(back.input_type_alias_color.as_deref(), Some("#8abeb7"));
+        assert_eq!(back.input_type_hash_color.as_deref(), Some("#b294bb"));
+        assert_eq!(back.input_type_chat_color.as_deref(), Some("#f0c674"));
+        assert_eq!(back.input_type_unknown_color, None);
     }
 
     #[test]

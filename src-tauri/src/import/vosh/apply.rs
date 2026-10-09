@@ -390,6 +390,7 @@ async fn replace_open(
     for player in players {
         let mut c = player.connection.lock();
         hand_to_connection(&mut p, &mut c, &tick_before);
+        crate::input::keep_echo_mark(player.id, crate::input::echo_mark(&p.ui));
         if let Some(dir) = &plugins_dir {
             let apply = follow_profile_plugins(&mut p, &mut c, dir);
             after

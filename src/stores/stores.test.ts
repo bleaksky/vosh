@@ -20,9 +20,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: async (cmd: string) => {
+  invoke: async (cmd: string, args?: unknown) => {
     if (!commands.has(cmd)) throw new Error(`no fake for ${cmd}`);
-    return commands.get(cmd);
+    const answer = commands.get(cmd);
+    return typeof answer === 'function' ? answer(args) : answer;
   },
 }));
 
@@ -70,6 +71,11 @@ async function load() {
     target: await import('./session/targetStore'),
     tick: await import('./session/tickStore'),
     chipStyle: await import('./config/chipStyleStore'),
+    echoMark: await import('./config/echoMarkStore'),
+    lineMark: await import('./config/lineMarkStore'),
+    lineLook: await import('./config/lineLookStore'),
+    typeColors: await import('./config/typeColorsStore'),
+    knownWords: await import('./session/knownWordsStore'),
     tickCount: await import('./config/tickCountStore'),
     gameTime: await import('./config/gameTimeStore'),
     vitalsOptions: await import('./config/vitalsOptionsStore'),
@@ -599,6 +605,147 @@ describe('stores on the event bus', () => {
     fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(s.chipStyle.getChipStyle()).toBe('icon_value');
+  });
+
+  it('follow the echo mark Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', {
+      tracked_affects: [],
+      input_echo_mark: 'own',
+      input_echo_mark_text: 'you:',
+    });
+    const s = await load();
+    expect(s.echoMark.getEchoMarkOptions()).toEqual({
+      mark: 'own',
+      text: 'you:',
+      color: null,
+      dim: false,
+    });
+    const sent = { mark: 'gt', text: 'you:', color: '#c6a46a', dim: true };
+    fire('vosh://input-echo-mark-changed', sent);
+    const heard = s.echoMark.getEchoMarkOptions();
+    expect(heard).toEqual(sent);
+    // The same options again keep the snapshot.
+    fire('vosh://input-echo-mark-changed', { ...sent });
+    expect(s.echoMark.getEchoMarkOptions()).toBe(heard);
+    fire('vosh://input-echo-mark-changed', { mark: 'caret' });
+    expect(s.echoMark.getEchoMarkOptions()).toEqual({
+      mark: 'chevron',
+      text: '',
+      color: null,
+      dim: false,
+    });
+    commands.set('ui_get_config', { tracked_affects: [], input_echo_mark: 'off' });
+    fire('vosh://profile-switched', 'Orla');
+    await settle();
+    expect(s.echoMark.getEchoMarkOptions().mark).toBe('off');
+  });
+
+  it('follow the command line look Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', { tracked_affects: [], input_line_background: 'tint' });
+    const s = await load();
+    expect(s.lineLook.getLineLook()).toEqual({
+      blink: true,
+      caretColor: null,
+      textColor: null,
+      background: 'tint',
+      backgroundColor: null,
+      size: 0,
+    });
+    const sent = {
+      blink: false,
+      caretColor: '#c6a46a',
+      textColor: '#d8dee9',
+      background: 'own',
+      backgroundColor: '#1d1f21',
+      size: 16,
+    };
+    fire('vosh://input-line-look-changed', sent);
+    const heard = s.lineLook.getLineLook();
+    expect(heard).toEqual(sent);
+    fire('vosh://input-line-look-changed', { ...sent });
+    expect(s.lineLook.getLineLook()).toBe(heard);
+    commands.set('ui_get_config', { tracked_affects: [], input_line_size: 90 });
+    fire('vosh://profile-switched', 'Orla');
+    await settle();
+    expect(s.lineLook.getLineLook()).toMatchObject({ background: 'theme', size: 64 });
+  });
+
+  it('follow the coloring as you type Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', { tracked_affects: [] });
+    const s = await load();
+    expect(s.typeColors.getTypeColors()).toEqual({
+      on: false,
+      alias: null,
+      hash: null,
+      chat: null,
+      unknown: null,
+    });
+    const sent = { on: true, alias: '#8abeb7', hash: '#b294bb', chat: null, unknown: '#cc6666' };
+    fire('vosh://input-type-colors-changed', sent);
+    expect(s.typeColors.getTypeColors()).toEqual(sent);
+    commands.set('ui_get_config', { tracked_affects: [], input_type_chat_color: '#f0c674' });
+    fire('vosh://profile-switched', 'Maren');
+    await settle();
+    expect(s.typeColors.getTypeColors()).toMatchObject({ on: false, chat: '#f0c674' });
+  });
+
+  it('read the words Vosh knows only while coloring is on', async () => {
+    const asked: unknown[] = [];
+    let aliases = ['kk'];
+    commands.set('input_known_words', (args: unknown) => {
+      asked.push(args);
+      return { aliases, commands: ['alias', 'walk'] };
+    });
+    commands.set('ui_get_config', { tracked_affects: [] });
+    const s = await load();
+    fire('vosh://aliases-changed', 'Tolliver');
+    await settle();
+    expect(asked).toEqual([]);
+    expect(s.knownWords.getKnownWords()).toBeNull();
+
+    fire('vosh://input-type-colors-changed', { on: true });
+    await settle();
+    expect(asked).toEqual([{ session: 1 }]);
+    expect(s.knownWords.getKnownWords()).toEqual({ aliases: ['kk'], commands: ['alias', 'walk'] });
+
+    aliases = ['kk', 'hl'];
+    fire('vosh://aliases-changed', 'Tolliver');
+    await settle();
+    expect(s.knownWords.getKnownWords()?.aliases).toEqual(['kk', 'hl']);
+
+    const row = (id: number, selected: boolean) => ({ id, selected });
+    fire('vosh://sessions-changed', [row(1, false), row(2, true)]);
+    await settle();
+    expect(asked.at(-1)).toEqual({ session: 2 });
+
+    commands.set('ui_get_config', { tracked_affects: [], input_type_colors: true });
+    for (const event of ['groups-changed', 'plugins-changed', 'profile-switched']) {
+      const before = asked.length;
+      fire(`vosh://${event}`, 'Tolliver');
+      await settle();
+      expect(asked.length, event).toBe(before + 1);
+    }
+
+    fire('vosh://input-type-colors-changed', { on: false });
+    await settle();
+    expect(s.knownWords.getKnownWords()).toBeNull();
+    const before = asked.length;
+    fire('vosh://aliases-changed', 'Tolliver');
+    await settle();
+    expect(asked).toHaveLength(before);
+  });
+
+  it('follow the line mark switch Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', { tracked_affects: [], input_line_mark: false });
+    const s = await load();
+    expect(s.lineMark.getLineMark()).toBe(false);
+    fire('vosh://input-line-mark-changed', true);
+    expect(s.lineMark.getLineMark()).toBe(true);
+    commands.set('ui_get_config', { tracked_affects: [] });
+    fire('vosh://input-line-mark-changed', false);
+    fire('vosh://profile-switched', 'Orla');
+    await settle();
+    expect(s.lineMark.getLineMark()).toBe(true);
   });
 
   it('follow the tick count Settings saves and each profile keeps', async () => {

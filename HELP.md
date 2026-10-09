@@ -17,7 +17,7 @@ You connect from the session button, centered in the title band over the termina
 - To play in a second session beside this one, choose `New session…` instead. It opens a row of its own with a form that starts from the world you last saved.
 - Watch the dot shift from connecting to connected.
 - Type your character name at the login prompt and press `Enter`.
-- When the server asks for a password, the command line swaps to a masked field with the placeholder `password`. Nothing you type shows on screen, echoes to the terminal, lands in command history, or reaches the session log. Vosh sends it exactly as typed, with no aliases, variables, or `#` commands applied. Press `Enter` to submit. `Shift+Enter` submits here too instead of adding a line.
+- When the server asks for a password, the command line swaps to a masked field and the pill at its start reads `Password`. Nothing you type shows on screen, echoes to the terminal, lands in command history, or reaches the session log. Vosh sends it exactly as typed, with no aliases, variables, or `#` commands applied. Press `Enter` to submit. `Shift+Enter` submits here too instead of adding a line.
 
 While connected, the button shows your character name and the world. If a saved profile matches the host and port you dialed, Vosh switches to that profile before connecting. A profile set to log in as your character takes over right after login, when the server reports who you are.
 
@@ -193,13 +193,19 @@ The command input sends lines to the server. It handles single commands, chained
 - Type a command and press `Enter` to send it.
 - Chain commands on one line with `;`. Each piece goes out as its own command. Type `\;` for a literal semicolon.
 - Press `Shift+Enter` to add a line without sending. The box grows and a line number gutter appears once it holds two or more lines. Press `Enter` and every line submits separately, in order, with blank lines dropped.
-- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that. It echoes as a grey `›` on its own line, or as a blank line with `Mark your commands` off, so you see each one go out. After a prompt that ends in `>`, it ends that row and adds nothing.
+- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that. It echoes as your mark on its own line, or as a blank line with the mark Off, so you see each one go out. After a prompt that ends in `>`, it ends that row and adds nothing.
 - Paste multi line text straight into the input. A single line submits immediately. Two or more lines become a paste burst, sent one line every 500 ms by default, with a `paste N/M esc cancels` counter in the command line.
 - Press `Esc` during a burst to cancel every line that has not gone out yet. Starting a new paste also cancels the old burst.
 
+When `Enter` does something else, the command line names it in a pill where your mark sits. It reads `Password` at a password prompt and `More` at the game's pager, where `Enter` shows the next page. While a walk goes it reads `Walking` with the steps left, and `Esc` stops it. In the game's editor it names your text, as Write your description shows.
+
 With `Keep last command` on under Input, then Command line, in Settings, a sent command stays in the box fully selected. Press `Enter` again to resend it, or start typing to replace it.
 
-Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Turn off `Mark your commands` under Input, then Command line, in Settings, to echo them bare. A quick key and a macro echo the same way. Right after a prompt that ends in `>`, such as `Account name>` at login, a command echoes without the `›`, since the prompt marks it already.
+Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Pick another mark in `Mark before your commands` under Input, then Sent commands, in Settings. Choose `>`, your own text of up to four characters such as `you:`, or Off to echo your commands bare. With `Use the same mark in the command line` on, as it starts, the line you type in starts with the same mark, and with the mark Off it starts with your text. Turn on `Dim sent commands` and your commands draw faint, so the game's lines stand out, while the mark keeps its color. A quick key and a macro echo the same way. Right after a prompt that ends in `>`, such as `Account name>` at login, a command echoes without its mark, whichever mark you picked, since the prompt marks it already.
+
+Shape the line you type in under Input, then Command line, in Settings. `Caret blinks` is on at first, and with Reduce motion on in your system settings the caret holds still anyway. `Caret color` recolors the caret, which takes your theme's accent until you pick one, and `Text color` recolors what you type. `Background` keeps the theme's band, gives it a `Slight tint` of your theme's accent so the line stands apart from the game, or takes `Your own` color. `Size` starts at `Same as terminal`, and any size you pick changes only the line.
+
+Turn on `Color commands as you type` and the first word of each line decides its color. An alias and a Vosh `#` command color that word, a chat line by the same list spell check uses colors whole, and a `#` command Vosh doesn't know turns red. Vosh colors only what it knows for sure, so game commands stay plain. The selection, spell check and the caret work as before.
 
 Set the delay in `Wait between pasted lines` under Input, then Advanced, in Settings, anywhere from 0 to 10000 ms.
 
@@ -363,7 +369,7 @@ Vosh never writes, rewrites or suggests a word. The red underlines come from you
 
 Your drafts stay in writing.toml in your data folder, one for each character on each world, and save as you type. Close the card at any time and your draft waits for you. With no connection the card still opens, and `Send to game` waits for a session that plays the character.
 
-When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Write this in Vosh?`. `Open in Vosh` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed and the command line counts it to 75. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
+When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Write this in Vosh?`. `Open in Vosh` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed. The command line names your text and the line you're on, such as `Description · 4 of 30`, in amber past thirty. The tick still marks column 75, and what runs past it takes a wash. Click the name for `Open in the writing card`, which opens the card on your text, or `Finish`, which sends `@` and closes the game's editor. You can also type `@` on a blank line to finish. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
 
 ### 2.10 Write in the game
 
@@ -386,9 +392,9 @@ You can keep as many notes going as you like, each saved as you type. Each post 
 
 You can move the card, resize its box and pin it to the panel for any kind, as Write your description shows.
 
-Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
+Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does. Keep typing in a note and the command line reads like `Note · line 4`, since a note has no line limit.
 
-The card doesn't take tomes, cabal votes, paper or your pet's description yet. When you open one with `scribe text`, `vote edit`, `write edit` or `petedit desc`, no notice comes, and the command line counts each line you type to 75 all the same.
+The card doesn't take tomes, cabal votes, paper or your pet's description yet. When you open one with `scribe text`, `vote edit`, `write edit` or `petedit desc`, no notice comes. The command line still marks column 75 and reads like `Tome · line 4` as you type.
 
 ### 2.11 Walk to a place
 
@@ -399,7 +405,7 @@ The card doesn't take tomes, cabal votes, paper or your pet's description yet. W
 - Type `#walk 3n2e` to go north three times, then east twice.
 - Use `n` `e` `s` `w` `u` and `d`. The game has no diagonal exits, so `ne` walks north, then east.
 - Put a count from 1 to 99 before a direction to repeat it. Spaces between parts are fine.
-- The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. Other `#` commands leave it going.
+- The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. While you walk, the command line shows `Walking · 2 steps left` beside the map's chip. Other `#` commands leave it going.
 - An alias or a macro can run `#walk`, so `#alias bank #walk 3n2e` walks you there by name. Commands after `#walk` in the same alias wait until you arrive, and drop if the walk stops early.
 - Click a room on the map to walk to it. Vosh shows the steps as a `#walk` string first. A new click or `#walk` while you walk takes over once the step on its way lands.
 
@@ -548,7 +554,7 @@ Macros bind a key to a command that fires while the command line has focus. They
 
 A macro fires only while the command line has focus. On macOS the `Cmd` shortcuts belong to Vosh and `Ctrl` belongs to your macros.
 
-Turn on `Show the commands your macros send` under Input, then Command line, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
+Turn on `Show the commands your macros send` under Input, then Sent commands, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
 
 To walk with the numpad, turn on `Numpad movement` in Settings under Automation, then Presets. It adds six macros under `From presets` in Macros, where only their group changes. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. Vosh reads the key itself, so NumLock does not matter and the digit row still types.
 
@@ -937,7 +943,7 @@ The colors MUD text draws in live in Settings under Appearance, and the rows tha
 
 Keep highlight colors readable covers the exact colors a trigger or a preset paints text in, such as `{#8fa7d9}` or `{fg:244}` in `Replace with`. Vosh measures each one against the terminal background. When one reads too faint, Vosh keeps its hue and moves it darker on a light theme or lighter on a dark one until it reads. A color that already reads stays as you picked it, and your trigger keeps the color you saved. This switch never changes the game's own colors or the theme's sixteen colors. Fit game colors covers those. A theme switch reaches the lines that arrive after it, and earlier lines keep the color they were drawn in.
 
-Two more colors sit with the rows they belong to. `Sent command color` under Input, then Command line, recolors the local echo of every command you send, and the `›` before it stays grey. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
+More colors sit with the rows they belong to. `Command color` under Input, then Sent commands, recolors the local echo of every command you send. `Mark color` above it recolors the mark before each one, which stays the grey of your theme's bright black until you pick a color. `Text color` and `Caret color` under Input, then Command line, recolor what you type and the caret, which keep your theme's text and accent until you pick a color. While `Color commands as you type` is on, four more rows sit under it. `Aliases` start in your theme's cyan, `Vosh commands` in its magenta, `Chat` in its yellow, and `A # command Vosh doesn't know` in its danger color. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
 
 ### 6.4 Set the fonts
 

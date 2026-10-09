@@ -21,8 +21,11 @@ import {
   FONT_CHANGED,
   GAME_TIME_CHANGED,
   INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
+  INPUT_ECHO_MARK_CHANGED,
+  INPUT_LINE_LOOK_CHANGED,
+  INPUT_LINE_MARK_CHANGED,
+  INPUT_TYPE_COLORS_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -42,6 +45,7 @@ import {
 import { screenReaderOf } from './screenReader';
 import { fetchUiConfig, subscribeUiConfigReplaced, type UiConfig } from './uiConfig';
 import { type FontChange } from './uiConfigEvents';
+import { echoMarkOptionsOf, lineLookOf, typeColorsOf } from './uiConfigInput';
 import {
   vitalsOptionsOf,
   vitalsTextOf,
@@ -153,7 +157,29 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   await emitChanged(SPLIT_DIVIDER_CHANGED, config.split_divider_color, before?.split_divider_color);
   await emitChanged(INPUT_ECHO_COLOR_CHANGED, config.input_echo_color, before?.input_echo_color);
   await emitChanged(ECHO_MACROS_CHANGED, config.echo_macros, before?.echo_macros);
-  await emitChanged(INPUT_ECHO_CARET_CHANGED, config.input_echo_caret, before?.input_echo_caret);
+  // The mark, its text, its color and Dim go out as one, so an echo
+  // never mixes an old mark with a new color.
+  await emitChanged(
+    INPUT_ECHO_MARK_CHANGED,
+    echoMarkOptionsOf(config),
+    before ? echoMarkOptionsOf(before) : undefined,
+    deepEqual,
+  );
+  await emitChanged(INPUT_LINE_MARK_CHANGED, config.input_line_mark, before?.input_line_mark);
+  // The look and the coloring each go out as one, so the command line
+  // never draws an old caret color over a new background.
+  await emitChanged(
+    INPUT_LINE_LOOK_CHANGED,
+    lineLookOf(config),
+    before ? lineLookOf(before) : undefined,
+    deepEqual,
+  );
+  await emitChanged(
+    INPUT_TYPE_COLORS_CHANGED,
+    typeColorsOf(config),
+    before ? typeColorsOf(before) : undefined,
+    deepEqual,
+  );
   await emitChanged(
     PASTE_LINE_DELAY_CHANGED,
     config.paste_line_delay_ms,

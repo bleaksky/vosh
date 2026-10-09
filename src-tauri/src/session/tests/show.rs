@@ -1171,7 +1171,13 @@ fn pinned_after(line: &str) -> (Vec<String>, i32, Vec<String>) {
     let mut grid = crate::native::grid::TermGrid::new(60, 30);
     grid.session_output(&session.read(&mud.login()).out);
     let _ = session.send(line);
-    grid.local_write(format!("{}{line}\r\n", crate::input::ECHO_CARET).as_bytes());
+    grid.local_write(
+        format!(
+            "{}{line}\r\n",
+            crate::input::echo_mark(&crate::profile::ui::UiConfig::default())
+        )
+        .as_bytes(),
+    );
     session.local_write();
     for write in mud.command(line) {
         grid.session_output(&session.read(&write.bytes).out);

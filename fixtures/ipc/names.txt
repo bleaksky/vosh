@@ -18,6 +18,7 @@ command hidden_get(session?)
 command highlight_ground_set(background?, game?)
 command import_apply(format, text, presetTriggers, profile?)
 command import_detect(text)
+command input_known_words(session?)
 command launch_notices_take()
 command loadouts_get_state(profile?)
 command loadouts_set_active(active, profile?)
@@ -178,6 +179,7 @@ command writing_start(job, session?)
 command writing_stop(session?)
 command writing_switches_set(spelling, guide)
 command writing_take(id, session?)
+command writing_take_editor(id, session?)
 event session://alert app heard
 event session://alerts-ended app heard
 event session://game-prompt-seen app heard
@@ -229,8 +231,11 @@ event vosh://help-find app heard
 event vosh://help-goto page heard
 event vosh://help-open app heard
 event vosh://input-cursor-style-changed page heard
-event vosh://input-echo-caret-changed page heard
 event vosh://input-echo-color-changed page heard
+event vosh://input-echo-mark-changed page heard
+event vosh://input-line-look-changed page heard
+event vosh://input-line-mark-changed page heard
+event vosh://input-type-colors-changed page heard
 event vosh://keep-last-changed page heard
 event vosh://loadouts-changed app heard
 event vosh://macro-groups-changed app heard

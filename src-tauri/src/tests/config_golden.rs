@@ -394,12 +394,28 @@ fn full_ui() -> UiConfig {
         input_echo_color: Some("#88aaff".into()),
         echo_macros: false,
         input_echo_caret: false,
+        input_echo_mark: "off".into(),
+        input_echo_mark_text: "T>".into(),
+        input_echo_mark_color: Some("#c6a46a".into()),
+        input_echo_dim: true,
+        input_line_mark: false,
         side_panels_fill_height: true,
         paste_line_delay_ms: 250,
         spellcheck_prompt: true,
         writing_offer: false,
         writing_ask_post: false,
         input_cursor_style: "underline_thick".into(),
+        input_caret_blink: false,
+        input_caret_color: Some("#c6a46a".into()),
+        input_line_color: Some("#d8dee9".into()),
+        input_line_background: "own".into(),
+        input_line_background_color: Some("#1d1f21".into()),
+        input_line_size: 16,
+        input_type_colors: true,
+        input_type_alias_color: Some("#8abeb7".into()),
+        input_type_hash_color: Some("#b294bb".into()),
+        input_type_chat_color: Some("#f0c674".into()),
+        input_type_unknown_color: Some("#cc6666".into()),
         // set_prompt fills both from the [prompt] table.
         prompt_template_enabled: false,
         prompt_template: String::new(),
@@ -1378,6 +1394,22 @@ fn a_grouped_preset_trigger_with_no_edits_still_loads() {
     assert_eq!(sanctuary.group.as_deref(), Some("fights"));
     let edits = &config.preset_edits;
     assert!(edits.is_empty(), "{edits:?}");
+}
+
+/// Profile files from before the marks keep `input_echo_caret = true`,
+/// which reads as the › mark, and a save keeps the old switch for them.
+#[test]
+fn an_old_mark_your_commands_switch_reads_as_the_chevron() {
+    for name in [
+        "old/profile-grouped-preset.toml",
+        "old/profile-numpad-0.8.1.toml",
+    ] {
+        let config = load_old_profile(name);
+        assert_eq!(config.ui.input_echo_mark, "chevron", "{name}");
+        let text = config.to_toml().unwrap();
+        assert!(text.contains("input_echo_caret = true"), "{name}: {text}");
+        assert!(!text.contains("input_echo_mark"), "{name}: {text}");
+    }
 }
 
 #[test]

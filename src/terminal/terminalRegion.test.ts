@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import { ECHO_CARET } from '../input/maskedInput';
+import { DEFAULT_ECHO_MARK, echoMark } from '../input/maskedInput';
 import { LiftTracker } from './xterm/liftBands';
 import {
   closePinRow,
@@ -461,7 +461,7 @@ describe('RegionWriter held line ends', () => {
     const after = async (line: string, reply: string) => {
       const { term, writer } = setup();
       writer.output({ text: 'room', hold: '\r\n\r\n', pinRow: true });
-      writer.local(`${ECHO_CARET}${line}\r\n`);
+      writer.local(`${DEFAULT_ECHO_MARK}${line}\r\n`);
       writer.output({ text: reply, hold: '\r\n\r\n'.slice(reply ? 0 : 2), pinRow: true });
       await parsed(writer);
       const rows = screen(term);
@@ -1035,15 +1035,18 @@ describe('a run of repeated lines the session collapses', () => {
   });
 });
 
-// Mark your commands draws a grey › before your echo, unless the row it
-// lands on already ends in > before the cursor, as a game's own prompt
-// does. The same rules as the native grid's, in
+// Mark before your commands draws a mark, the grey › by default, before your
+// echo, unless the row it lands on already ends in > before the cursor,
+// as a game's own prompt does. The same rules as the native grid's, in
 // src-tauri/src/native/grid/regions.rs. The game lines are Aabahran's own,
 // from tables.c, update.c and the prompt fixtures.
 describe('the mark before your echo', () => {
   const sends: [string, (writer: RegionWriter, command: string) => void][] = [
-    ['typed', (writer, command) => writer.local(`${ECHO_CARET}${command}\r\n`)],
-    ['quick key', (writer, command) => writer.output({ text: `${ECHO_CARET}${command}\r\n` })],
+    ['typed', (writer, command) => writer.local(`${DEFAULT_ECHO_MARK}${command}\r\n`)],
+    [
+      'quick key',
+      (writer, command) => writer.output({ text: `${DEFAULT_ECHO_MARK}${command}\r\n` }),
+    ],
   ];
   const motd = 'Prepare yourself. For you are about to <Enter> the Forsaken Lands!';
 
@@ -1129,10 +1132,46 @@ describe('the mark before your echo', () => {
     });
   }
 
+  // Every mark you can pick drops by its own length, typed or a quick
+  // key, and keeps its place on a fresh row. Off has nothing to drop.
+  const picks: [string, string, string][] = [
+    ['the greater than sign', echoMark({ mark: 'gt', text: '', color: null }), '> '],
+    ['your own text', echoMark({ mark: 'own', text: 'you:', color: null }), 'you: '],
+    ['a colored chevron', echoMark({ mark: 'chevron', text: '', color: '#c6a46a' }), '› '],
+    ['Off', echoMark({ mark: 'off', text: 'you:', color: null }), ''],
+  ];
+  for (const [pick, picked, drawn] of picks) {
+    it(`drops ${pick} after your prompt and keeps it on a fresh row`, async () => {
+      const { term, writer } = setup();
+      writer.setEchoMark(picked);
+      writer.output({ text: `${mark(1)}<1020hp 800m 930mv> ` });
+      writer.local(`${picked}look\r\n`);
+      writer.output({ text: `${picked}kick\r\n` });
+      writer.output({ text: 'You are hungry.\r\n' });
+      writer.local(`${picked}look\r\n`);
+      await parsed(writer);
+      expect(screen(term)).toEqual([
+        '<1020hp 800m 930mv> look',
+        `${drawn}kick`,
+        'You are hungry.',
+        `${drawn}look`,
+      ]);
+    });
+  }
+
+  it('keeps a chevron the game sends once you pick another mark', async () => {
+    const { term, writer } = setup();
+    writer.setEchoMark(echoMark({ mark: 'gt', text: '', color: null }));
+    writer.output({ text: '<1020hp 800m 930mv> ' });
+    writer.output({ text: `${DEFAULT_ECHO_MARK}look\r\n` });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['<1020hp 800m 930mv> › look']);
+  });
+
   it('drops before a bare line end at a login prompt', async () => {
     const { term, writer } = setup();
     writer.output({ text: '\n\rYour choice> ' });
-    writer.local(`${ECHO_CARET}\r\n`);
+    writer.local(`${DEFAULT_ECHO_MARK}\r\n`);
     writer.output({ text: '\n\rYour choice> ' });
     await parsed(writer);
     expect(screen(term)).toEqual(['', 'Your choice> ', '', 'Your choice> ']);

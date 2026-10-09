@@ -19,8 +19,9 @@ pub(crate) struct Stops {
 }
 
 impl Stops {
-    pub(crate) fn stop(&mut self, name: &str, key: StopKey) {
-        self.by_key.entry(key).or_default().insert(name.to_string());
+    /// Stop `name` under `key`. True when it was not stopped there yet.
+    pub(crate) fn stop(&mut self, name: &str, key: StopKey) -> bool {
+        self.by_key.entry(key).or_default().insert(name.to_string())
     }
 
     /// The names stopped under `key`, so a pass over every item looks the

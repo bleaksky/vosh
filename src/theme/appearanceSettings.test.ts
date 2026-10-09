@@ -11,7 +11,7 @@ import {
   keepFit,
   pairChoices,
   panelFontChoices,
-  panelSizeChoices,
+  sizeChoicesWithTerminal,
   primaryFontFamily,
   removeCustomTheme,
   sizeChoices,
@@ -86,14 +86,14 @@ describe('panelFontChoices', () => {
   });
 });
 
-describe('panelSizeChoices', () => {
+describe('sizeChoicesWithTerminal', () => {
   it('offers the terminal size, then the sizes Size offers', () => {
-    expect(panelSizeChoices(12)).toEqual([
+    expect(sizeChoicesWithTerminal(12)).toEqual([
       { value: '0', label: 'Same as terminal' },
       ...sizeChoices(12),
     ]);
-    expect(panelSizeChoices(0)).toEqual(panelSizeChoices(12));
-    expect(panelSizeChoices(12).map((c) => c.value)).toEqual([
+    expect(sizeChoicesWithTerminal(0)).toEqual(sizeChoicesWithTerminal(12));
+    expect(sizeChoicesWithTerminal(12).map((c) => c.value)).toEqual([
       '0',
       '11',
       '12',
@@ -106,8 +106,8 @@ describe('panelSizeChoices', () => {
   });
 
   it('lists a size of your own among them', () => {
-    expect(panelSizeChoices(20).at(-1)).toEqual({ value: '20', label: '20 pt' });
-    expect(panelSizeChoices(9)[1]).toEqual({ value: '9', label: '9 pt' });
+    expect(sizeChoicesWithTerminal(20).at(-1)).toEqual({ value: '20', label: '20 pt' });
+    expect(sizeChoicesWithTerminal(9)[1]).toEqual({ value: '9', label: '9 pt' });
   });
 });
 

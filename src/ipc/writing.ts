@@ -142,6 +142,8 @@ export interface WritingState {
   editor: EditorKind | null;
   /** The card's offer, after you opened the editor yourself. */
   offer: { id: number; kind: WritingKind } | null;
+  /** How many lines the game's editor holds, while Vosh can count them. */
+  lines: number | null;
   job: JobProgress | null;
   /** Sends of the session that wait for the job. */
   held: number;
@@ -168,6 +170,11 @@ export async function writingStop(session?: number): Promise<void> {
 /** Take the offer `id`, so the card opens on what the game listed. */
 export async function writingTake(id: number, session?: number): Promise<void> {
   await invoke('writing_take', { id, session });
+}
+
+/** Open the card on the text the game's editor holds now, for the job `id`. */
+export async function writingTakeEditor(id: number, session?: number): Promise<void> {
+  await invoke('writing_take_editor', { id, session });
 }
 
 /** Hear each change to where a session's writer stands. */

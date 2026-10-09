@@ -330,11 +330,37 @@ pub(crate) struct UiConfig {
     /// when stacked macro sends make the scrollback too noisy.
     #[serde(default = "default_echo_macros")]
     pub echo_macros: bool,
-    /// When true (the default), the echo of each command you send starts
-    /// with a grey `›` and a space, so your commands stand apart from the
-    /// game's lines. A profile from before the setting reads it on.
-    #[serde(default = "default_input_echo_caret")]
+    /// The switch the mark grew from, kept in step with
+    /// `input_echo_mark` on every save (true unless the mark is `off`), so
+    /// an older build still marks your commands or leaves them bare. A
+    /// file without `input_echo_mark` reads the mark from it (see
+    /// [`read_input_echo_mark`]).
+    #[serde(default = "default_true")]
     pub input_echo_caret: bool,
+    /// The mark the echo of each command you send starts with, so your
+    /// commands stand apart from the game's lines. `off`, `chevron` for
+    /// `›`, `gt` for `>`, or `own` for `input_echo_mark_text`. Written
+    /// only once it is not `chevron`. Unknown values coerce to `chevron`.
+    #[serde(
+        default = "default_input_echo_mark",
+        skip_serializing_if = "is_default_input_echo_mark"
+    )]
+    pub input_echo_mark: String,
+    /// Your own mark, at most four characters. It stays while another
+    /// mark is picked, so picking `own` again brings it back.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub input_echo_mark_text: String,
+    /// CSS hex color of the mark. None means the theme's bright black,
+    /// SGR 90.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_echo_mark_color: Option<String>,
+    /// Draw the echo of each command you send faint. The mark keeps its
+    /// own color. Off by default.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub input_echo_dim: bool,
+    /// Start the line you type in with the same mark. On by default.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub input_line_mark: bool,
     /// Whether the old side panel zones filled the window height. The
     /// pane panel has no such zones, so nothing reads it. Every
     /// save writes back the value it loaded, so 0.7.2 keeps it on a
@@ -371,6 +397,56 @@ pub(crate) struct UiConfig {
     /// values coerce back to `block` on save.
     #[serde(default = "default_input_cursor_style")]
     pub input_cursor_style: String,
+    /// The command-line caret blinks. On by default, and Reduce motion
+    /// still holds it steady.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub input_caret_blink: bool,
+    /// CSS hex color of the caret. None means the theme accent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_caret_color: Option<String>,
+    /// CSS hex color of what you type. None means the theme text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_line_color: Option<String>,
+    /// The command line's background: `theme` (the default), `tint` for
+    /// a slight tint of the accent, or `own` for
+    /// `input_line_background_color`. Written only once it is not
+    /// `theme`. Unknown values coerce to `theme`.
+    #[serde(
+        default = "default_input_line_background",
+        skip_serializing_if = "is_default_input_line_background"
+    )]
+    pub input_line_background: String,
+    /// Your own background color. It stays while another background is
+    /// picked, so picking `own` again brings it back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_line_background_color: Option<String>,
+    /// Size in px of the text you type. 0, the default, follows the
+    /// terminal size. Anything else is held to 6 to 64.
+    #[serde(
+        default = "default_input_line_size",
+        skip_serializing_if = "is_default_input_line_size"
+    )]
+    pub input_line_size: u32,
+    /// Color the command line as you type, by what Vosh knows the first
+    /// word to be. Off by default.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub input_type_colors: bool,
+    /// CSS hex color of a line that starts with one of your aliases. None
+    /// means the theme's cyan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_alias_color: Option<String>,
+    /// CSS hex color of a line that starts with a Vosh `#` command. None
+    /// means the theme's magenta.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_hash_color: Option<String>,
+    /// CSS hex color of a chat line, the whole line. None means the
+    /// theme's yellow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_chat_color: Option<String>,
+    /// CSS hex color of a `#` command Vosh does not know. None means the
+    /// theme's danger color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_unknown_color: Option<String>,
     /// A copy of `[prompt] draw`, which holds the switch now. Every save
     /// writes it, so an older build that reads only this key still draws
     /// your prompt. A file with no `[prompt]` reads the switch from
@@ -1328,10 +1404,6 @@ fn default_echo_macros() -> bool {
     true
 }
 
-fn default_input_echo_caret() -> bool {
-    true
-}
-
 fn default_writing_offer() -> bool {
     true
 }
@@ -1428,12 +1500,28 @@ impl Default for UiConfig {
             input_echo_color: None,
             echo_macros: true,
             input_echo_caret: true,
+            input_echo_mark: default_input_echo_mark(),
+            input_echo_mark_text: String::new(),
+            input_echo_mark_color: None,
+            input_echo_dim: false,
+            input_line_mark: true,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,
             writing_offer: true,
             writing_ask_post: true,
             input_cursor_style: default_input_cursor_style(),
+            input_caret_blink: true,
+            input_caret_color: None,
+            input_line_color: None,
+            input_line_background: default_input_line_background(),
+            input_line_background_color: None,
+            input_line_size: default_input_line_size(),
+            input_type_colors: false,
+            input_type_alias_color: None,
+            input_type_hash_color: None,
+            input_type_chat_color: None,
+            input_type_unknown_color: None,
             prompt_template_enabled: false,
             prompt_template: String::new(),
             vitals: VitalsConfig::default(),
@@ -1558,6 +1646,60 @@ pub(crate) fn set_follow_system_appearance(ui: &mut UiConfig, on: bool) {
         (false, kept) => kept.to_string(),
     };
     set_theme_follow(ui, mode);
+}
+
+/// The marks the echo of a command you send can start with. Anything
+/// else saves as `chevron`.
+pub(crate) const INPUT_ECHO_MARKS: [&str; 4] = ["off", "chevron", "gt", "own"];
+
+/// The most characters your own mark keeps.
+pub(crate) const INPUT_ECHO_MARK_TEXT_MAX: usize = 4;
+
+fn default_input_echo_mark() -> String {
+    "chevron".to_string()
+}
+
+fn is_default_input_echo_mark(value: &str) -> bool {
+    value == "chevron"
+}
+
+/// Keep a known mark and turn anything else into `chevron`.
+pub(crate) fn coerce_input_echo_mark(value: String) -> String {
+    if INPUT_ECHO_MARKS.contains(&value.as_str()) {
+        value
+    } else {
+        default_input_echo_mark()
+    }
+}
+
+/// Your own mark as it saves. Control characters drop, the ends trim, and
+/// it keeps at most [`INPUT_ECHO_MARK_TEXT_MAX`] characters.
+pub(crate) fn coerce_input_echo_mark_text(value: String) -> String {
+    let clean: String = value.chars().filter(|c| !c.is_control()).collect();
+    let kept: String = clean
+        .trim()
+        .chars()
+        .take(INPUT_ECHO_MARK_TEXT_MAX)
+        .collect();
+    kept.trim_end().to_string()
+}
+
+/// The mark a file reads as. `input_echo_caret` false is `off` whatever
+/// `input_echo_mark` says, so a file without the key keeps the choice an
+/// older build saved. True with `off` means an older build turned the mark
+/// back on, which reads as `chevron`. Else the mark stays, coerced.
+pub(crate) fn read_input_echo_mark(input_echo_caret: bool, input_echo_mark: &str) -> String {
+    match (input_echo_caret, input_echo_mark) {
+        (false, _) => "off".to_string(),
+        (true, "off") => default_input_echo_mark(),
+        (true, mark) => coerce_input_echo_mark(mark.to_string()),
+    }
+}
+
+/// Set the mark and keep `input_echo_caret` true unless it is `off`.
+pub(crate) fn set_input_echo_mark(ui: &mut UiConfig, value: String) {
+    ui.input_echo_mark = coerce_input_echo_mark(value);
+    ui.input_echo_caret = ui.input_echo_mark != "off";
 }
 
 /// Trim a day or night theme pick. A blank one stays blank, which the
@@ -1911,6 +2053,48 @@ pub(crate) fn coerce_input_cursor_style(value: String) -> String {
     }
 }
 
+/// The backgrounds the command line draws. Anything else saves as the
+/// default, the theme's.
+pub(crate) const INPUT_LINE_BACKGROUNDS: [&str; 3] = ["theme", "tint", "own"];
+
+fn default_input_line_background() -> String {
+    "theme".to_string()
+}
+
+fn is_default_input_line_background(value: &str) -> bool {
+    value == "theme"
+}
+
+/// Keep a known background and turn anything else into `theme`.
+pub(crate) fn coerce_input_line_background(value: String) -> String {
+    if INPUT_LINE_BACKGROUNDS.contains(&value.as_str()) {
+        value
+    } else {
+        default_input_line_background()
+    }
+}
+
+/// What the command line Size row saves to follow the terminal size.
+pub(crate) const INPUT_LINE_SIZE_TERMINAL: u32 = 0;
+
+fn default_input_line_size() -> u32 {
+    INPUT_LINE_SIZE_TERMINAL
+}
+
+fn is_default_input_line_size(size: &u32) -> bool {
+    *size == INPUT_LINE_SIZE_TERMINAL
+}
+
+/// Hold a command line size to the terminal size's 6 to 64 pixels,
+/// keeping 0, which follows the terminal size.
+pub(crate) fn coerce_input_line_size(size: u32) -> u32 {
+    if size == INPUT_LINE_SIZE_TERMINAL {
+        size
+    } else {
+        coerce_font_size(size)
+    }
+}
+
 pub(crate) fn default_true() -> bool {
     true
 }
@@ -2040,23 +2224,216 @@ name = "haste"
     }
 
     #[test]
-    fn a_profile_from_before_mark_your_commands_reads_it_on() {
-        let parsed = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
-        assert!(parsed.ui.input_echo_caret);
-        let off = ProfileConfig::from_toml("[ui]\ninput_echo_caret = false\n").unwrap();
-        assert!(!off.ui.input_echo_caret);
-        assert!(off.to_toml().unwrap().contains("input_echo_caret = false"));
+    fn the_old_mark_switch_reads_as_the_mark_and_saves_in_step() {
+        let read = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        // A profile from before the setting, or with the switch on, reads ›.
+        for text in [
+            "[ui]\ntheme = \"nord\"\n",
+            "[ui]\ninput_echo_caret = true\n",
+        ] {
+            assert_eq!(read(text).input_echo_mark, "chevron", "{text}");
+        }
+        let off = read("[ui]\ninput_echo_caret = false\n");
+        assert_eq!(off.input_echo_mark, "off");
+        let text = through_text(&off);
+        assert!(text.contains("input_echo_caret = false"), "{text}");
+        assert!(text.contains("input_echo_mark = \"off\""), "{text}");
+        // An older build that turns the switch off drops the mark, and one
+        // that turns it back on reads as ›.
+        assert_eq!(
+            read("[ui]\ninput_echo_caret = false\ninput_echo_mark = \"gt\"\n").input_echo_mark,
+            "off"
+        );
+        assert_eq!(
+            read("[ui]\ninput_echo_caret = true\ninput_echo_mark = \"off\"\n").input_echo_mark,
+            "chevron"
+        );
+        // Every mark but off saves the switch on, and only › is left out.
+        for mark in INPUT_ECHO_MARKS {
+            let mut ui = UiConfig::default();
+            set_input_echo_mark(&mut ui, mark.to_string());
+            let text = through_text(&ui);
+            let on = mark != "off";
+            assert!(
+                text.contains(&format!("input_echo_caret = {on}")),
+                "{mark}: {text}"
+            );
+            assert_eq!(
+                text.contains("input_echo_mark ="),
+                mark != "chevron",
+                "{mark}: {text}"
+            );
+            assert_eq!(through_toml(&ui).input_echo_mark, mark);
+        }
+        let mut ui = UiConfig::default();
+        set_input_echo_mark(&mut ui, "caret".into());
+        assert_eq!(
+            (ui.input_echo_mark.as_str(), ui.input_echo_caret),
+            ("chevron", true)
+        );
     }
 
-    /// Save `ui` to a profile file and read it back.
-    fn through_toml(ui: &UiConfig) -> UiConfig {
+    #[test]
+    fn your_own_mark_keeps_four_characters_and_no_control_ones() {
+        for (typed, kept) in [
+            ("T>", "T>"),
+            ("  ab  ", "ab"),
+            ("\u{1b}[1m>>", "[1m>"),
+            ("a\tb\nc", "abc"),
+            ("abc def", "abc"),
+            ("ᚠᚢᚦᚨᚱ", "ᚠᚢᚦᚨ"),
+            ("\u{7}", ""),
+        ] {
+            assert_eq!(coerce_input_echo_mark_text(typed.into()), kept, "{typed:?}");
+        }
+        let ui = ProfileConfig::from_toml("[ui]\ninput_echo_mark_text = \" >>>>> \"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.input_echo_mark_text, ">>>>");
+    }
+
+    #[test]
+    fn the_mark_settings_save_only_once_they_change() {
+        let text = through_text(&UiConfig::default());
+        for key in [
+            "input_echo_mark",
+            "input_echo_mark_text",
+            "input_echo_mark_color",
+            "input_echo_dim",
+            "input_line_mark",
+        ] {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let ui = UiConfig {
+            input_echo_mark: "own".into(),
+            input_echo_mark_text: "T>".into(),
+            input_echo_mark_color: Some("#c6a46a".into()),
+            input_echo_dim: true,
+            input_line_mark: false,
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert_eq!(back.input_echo_mark, "own");
+        assert_eq!(back.input_echo_mark_text, "T>");
+        assert_eq!(back.input_echo_mark_color.as_deref(), Some("#c6a46a"));
+        assert!(back.input_echo_dim);
+        assert!(!back.input_line_mark);
+    }
+
+    #[test]
+    fn the_command_line_look_saves_only_once_it_changes() {
+        let text = through_text(&UiConfig::default());
+        for key in [
+            "input_caret_blink",
+            "input_caret_color",
+            "input_line_color",
+            "input_line_background",
+            "input_line_background_color",
+            "input_line_size",
+        ] {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&UiConfig::default());
+        assert!(back.input_caret_blink);
+        assert_eq!(back.input_caret_color, None);
+        assert_eq!(back.input_line_color, None);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_background_color, None);
+        assert_eq!(back.input_line_size, 0);
+        let ui = UiConfig {
+            input_caret_blink: false,
+            input_caret_color: Some("#c6a46a".into()),
+            input_line_color: Some("#d8dee9".into()),
+            input_line_background: "tint".into(),
+            input_line_background_color: Some("#1d1f21".into()),
+            input_line_size: 16,
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert!(!back.input_caret_blink);
+        assert_eq!(back.input_caret_color.as_deref(), Some("#c6a46a"));
+        assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
+        assert_eq!(back.input_line_background, "tint");
+        assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
+        assert_eq!(back.input_line_size, 16);
+        for pick in ["theme", "tint", "own"] {
+            let ui = UiConfig {
+                input_line_background: pick.into(),
+                ..UiConfig::default()
+            };
+            assert_eq!(through_toml(&ui).input_line_background, pick);
+        }
+    }
+
+    #[test]
+    fn coloring_as_you_type_saves_only_once_it_changes() {
+        let keys = [
+            "input_type_colors",
+            "input_type_alias_color",
+            "input_type_hash_color",
+            "input_type_chat_color",
+            "input_type_unknown_color",
+        ];
+        let text = through_text(&UiConfig::default());
+        for key in keys {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&UiConfig::default());
+        assert!(!back.input_type_colors);
+        assert_eq!(back.input_type_alias_color, None);
+        assert_eq!(back.input_type_hash_color, None);
+        assert_eq!(back.input_type_chat_color, None);
+        assert_eq!(back.input_type_unknown_color, None);
+        let ui = UiConfig {
+            input_type_colors: true,
+            input_type_alias_color: Some("#8abeb7".into()),
+            input_type_hash_color: Some("#b294bb".into()),
+            input_type_chat_color: Some("#f0c674".into()),
+            input_type_unknown_color: Some("#cc6666".into()),
+            ..UiConfig::default()
+        };
+        let text = through_text(&ui);
+        for key in keys {
+            assert!(text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&ui);
+        assert!(back.input_type_colors);
+        assert_eq!(back.input_type_alias_color.as_deref(), Some("#8abeb7"));
+        assert_eq!(back.input_type_hash_color.as_deref(), Some("#b294bb"));
+        assert_eq!(back.input_type_chat_color.as_deref(), Some("#f0c674"));
+        assert_eq!(back.input_type_unknown_color.as_deref(), Some("#cc6666"));
+    }
+
+    #[test]
+    fn an_unknown_command_line_background_reads_as_the_theme() {
+        for value in ["theme", "tint", "own"] {
+            assert_eq!(coerce_input_line_background(value.into()), value);
+        }
+        for value in ["", "Tint", "glass"] {
+            assert_eq!(coerce_input_line_background(value.into()), "theme");
+        }
+    }
+
+    #[test]
+    fn a_command_line_size_holds_to_the_terminal_sizes_and_keeps_same_as_terminal() {
+        assert_eq!(coerce_input_line_size(INPUT_LINE_SIZE_TERMINAL), 0);
+        assert_eq!(coerce_input_line_size(3), 6);
+        assert_eq!(coerce_input_line_size(14), 14);
+        assert_eq!(coerce_input_line_size(90), 64);
+    }
+
+    /// The profile file a save of `ui` writes.
+    fn through_text(ui: &UiConfig) -> String {
         let config = ProfileConfig {
             ui: ui.clone(),
             ..ProfileConfig::default()
         };
-        ProfileConfig::from_toml(&config.to_toml().unwrap())
-            .unwrap()
-            .ui
+        config.to_toml().unwrap()
+    }
+
+    /// Save `ui` to a profile file and read it back.
+    fn through_toml(ui: &UiConfig) -> UiConfig {
+        ProfileConfig::from_toml(&through_text(ui)).unwrap().ui
     }
 
     #[test]

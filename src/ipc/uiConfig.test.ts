@@ -21,6 +21,7 @@ import {
   type UiFields,
 } from './uiConfig';
 import { broadcastUiConfigChanges } from './uiConfigBroadcast';
+import { coerceEchoMarkText } from './uiConfigInput';
 import { galleryThemes } from '../theme/themeThumb';
 import {
   BUILTIN_THEMES,
@@ -625,6 +626,20 @@ describe('setUiFields', () => {
     );
   });
 
+  it('reads the command line background and size the way Rust saves them', () => {
+    const read = (patch: Partial<RawUiConfig>) => normalizeUiConfig(patch as RawUiConfig);
+    expect(read({ input_line_background: 'tint' }).input_line_background).toBe('tint');
+    expect(read({ input_line_background: 'glass' }).input_line_background).toBe('theme');
+    for (const [saved, size] of [
+      [0, 0],
+      [3, 6],
+      [14, 14],
+      [90, 64],
+    ]) {
+      expect(read({ input_line_size: saved }).input_line_size, String(saved)).toBe(size);
+    }
+  });
+
   it('reads the Switch themes mode, and off for anything it does not know', () => {
     const read = (mode: unknown) =>
       normalizeUiConfig({ theme_follow: mode } as RawUiConfig).theme_follow;
@@ -675,5 +690,20 @@ describe('normalizeSnoopShare', () => {
     expect(normalizeSnoopShare(Number.NaN)).toBe(0.4);
     expect(normalizeSnoopShare('wide')).toBe(0.4);
     expect(normalizeSnoopShare(undefined)).toBe(0.4);
+  });
+});
+
+describe('your own mark', () => {
+  it('keeps four characters and no control ones, as Rust saves it', () => {
+    const cases: [string, string][] = [
+      ['T>', 'T>'],
+      ['  ab  ', 'ab'],
+      ['\x1b[1m>>', '[1m>'],
+      ['a\tb\nc', 'abc'],
+      ['abc def', 'abc'],
+      ['ᚠᚢᚦᚨᚱ', 'ᚠᚢᚦᚨ'],
+      ['\x07', ''],
+    ];
+    for (const [typed, kept] of cases) expect(coerceEchoMarkText(typed), typed).toBe(kept);
   });
 });

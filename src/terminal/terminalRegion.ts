@@ -47,13 +47,13 @@
 // rows the pinned band lends need. xterm has parsed none of what it
 // holds then, so its flush parses each write once.
 //
-// While Mark your commands is on, your echo, typed or from a quick key,
-// starts with its grey mark. Where the echo lands decides the mark, so it
+// With a mark picked, your echo, typed or from a quick key,
+// starts with that mark. Where the echo lands decides the mark, so it
 // waits for xterm to parse what came before it, held line ends and a
 // restore included. When the row it lands on already ends in `>` before
 // the cursor, as the game's own prompt does, the mark drops.
 
-import { ECHO_CARET } from '../input/maskedInput';
+import { DEFAULT_ECHO_MARK } from '../input/maskedInput';
 
 /** The private OSC a region mark uses. */
 export const REGION_OSC = 7717;
@@ -287,6 +287,9 @@ export class RegionWriter {
   private readonly queue: Item[] = [];
   private readonly osc: { dispose(): void };
   private disposed = false;
+  /** The bytes your echo starts with, which it leaves out after a prompt
+   *  that ends in `>`. Empty while the mark is off. */
+  private echoMark = DEFAULT_ECHO_MARK;
 
   constructor(term: RegionTerminal) {
     this.term = term;
@@ -305,6 +308,12 @@ export class RegionWriter {
    *  lands after the open region, so it closes it. */
   local(text: string): void {
     if (text.length > 0) this.push({ kind: 'local', text });
+  }
+
+  /** Take the mark your echo starts with now, as echoMark builds it,
+   *  empty for none. */
+  setEchoMark(mark: string): void {
+    this.echoMark = mark;
   }
 
   /** Line ends that bring the cursor down to the last row, as padding
@@ -610,7 +619,7 @@ export class RegionWriter {
    *  ends it ends on, as held line ends. */
   private landText(text: string, then?: () => void, hold = false): void {
     this.writeHold();
-    if (!text.startsWith(ECHO_CARET)) {
+    if (!this.marked(text)) {
       this.writeLanded(this.land(text), hold);
       then?.();
       return;
@@ -632,6 +641,11 @@ export class RegionWriter {
     }
   }
 
+  /** Whether `text` starts with your mark. Never with the mark off. */
+  private marked(text: string): boolean {
+    return this.echoMark.length > 0 && text.startsWith(this.echoMark);
+  }
+
   /** Your echo `text` without its mark when the row it lands on already
    *  ends in `>` before the cursor. A cursor past the last column writes
    *  on the next row, which holds nothing yet. Call it only once xterm
@@ -639,9 +653,9 @@ export class RegionWriter {
   private withoutMark(text: string): string {
     const buffer = this.term.buffer.active;
     const x = buffer.cursorX;
-    if (!text.startsWith(ECHO_CARET) || x >= this.term.cols) return text;
+    if (!this.marked(text) || x >= this.term.cols) return text;
     const before = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(false, 0, x);
-    return endsInPrompt(before ?? '') ? text.slice(ECHO_CARET.length) : text;
+    return endsInPrompt(before ?? '') ? text.slice(this.echoMark.length) : text;
   }
 
   /** `text` as it lands at the cursor: without the line end that would

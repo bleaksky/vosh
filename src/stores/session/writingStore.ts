@@ -13,6 +13,7 @@ export const WRITING_IDLE: WritingState = {
   game: 'unknown',
   editor: null,
   offer: null,
+  lines: null,
   job: null,
   held: 0,
   done: null,

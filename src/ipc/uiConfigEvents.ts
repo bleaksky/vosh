@@ -14,8 +14,8 @@ import {
   FONT_CHANGED,
   GAME_TIME_CHANGED,
   INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
+  INPUT_LINE_MARK_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -185,7 +185,7 @@ export function subscribeThemeTerminalColorsChanged(
   return listen<boolean>(THEME_TERMINAL_COLORS_CHANGED, (event) => cb(event.payload));
 }
 
-/** Hear Sent command color change, null for the default. */
+/** Hear Command color change, null for the default. */
 export function subscribeInputEchoColorChanged(
   cb: (color: string | null) => void,
 ): Promise<UnlistenFn> {
@@ -197,14 +197,14 @@ export function subscribeEchoMacrosChanged(cb: (on: boolean) => void): Promise<U
   return listen<boolean>(ECHO_MACROS_CHANGED, (event) => cb(event.payload));
 }
 
-/** Hear Mark your commands change. */
-export function subscribeInputEchoCaretChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(INPUT_ECHO_CARET_CHANGED, (event) => cb(event.payload));
-}
-
 /** Hear Wait between pasted lines change, in ms. */
 export function subscribePasteLineDelayChanged(cb: (ms: number) => void): Promise<UnlistenFn> {
   return listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Use the same mark in the command line change. */
+export function subscribeInputLineMarkChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(INPUT_LINE_MARK_CHANGED, (event) => cb(event.payload));
 }
 
 /** Hear Check spelling when you chat change. */

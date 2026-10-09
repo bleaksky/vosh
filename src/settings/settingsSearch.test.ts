@@ -57,8 +57,62 @@ describe('searchSettingsRows', () => {
       anchor: 'panel-size',
     });
     expect(labels('ghostty')).toEqual(['Import a theme']);
-    expect(labels('cursor')).toEqual(['Caret shape']);
+    expect(labels('cursor')).toEqual(['Caret shape', 'Caret blinks', 'Caret color']);
     expect(labels('missing')).toContain('Tracked affects');
+  });
+
+  it('finds how the command line looks and colors', () => {
+    expect(labels('caret blink')).toEqual(['Caret blinks']);
+    expect(labels('command line tint')).toEqual(['Background']);
+    expect(labels('command line bigger')).toEqual(['Size']);
+    expect(labels('typed foreground')).toEqual(['Text color']);
+    expect(labels('fish')).toEqual(['Color commands as you type']);
+    expect(searchSettingsRows('syntax highlight', mac)[0].target).toEqual({
+      group: 'input',
+      section: 'command-line',
+      anchor: 'type-colors',
+    });
+  });
+
+  it('finds the sent commands rows by the words board 09 gives', () => {
+    const inputHits = (query: string) =>
+      searchSettingsRows(query, mac)
+        .filter((r) => r.target.group === 'input')
+        .map((r) => r.label);
+    const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target;
+    expect(labels('prefix')).toEqual(['Mark before your commands']);
+    expect(target('Mark before your commands')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'mark-commands',
+    });
+    // Two Accessibility rows say faint too.
+    expect(inputHits('faint')).toEqual(['Dim sent commands']);
+    expect(labels('glyph')).toEqual(['Use the same mark in the command line']);
+    expect(labels('mark color')[0]).toBe('Mark color');
+    expect(searchSettingsRows('mark color', mac)[0].target).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'mark-color',
+    });
+    expect(target('Command color')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'sent-color',
+    });
+    expect(target('Show the commands your macros send')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'echo-macros',
+    });
+    // Ties fall in the order the page draws them.
+    expect(inputHits('color')).toEqual([
+      'Color commands as you type',
+      'Mark color',
+      'Command color',
+      'Caret color',
+      'Text color',
+    ]);
   });
 
   it('finds where the session in front connects', () => {
@@ -215,7 +269,8 @@ describe('searchSettingsRows', () => {
 
   it('finds the Input rows, Advanced ones included', () => {
     expect(labels('paste')).toEqual(['Wait between pasted lines']);
-    expect(labels('sent command')[0]).toBe('Sent command color');
+    expect(labels('sent command')).toContain('Command color');
+    expect(labels('mark')).toContain('Mark before your commands');
     const paste = searchSettingsRows('paste', mac)[0];
     expect(paste.target).toEqual({ group: 'input', section: 'advanced', anchor: 'paste-delay' });
   });

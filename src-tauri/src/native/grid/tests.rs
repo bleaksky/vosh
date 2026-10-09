@@ -1646,10 +1646,11 @@ mod stage_into_grid {
     }
 }
 
-/// Your echo with the grey mark Mark your commands draws, as the page
+/// Your echo with the grey mark Mark before your commands draws, as the page
 /// writes it after you type `command`.
 fn send_typed(g: &mut TermGrid, command: &str) {
-    g.local_write(format!("{}{command}\r\n", crate::input::ECHO_CARET).as_bytes());
+    let mark = crate::input::echo_mark(&crate::profile::ui::UiConfig::default());
+    g.local_write(format!("{mark}{command}\r\n").as_bytes());
 }
 
 /// A quick key's echo of `command`, as the session sends it.
@@ -1777,6 +1778,92 @@ fn your_echo_keeps_its_mark_on_the_row_a_pinned_prompt_left() {
             "{how}"
         );
     }
+}
+
+/// The [ui] table with the mark `pick`, and `own` as your own text.
+fn mark_ui(pick: &str, own: &str) -> crate::profile::ui::UiConfig {
+    let mut ui = crate::profile::ui::UiConfig::default();
+    crate::profile::ui::set_input_echo_mark(&mut ui, pick.into());
+    ui.input_echo_mark_text = own.into();
+    ui
+}
+
+/// A grid that leaves out the mark `ui` draws.
+fn grid_with_mark(ui: &crate::profile::ui::UiConfig) -> TermGrid {
+    let mut g = TermGrid::new(40, 10);
+    g.set_echo_mark(crate::input::echo_mark(ui).into_bytes());
+    g
+}
+
+#[test]
+fn every_mark_drops_after_a_prompt_that_ends_in_gt_and_stays_on_a_fresh_row() {
+    for (pick, own, shown) in [
+        ("chevron", "", "\u{203a} "),
+        ("gt", "", "> "),
+        ("own", "you:", "you: "),
+        ("off", "you:", ""),
+    ] {
+        let ui = mark_ui(pick, own);
+        let mark = crate::input::echo_mark(&ui);
+        let mut g = grid_with_mark(&ui);
+        g.session_output(&text(b"\n\rAccount name> "));
+        // Typed, as the page writes it.
+        g.local_write(format!("{mark}Tolliver\r\n").as_bytes());
+        // A quick key, as the session sends it.
+        g.session_output(&text(b"Your choice> "));
+        let echo = crate::input::command_echo("1", &ui);
+        g.session_output(&text(format!("{echo}\r\n").as_bytes()));
+        g.local_write(format!("{mark}look\r\n").as_bytes());
+        assert_eq!(
+            screen(&g),
+            [
+                String::new(),
+                "Account name> Tolliver".to_string(),
+                "Your choice> 1".to_string(),
+                format!("{shown}look"),
+            ],
+            "{pick}"
+        );
+    }
+}
+
+#[test]
+fn a_game_line_that_looks_like_a_mark_stays_after_a_mark_change() {
+    let mut g = grid_with_mark(&mark_ui("own", "you:"));
+    // The chevron the grid left out before is now the game's own text,
+    // and so is grey text that is not every byte of your mark.
+    g.session_output(&text(b"Your choice> "));
+    g.session_output(&text(b"\x1b[90m\xe2\x80\xba \x1b[0mlook\r\n"));
+    g.session_output(&text(b"Your choice> "));
+    g.session_output(&text(b"\x1b[90myou \x1b[0mlook\r\n"));
+    g.session_output(&text(b"Your choice> "));
+    g.session_output(&text(b"\x1b[90myou: look\r\n"));
+    assert_eq!(
+        screen(&g),
+        [
+            "Your choice> \u{203a} look",
+            "Your choice> you look",
+            "Your choice> you: look",
+        ]
+    );
+}
+
+#[test]
+fn a_session_grid_takes_the_mark_now_and_when_it_is_made() {
+    let _shared = lock_shared_grid_for_test();
+    let ui = mark_ui("gt", "");
+    let mark = crate::input::echo_mark(&ui);
+    // Said before the grid exists, the mark reaches the grid a write
+    // makes.
+    set_echo_mark(ONE, mark.clone().into_bytes());
+    feed_session_output(ONE, &text(b"Your choice> "), None);
+    feed_local(ONE, format!("{mark}1\r\n").as_bytes());
+    // Said to a grid that exists, it reaches that grid.
+    set_echo_mark(ONE, Vec::new());
+    feed_session_output(ONE, &text(b"Your choice> "), None);
+    feed_local(ONE, format!("{mark}2\r\n").as_bytes());
+    let rows = shared_screen_rows_for_test();
+    assert_eq!(rows[..2], ["Your choice> 1", "Your choice> > 2"]);
 }
 
 #[test]

@@ -136,6 +136,7 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
         let before = effects.tick_before.as_ref();
         crate::input::profile::hand_to_other_sessions(app, &shared, session, open, how, before)
             .await;
+        crate::input::keep_profile_echo_mark(&shared, open).await;
     } else {
         if let Some(before) = effects.tick_before.as_ref() {
             crate::tick::follow_in_other_sessions(&shared, session.id, open, before).await;

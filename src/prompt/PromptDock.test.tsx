@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import { resolveCell, type BandEnv } from '../terminal/bandCells';
-import { ECHO_CARET, planSubmit } from '../input/maskedInput';
+import { DEFAULT_ECHO_MARK, planSubmit } from '../input/maskedInput';
 import {
   bandRows,
   DOCK_GAP,
@@ -444,9 +444,17 @@ describe('cells and colors on the band', () => {
 
 describe('Enter on an empty line', () => {
   it('echoes a line you can see, as a telnet client does, pinned prompt or not', () => {
-    const context = { masked: false, quickKey: false, echoColor: null };
+    const context = {
+      masked: false,
+      quickKey: false,
+      echoColor: null,
+      echoMark: '',
+      echoDim: false,
+    };
     expect(planSubmit('', context).echo).toBe('\r\n');
-    expect(planSubmit('', { ...context, echoCaret: true }).echo).toBe(`${ECHO_CARET}\r\n`);
+    expect(planSubmit('', { ...context, echoMark: DEFAULT_ECHO_MARK }).echo).toBe(
+      `${DEFAULT_ECHO_MARK}\r\n`,
+    );
     expect(planSubmit('look', context).echo).toBe('look\r\n');
     expect(planSubmit('', { ...context, masked: true }).echo).toBe('\r\n');
   });

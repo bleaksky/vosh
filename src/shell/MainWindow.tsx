@@ -170,6 +170,7 @@ function MainWindow() {
     writingCard,
     openPromptCard,
     openWriting,
+    openWritingFromEditor,
     charStatus,
     writeKinds,
     cardBand,
@@ -394,6 +395,7 @@ function MainWindow() {
       macroKeys={macroKeys}
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
+      onOpenWriting={openWritingFromEditor}
       onSelectAllTerminal={() => termRef.current?.selectAll()}
       onLocalEcho={(text, session) => {
         writeTo(session, text);

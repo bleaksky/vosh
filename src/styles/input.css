@@ -7,10 +7,14 @@
    and never shrinks. Its position and z-index keep it painted over the
    terminal while xterm's canvas lags a frame behind a resize. The row
    sets your terminal font and size for everything in it, so a command
-   reads the same as you type it and as it echoes. The password input
-   shows the native caret in the accent, and the textarea hides it to
-   draw .input-caret. */
+   reads the same as you type it and as it echoes, until you pick a
+   size of its own. The password input shows the native caret in
+   --caret, and the textarea hides it to draw .input-caret. --caret and
+   --line-text are the theme accent and text until you pick colors of
+   your own, which Input.tsx sets inline. */
 .input-row {
+  --caret: var(--accent);
+  --line-text: var(--text);
   position: relative;
   z-index: 1;
   flex: 1 0 auto;
@@ -21,13 +25,23 @@
   background: var(--inputband);
   font-family: var(--app-font-family);
   font-size: var(--app-font-size);
-  caret-color: var(--accent);
+  caret-color: var(--caret);
+}
+
+/* Slight tint lays 7 percent of the accent over the band. Your own
+   background comes in as --line-ground. */
+.input-row.is-tint {
+  background: color-mix(in srgb, var(--accent) 7%, var(--inputband));
+}
+
+.input-row.is-own {
+  background: var(--line-ground, var(--inputband));
 }
 
 .input-row input {
   flex: 1 1 auto;
   background: transparent;
-  color: var(--text);
+  color: var(--line-text);
   border: none;
   outline: none;
   font-family: inherit;
@@ -60,7 +74,7 @@
 .input-row textarea {
   flex: 1 1 auto;
   background: transparent;
-  color: var(--text);
+  color: var(--line-text);
   border: none;
   outline: none;
   font-family: inherit;
@@ -77,19 +91,24 @@
   caret-color: transparent;
 }
 
-/* Block caret. One cell of your terminal font in the accent,
+/* Block caret. One cell of your terminal font in --caret,
    absolutely positioned by Input.tsx at the measured caret spot.
    Blinks on a stepped keyframe like a hardware cursor; useCaret.ts
    restarts the animation on every value change so the caret holds
-   solid while the user types. */
+   solid while the user types. With Caret blinks off it holds steady,
+   and Reduce motion holds it steady either way. */
 .input-caret {
   position: absolute;
   box-sizing: border-box;
   width: var(--caret-w);
   height: var(--caret-h);
-  background: var(--accent);
+  background: var(--caret);
   pointer-events: none;
   animation: vosh-caret-blink 1.1s steps(1, end) infinite;
+}
+
+.input-caret.is-steady {
+  animation: none;
 }
 
 @keyframes vosh-caret-blink {
@@ -123,7 +142,7 @@
   width: var(--caret-w);
   height: var(--caret-h);
   background: transparent;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--caret);
 }
 
 .caret-shape--half_block {
@@ -179,6 +198,42 @@
   background: var(--accent-soft);
   color: var(--text);
 }
+/* Coloring as you type. The layer draws a colored copy of the line
+   under the textarea, with its font, padding, wrap and width, which
+   Input.tsx measures from the textarea. While it draws, the textarea
+   text and its selected text go transparent, so the colors show through
+   and the soft accent still marks a selection. --type-alias, --type-hash
+   and --type-chat come in inline from your colors or the theme's
+   terminal cyan, magenta and yellow. */
+.input-type-layer {
+  position: absolute;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--line-text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.35;
+  padding: 2px 0;
+  box-sizing: border-box;
+}
+.input-type-alias {
+  color: var(--type-alias, var(--line-text));
+}
+.input-type-hash {
+  color: var(--type-hash, var(--line-text));
+}
+.input-type-chat {
+  color: var(--type-chat, var(--line-text));
+}
+.input-type-unknown {
+  color: var(--type-unknown, var(--danger-text));
+}
+.input-row.is-typed textarea,
+.input-row.is-typed textarea::selection {
+  color: transparent;
+}
 /* Top-align the row only while composing multiple lines so the prompt,
    gutter, and first text line share a baseline. Single-line prompts keep
    the default centered layout untouched. */
@@ -206,7 +261,7 @@
 }
 
 /* Paste-burst indicator. When a multi-line paste is in flight, a thin
-   chip sits between the prompt glyph and the live input showing
+   chip sits between the mark and the live input showing
    progress + the cancel hint. Bracket-delimited to match the rest of
    the chrome ([save], [check now], etc.). Tabular-nums keep the
    counts stable as digits grow so the slash does not shift. */
@@ -267,13 +322,20 @@
   font-size: 0.92em;
 }
 
-/* The prompt glyph sits 16 in, in the tertiary tone, so the text you
-   type starts at 32. */
+/* The mark sits 16 in, in the tertiary tone. One character takes 16 px,
+   so the text you type starts at 32, and a longer mark of up to four
+   keeps a space after it. With the mark off there is no span and the
+   text starts at 16. */
 .input-row .prompt {
   flex: none;
-  width: 16px;
+  min-width: 16px;
+  white-space: pre;
   color: var(--tertiary);
   font-weight: 400;
+}
+
+.input-row .input-mark-wide {
+  margin-right: 1ch;
 }
 
 /* The row sets no gap, so the gutter and the paste chip keep 8 px
@@ -281,4 +343,60 @@
 .input-row .input-gutter,
 .input-row .paste-burst {
   margin-right: 8px;
+}
+
+/* The pill at the start of the line, in place of the mark, while a mode
+   changes what Enter does. Input.tsx sets --input-mode to the mode's
+   color, which fills the pill at 16 percent, rings it at 45, draws a
+   2 px edge at the row's left and a 9 percent wash that fades out by
+   360 px over whatever ground the band has. */
+.input-row.is-mode {
+  box-shadow: inset 2px 0 0 var(--input-mode);
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--input-mode) 9%, transparent),
+    transparent 360px
+  );
+}
+
+.input-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  margin: 0 10px 0 0;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  font: 500 12px/16px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text);
+  background: color-mix(in srgb, var(--input-mode) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--input-mode) 45%, transparent);
+}
+
+button.input-pill {
+  cursor: default;
+}
+
+button.input-pill:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--input-mode) 45%, transparent),
+    0 0 0 2px var(--accent);
+}
+
+.input-pill svg {
+  margin-right: -3px;
+  color: var(--secondary);
+}
+
+.input-pill-dot {
+  opacity: 0.55;
+}
+
+.input-pill-count.is-warn {
+  color: var(--warn-text);
 }

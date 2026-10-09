@@ -2,19 +2,29 @@
 // broadcast each Settings save sends.
 
 import { useEffect, useRef, useState } from 'react';
-import { getUiConfig, normalizeInputCursorStyle, type InputCursorStyle } from '../ipc/uiConfig';
+import { getUiConfig } from '../ipc/uiConfig';
+import { normalizeInputCursorStyle, type InputCursorStyle } from '../ipc/uiConfigInput';
 import {
   subscribeEchoMacrosChanged,
   subscribeInputCursorStyleChanged,
-  subscribeInputEchoCaretChanged,
   subscribeInputEchoColorChanged,
   subscribeKeepLastChanged,
   subscribePasteLineDelayChanged,
   subscribeSpellcheckPromptChanged,
 } from '../ipc/uiConfigEvents';
 import { useTauriEvent } from '../ipc/useTauriEvent';
+import { echoMark, markText } from './maskedInput';
+import {
+  getEchoMarkOptions,
+  subscribeEchoMarkOptions,
+  useEchoMarkOptions,
+} from '../stores/config/echoMarkStore';
+import { useLineLook } from '../stores/config/lineLookStore';
+import { useLineMark } from '../stores/config/lineMarkStore';
+import { useTypeColors } from '../stores/config/typeColorsStore';
+import { useKnownWords } from '../stores/session/knownWordsStore';
 
-/** The command line settings. The two that change what the row draws
+/** The command line settings. The ones that change what the row draws
  *  come back as state, and the rest as refs the handlers read when they
  *  run. */
 export function useInputPreferences() {
@@ -39,9 +49,21 @@ export function useInputPreferences() {
   // on). Under lag the echo shows the keybind registered before the
   // world responds. Same load + subscribe pattern as keepLast.
   const echoMacrosRef = useRef<boolean>(true);
-  // Mark your commands, a grey caret before each echo (default on).
-  // Same load + subscribe pattern as keepLast.
-  const echoCaretRef = useRef<boolean>(true);
+  // The mark each echo starts with, built from Mark before your commands and
+  // the Mark color, and Dim sent commands, which the echo mark store
+  // keeps current.
+  const echoMarkRef = useRef<string>(echoMark(getEchoMarkOptions()));
+  const echoDimRef = useRef<boolean>(getEchoMarkOptions().dim);
+  // The mark the row draws before the line you type, while Use the same
+  // mark in the command line is on.
+  const markOptions = useEchoMarkOptions();
+  const lineMarkOn = useLineMark();
+  // How the row looks: the caret blink and color, the text color, the
+  // background and the size.
+  const lineLook = useLineLook();
+  // Color commands as you type, and the words Vosh knows that judge it.
+  const typeColors = useTypeColors();
+  const knownWords = useKnownWords();
   useEffect(() => {
     let cancelled = false;
     getUiConfig()
@@ -51,7 +73,6 @@ export function useInputPreferences() {
         pasteDelayRef.current = cfg.paste_line_delay_ms;
         echoColorRef.current = cfg.input_echo_color;
         echoMacrosRef.current = cfg.echo_macros;
-        echoCaretRef.current = cfg.input_echo_caret;
         setSpellcheckPrompt(cfg.spellcheck_prompt);
         setCursorStyle(cfg.input_cursor_style);
       })
@@ -81,17 +102,28 @@ export function useInputPreferences() {
   useTauriEvent(subscribeEchoMacrosChanged, (on) => {
     echoMacrosRef.current = Boolean(on);
   });
-  useTauriEvent(subscribeInputEchoCaretChanged, (on) => {
-    echoCaretRef.current = Boolean(on);
-  });
+  useEffect(
+    () =>
+      subscribeEchoMarkOptions(() => {
+        const options = getEchoMarkOptions();
+        echoMarkRef.current = echoMark(options);
+        echoDimRef.current = options.dim;
+      }),
+    [],
+  );
 
   return {
     spellcheckPrompt,
     cursorStyle,
+    lineLook,
+    typeColors,
+    knownWords,
+    lineMark: lineMarkOn ? markText(markOptions) : '',
     keepLastRef,
     pasteDelayRef,
     echoColorRef,
     echoMacrosRef,
-    echoCaretRef,
+    echoMarkRef,
+    echoDimRef,
   };
 }

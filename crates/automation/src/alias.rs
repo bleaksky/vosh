@@ -91,9 +91,17 @@ pub struct PluginAliases {
     /// Each alias with the plugin that made it, in the order they were
     /// made.
     aliases: Vec<(String, Alias)>,
+    /// See [`PluginAliases::revision`].
+    revision: u64,
 }
 
 impl PluginAliases {
+    /// Moves each time a plugin makes or drops an alias, as
+    /// [`AliasStore::revision`] does for yours.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Make the alias `name` for `plugin`, in place of one of that name
     /// the same plugin made.
     pub fn set(&mut self, plugin: &str, name: impl Into<String>, expansion: impl Into<String>) {
@@ -101,6 +109,7 @@ impl PluginAliases {
         self.aliases
             .retain(|(by, old)| !(by == plugin && old.name == alias.name));
         self.aliases.push((plugin.to_string(), alias));
+        self.revision = next_revision();
     }
 
     /// Remove the alias `name` when `plugin` made it. True when it went.
@@ -108,12 +117,20 @@ impl PluginAliases {
         let before = self.aliases.len();
         self.aliases
             .retain(|(by, alias)| !(by == plugin && alias.name == name));
-        self.aliases.len() != before
+        let removed = self.aliases.len() != before;
+        if removed {
+            self.revision = next_revision();
+        }
+        removed
     }
 
     /// Remove every alias `plugin` made.
     pub fn remove_plugin(&mut self, plugin: &str) {
+        let before = self.aliases.len();
         self.aliases.retain(|(by, _)| by != plugin);
+        if self.aliases.len() != before {
+            self.revision = next_revision();
+        }
     }
 
     /// Every alias by name, with the plugin that made it.
@@ -189,10 +206,10 @@ impl AliasStore {
         }
     }
 
-    /// Moves each time an alias is added, replaced, or removed, so a
-    /// caller can tell whether the list changed across a step without
-    /// comparing it. Turning a group on or off leaves it alone, since
-    /// the list itself stays the same.
+    /// Moves each time an alias is added, replaced, or removed, or Vosh
+    /// stops one, so a caller can tell whether the list or what expands
+    /// changed across a step without comparing it. Turning a group on or
+    /// off leaves it alone, since the group toggles count those.
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -267,8 +284,8 @@ impl AliasStore {
     /// Turn the alias `name` off under `key`, after Vosh stopped its Lua
     /// there. It stays off there until you save it again.
     pub fn stop(&mut self, name: &str, key: StopKey) {
-        if self.aliases.contains_key(name) {
-            self.stopped.stop(name, key);
+        if self.aliases.contains_key(name) && self.stopped.stop(name, key) {
+            self.revision = next_revision();
         }
     }
 
@@ -290,6 +307,27 @@ impl AliasStore {
         self.stopped = old
             .stopped
             .kept(|name| self.aliases.get(name) == old.aliases.get(name));
+    }
+
+    /// True when the saved alias `alias` expands under `key`: it is on,
+    /// its group is on, and Vosh has not stopped its Lua there.
+    fn fires(&self, alias: &Alias, key: StopKey) -> bool {
+        alias.enabled
+            && self.groups.allows(alias.group.as_deref())
+            && !self.stopped.contains(&alias.name, key)
+    }
+
+    /// The names that expand if you press Enter now in the session
+    /// `key` names, sorted and each once: the saved aliases that fire
+    /// there and every alias in `plugins`. Names match case sensitively,
+    /// as expansion matches them.
+    pub fn live_names(&self, plugins: &PluginAliases, key: StopKey) -> Vec<String> {
+        let saved = self.aliases.values().filter(|a| self.fires(a, key));
+        let made = plugins.list().into_iter().map(|(_, alias)| alias);
+        let mut names: Vec<String> = saved.chain(made).map(|a| a.name.clone()).collect();
+        names.sort();
+        names.dedup();
+        names
     }
 
     pub fn list(&self) -> Vec<&Alias> {
@@ -359,13 +397,7 @@ impl AliasStore {
         // can flip whole "Combat" / "Crafting" loadouts off without
         // editing each row. An alias a plugin made has none of these and
         // comes first.
-        let saved = || {
-            self.aliases.get(name).filter(|a| {
-                a.enabled
-                    && self.groups.allows(a.group.as_deref())
-                    && !self.stopped.contains(&a.name, key)
-            })
-        };
+        let saved = || self.aliases.get(name).filter(|a| self.fires(a, key));
         let Some(alias) = plugins.get(name).or_else(saved) else {
             out.push(ExpandStep::Command(command.to_string()));
             return Ok(());
@@ -856,6 +888,25 @@ mod tests {
             s.expand_line("greet", SESSION).unwrap(),
             vec!["bow".to_string()]
         );
+    }
+
+    #[test]
+    fn live_names_are_the_aliases_that_expand_now() {
+        let mut s = store(&[("kk", "kick"), ("hl", "cast heal"), ("Kk", "kick")]);
+        let mut off = Alias::new("off", "rest");
+        off.enabled = false;
+        s.set(off);
+        s.set(Alias::new("fl", "flee").with_group("combat"));
+        s.set_group_enabled("combat", false);
+        s.stop("hl", SESSION);
+        let mut plugins = PluginAliases::default();
+        plugins.set("mapper", "go", "run %1");
+        plugins.set("other", "kk", "kick hard");
+        // A disabled alias, one in an off group and one stopped here are
+        // left out. A plugin alias is kept, and a name shows once.
+        assert_eq!(s.live_names(&plugins, SESSION), ["Kk", "go", "kk"]);
+        // The stop holds only in the session it went under.
+        assert_eq!(s.live_names(&plugins, OTHER), ["Kk", "go", "hl", "kk"]);
     }
 
     #[test]

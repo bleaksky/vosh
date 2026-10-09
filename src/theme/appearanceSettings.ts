@@ -14,7 +14,6 @@ import {
   PANEL_FONT_SYSTEM,
   PANEL_FONT_TERMINAL,
 } from '../panel/panelFont';
-import { normalizePanelSize, PANEL_SIZE_TERMINAL } from '../panel/panelSize';
 import { renderFontStack } from '../lib/fontLoader';
 import type { CustomTheme } from '../ipc/theme';
 import type { SystemFontEntry } from '../ipc/uiConfig';
@@ -140,14 +139,11 @@ export function sizeChoices(current: number): Choice[] {
   return [...sizes].sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n} pt` }));
 }
 
-/** What the Panel text Size select offers: the terminal size, then the
- *  sizes Size offers, your size among them. */
-export function panelSizeChoices(current: number): Choice[] {
-  const size = normalizePanelSize(current);
-  return [
-    { value: String(PANEL_SIZE_TERMINAL), label: 'Same as terminal' },
-    ...sizeChoices(size === PANEL_SIZE_TERMINAL ? Number.NaN : size),
-  ];
+/** What a Size select that can follow the terminal offers: Same as
+ *  terminal, then the sizes Size offers, your size among them. Panel
+ *  text and the command line both save 0 to follow the terminal. */
+export function sizeChoicesWithTerminal(current: number): Choice[] {
+  return [{ value: '0', label: 'Same as terminal' }, ...sizeChoices(current)];
 }
 
 // ── Light and dark themes ────────────────────────────────────────────

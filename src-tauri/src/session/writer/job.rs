@@ -146,6 +146,31 @@ impl Job {
         beast: Option<String>,
         pager: bool,
     ) -> Self {
+        let mut job = Self::leave(id, kind, beast, pager, VecDeque::from([Stage::Close]));
+        job.read = Some(listed);
+        job
+    }
+
+    /// A job that opens the card on the text the game's editor holds
+    /// now, after the lines you typed into it: it turns the pager when it
+    /// waits, reads the text with `.s`, then leaves as [`Job::take`]
+    /// does. `.s` prints color codes as written (`send_to_char_nc`,
+    /// `olc.c`), so the listing keeps them.
+    pub(crate) fn take_editor(id: u64, kind: Kind, beast: Option<String>, pager: bool) -> Self {
+        let stages = VecDeque::from([Stage::Show(ShowFor::Read), Stage::Close]);
+        Self::leave(id, kind, beast, pager, stages)
+    }
+
+    /// A read that runs `stages` in the editor you opened, turning the
+    /// pager first when it waits, and asks a board for the note's fields
+    /// after them.
+    fn leave(
+        id: u64,
+        kind: Kind,
+        beast: Option<String>,
+        pager: bool,
+        mut stages: VecDeque<Stage>,
+    ) -> Self {
         let spec = WriteJob {
             id,
             kind,
@@ -162,7 +187,6 @@ impl Job {
             baseline: None,
         };
         let mut job = Self::new(spec);
-        let mut stages = VecDeque::from([Stage::Close]);
         if pager {
             stages.push_front(Stage::Turn);
         }
@@ -171,7 +195,6 @@ impl Job {
         }
         job.stages = stages;
         job.in_editor = true;
-        job.read = Some(listed);
         job.beast = beast;
         job
     }
