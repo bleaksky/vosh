@@ -5404,7 +5404,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vosh-app"
-version = "0.95.0"
+version = "0.95.1"
 dependencies = [
  "alacritty_terminal",
  "block2",
@@ -5459,7 +5459,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-automation"
-version = "0.95.0"
+version = "0.95.1"
 dependencies = [
  "regex",
  "serde",
@@ -5470,7 +5470,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-log"
-version = "0.95.0"
+version = "0.95.1"
 dependencies = [
  "regex",
  "rusqlite",
@@ -5482,7 +5482,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-prompt"
-version = "0.95.0"
+version = "0.95.1"
 dependencies = [
  "chrono",
  "regex",
@@ -5497,7 +5497,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-protocol"
-version = "0.95.0"
+version = "0.95.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -5507,7 +5507,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-script"
-version = "0.95.0"
+version = "0.95.1"
 dependencies = [
  "memchr",
  "mlua",
