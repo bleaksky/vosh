@@ -391,8 +391,6 @@ mod tests {
         pulse(&mut vars, 934, 688, 900);
         assert_eq!(draw(&vars, "%hp_change"), "\x1b[32m+34\x1b[39m\x1b[0m");
         assert_eq!(draw(&vars, "%mana_change"), "\x1b[31m-12\x1b[39m\x1b[0m");
-        // A color the design sets wins.
-        assert_eq!(draw(&vars, "%c_cyan%hp_change"), "\x1b[36m+34\x1b[0m");
         // Zero shows nothing, 0 or ±0, and a condition on it fails.
         assert_eq!(draw(&vars, "[%move_change]"), "[]\x1b[0m");
         assert_eq!(draw(&vars, "[%{move_change:zero}]"), "[0]\x1b[0m");
@@ -410,6 +408,77 @@ mod tests {
         assert_eq!(
             draw(&vars, "[%{hp_change:zero}%{hp_tick:plusminus}]"),
             "[]\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn the_sign_color_shows_over_the_look_before_the_value() {
+        let client = ticking();
+        let mut vars = Vars::new(true);
+        let draw = |vars: &Vars, t: &str| {
+            render_str(t, &vars.resolver(&client), RenderOptions::default()).ansi
+        };
+        pulse(&mut vars, 900, 700, 900);
+        pulse(&mut vars, 934, 688, 900);
+        // A color the parts before it leave does not count, and the look
+        // comes back after the value.
+        assert_eq!(
+            draw(&vars, "%c_gray(%hp_change)"),
+            "\x1b[90m(\x1b[32m+34\x1b[90m)\x1b[0m"
+        );
+        assert_eq!(
+            draw(&vars, "%c_cyan%s_bold<%hp_change x"),
+            "\x1b[36m\x1b[1m<\x1b[32m+34\x1b[36m x\x1b[0m"
+        );
+        // Nor does a dim the parts before it leave, and it comes back too.
+        assert_eq!(
+            draw(&vars, "%s_dim%c_gray(%mana_change)"),
+            "\x1b[2m\x1b[90m(\x1b[22;31m-12\x1b[2;90m)\x1b[0m"
+        );
+        assert_eq!(
+            draw(&vars, "%s_bold%s_dim[%hp_change]"),
+            "\x1b[1m\x1b[2m[\x1b[22;1;32m+34\x1b[2;39m]\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn a_color_or_dim_on_the_value_itself_wins() {
+        let client = ticking();
+        let mut vars = Vars::new(true);
+        let draw = |vars: &Vars, t: &str| {
+            render_str(t, &vars.resolver(&client), RenderOptions::default()).ansi
+        };
+        pulse(&mut vars, 900, 700, 900);
+        pulse(&mut vars, 934, 688, 900);
+        // Its own color, over a color before it too.
+        assert_eq!(draw(&vars, "%c_cyan%hp_change"), "\x1b[36m+34\x1b[0m");
+        assert_eq!(
+            draw(&vars, "%c_gray(%c_cyan%hp_change)"),
+            "\x1b[90m(\x1b[36m+34)\x1b[0m"
+        );
+        // A By value color is its own color, red for a gain at low health.
+        let mut low = Vars::new(true);
+        pulse(&mut low, 100, 700, 900);
+        pulse(&mut low, 134, 700, 900);
+        assert_eq!(draw(&low, "%{c:hp}%hp_change"), "\x1b[31m+34\x1b[0m");
+        // Its own dim keeps the sign color, dimmed.
+        assert_eq!(
+            draw(&vars, "(%s_dim%hp_change)"),
+            "(\x1b[2m\x1b[32m+34\x1b[39m)\x1b[0m"
+        );
+        // The default color, or a reset, is no color of its own.
+        assert_eq!(
+            draw(&vars, "%c_gray(%c_default%hp_change"),
+            "\x1b[90m(\x1b[39m\x1b[32m+34\x1b[39m\x1b[0m"
+        );
+        assert_eq!(
+            draw(&vars, "%s_dim(%c_reset%hp_change"),
+            "\x1b[2m(\x1b[0m\x1b[32m+34\x1b[39m\x1b[0m"
+        );
+        // A zero takes the look around it.
+        assert_eq!(
+            draw(&vars, "%c_gray(%{move_change:zero})"),
+            "\x1b[90m(0)\x1b[0m"
         );
     }
 
