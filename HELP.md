@@ -1202,118 +1202,180 @@ When a screen reader runs as Vosh starts and `Read new game lines` is off, the t
 
 <!-- id: characters-and-data.profiles -->
 
-A profile carries its own aliases, triggers, macros, and variables, its tracked affects, and its panes. Vosh picks the right profile when you connect and again when you log in. Manage profiles in Settings under Characters.
+A profile has its own aliases, triggers, macros, and variables, its tracked affects, and its panes. Vosh chooses the correct profile when you connect, and again when you log in. Manage profiles in Settings under Characters.
 
-- Open Settings and choose Characters. Your profiles list on the left, with a dot on each one a session plays and each one's world beside it. A profile on a port that is not the world's own shows the port too, as The Forsaken Lands 1825.
+- Open Settings and choose Characters. Your profiles are listed on the left. Each profile that a session plays has a dot, and each profile shows its world beside it. A profile on a port that isn't the own port of the world also shows the port, as The Forsaken Lands 1825.
 - Click `New profile` under the list, type a name, and press `Enter`. Names take letters, numbers, spaces, hyphens, and underscores.
-- Select a profile to edit it. Selecting one never switches the session you are playing.
-- Pick its `World`, then turn on `Use this profile when you log in`. The row names your character once Vosh has seen you log in. Turning it on takes that character from any other profile on the same world, and Vosh says so under the list. On a port that is not the world's own, such as 1825, a profile that claims the character on the whole world keeps it on the world's own port instead, and the line under the list names each claim that moved.
-- Open a profile's more menu to `Switch to this profile`, or to choose `Rename…`, `Duplicate…`, `Export to Downloads`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
+- To edit a profile, select it. When you select a profile, the session you play doesn't change.
+- Choose its `World`, then turn on `Use this profile when you log in`. The row names your character after Vosh has seen you log in. When you turn it on, it takes that character from any other profile on the same world. Vosh tells you so under the list.
+- On a port that isn't the own port of the world, such as 1825, something different happens. A profile that claims the character on the whole world keeps it on the own port of the world. The line under the list names each claim that moved.
+- Open the more menu of a profile to choose `Switch to this profile`, `Rename…`, `Duplicate…`, `Export to Downloads`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
 - With two or more sessions open, the line under the list names the sessions on each profile, such as `Default plays in Tolliver's session, Build in Orla's.`
 
-`Duplicate…` copies a profile's whole setup but leaves its world and login behind. You cannot delete a profile a session plays, so switch that session to another profile or close it first.
+`Duplicate…` copies all of the setup of a profile, but not its world and login. You can't delete a profile that a session plays. So first change that session to another profile, or close it.
 
-Settings edits the profile of the session in front and follows you to another session's profile. Unsaved changes to a list under Automation keep it on their profile until you save or discard them.
+Settings edits the profile of the session in front, and follows you to the profile of another session. Unsaved changes to a list under Automation keep Settings on their profile until you save or discard them.
 
-`Export to Downloads` saves the profile as a file in your Downloads folder. A profile with characters asks first which ones the file names. Each starts off, so a profile you share names your characters only when you turn them on.
+`Export to Downloads` saves the profile as a file in your Downloads folder. When a profile has characters, Vosh first asks which ones the file names. Each character starts off. So a profile you share names your characters only when you turn them on.
 
-The file carries the presets you have on and your changes to them, so a friend who imports it sees your colors. In loadout mode it carries the presets of the catalog, which every character shares. `New profile` copies both from the profile you play. `#profile reset` turns every preset off and clears your changes, and `#profile load` reads both back from the file. An older version, such as 0.8.1, runs the presets as they ship and keeps the groups you gave their triggers. It drops your other changes the first time it opens the profile, so back in this version the presets run as they ship, with your groups.
+The file has the presets you have on and your changes to them. So a friend who imports it sees your colors. In loadout mode it has the presets of the catalog, which every character shares. `New profile` copies both from the profile you play. `#profile reset` turns every preset off and clears your changes. `#profile load` reads both back from the file.
 
-To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export. Vosh shows what the file holds before anything changes. Under `Add as`, `New profile` adds it under the name you type, and `Replace a profile` lays it over the profile you pick, which keeps its own world and characters. Click `Import` or `Replace`, and Vosh selects the profile and says under the list what happened. The profile takes the presets the file has on and the changes to them whole.
+An older version, such as 0.8.1, runs the presets as they ship. It keeps the groups you gave their triggers. It drops your other changes the first time it opens the profile. So back in this version, the presets run as they ship, with your groups.
 
-In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file. When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so. The presets of the file stay out, the triggers and macros they added, the list of those that are on and the changes to them, since the presets of the catalog serve every character. Under `In this file`, `Presets` says `Stay as the catalog has them`.
+To bring in a profile, click `Import…` beside `New profile` and choose a Vosh profile export. Vosh shows what the file holds before anything changes. Under `Add as`, `New profile` adds it with the name you type. `Replace a profile` puts it over the profile you choose, which keeps its own world and characters.
 
-Plugins the file turns on come in off, so you turn each one on under Scripts. When a trigger or an alias in the file runs Lua, Vosh names each one under a warning, since Lua can send commands to the game and read everything the game sends. Import profiles only from people you trust.
+Click `Import` or `Replace`. Vosh selects the profile and tells you under the list what happened. The profile takes all of the presets that the file has on, and all of the changes to them.
 
-A new profile takes the world the file names, with a switch for each character the file names. A character no other profile has starts on and joins the new profile. One another profile has starts off and stays there. Turn it on to move it, and when that leaves the other profile with no character, its login turns off. A new profile with no character starts with its login off.
+In loadout mode, the triggers, aliases, and macros in the file go into the shared catalog, never into the profile file. They go into a group with the name of the file, such as `Healer profile`. When the catalog already has an item with the same name, or a macro of yours on the same key, yours stays. The line under the list tells you so.
 
-Some settings can stay the same for every character. Under General, Keep the same for every character holds `Theme`, `Font and size`, `Keep last command`, and `Check for updates`. With a switch on, every character shares one value. Turn it off and each character keeps its own.
+The presets of the file stay out. That is the triggers and macros they added, the list of presets that are on, and the changes to them. This is because the presets of the catalog serve every character. Under `In this file`, `Presets` says `Stay as the catalog has them`.
 
-From the command line, `#profile save` and `#profile load` write and reload the file of the profile your session plays, on demand.
+Plugins that the file turns on come in off, so you turn each one on under Scripts. When a trigger or an alias in the file runs Lua, Vosh names each one under a warning. This is because Lua can send commands to the game and read everything the game sends. Import profiles only from people you trust.
 
-Each profile reads your prompt on its own. Vosh moves the capture trigger that `#prompt` made into each profile that draws your own prompt, turns the trigger off, and tells you once at launch. Profiles that draw nothing then show the game's prompt. On The Forsaken Lands the moved pattern switches to your prompt codes the first time the game shows them, when you log in or when you type `prompt`. From then on Vosh follows each prompt you set in the game and keeps your design and the draw switch as they are. When a color code runs into a code in that prompt, or when the pattern fills a value under a name no prompt code fills, such as `health`, the pattern stays and `#prompt` says why. A pattern you set with `#prompt {regex}` never switches. An older version of Vosh shows the game's prompt in every profile until you turn `prompt-capture` on again under Automation. Back in this version, Vosh moves the capture into your profiles again and turns the trigger off.
+A new profile takes the world that the file names, with a switch for each character that the file names. A character that no other profile has starts on and goes into the new profile. A character that another profile has starts off and stays there. Turn it on to move it. When that leaves the other profile with no character, its login turns off. A new profile with no character starts with its login off.
+
+Some settings can stay the same for every character. Under General, Keep the same for every character holds `Theme`, `Font and size`, `Keep last command`, and `Check for updates`. When a switch is on, every character shares one value. When you turn it off, each character keeps its own value.
+
+In the command line, `#profile save` and `#profile load` write and load again the file of the profile your session plays, when you ask.
+
+Each profile reads your prompt on its own. Vosh moves the capture trigger that `#prompt` made into each profile that draws your own prompt. It turns the trigger off, and tells you one time at launch. Profiles that draw nothing then show the prompt of the game.
+
+On The Forsaken Lands, the moved pattern changes to your prompt codes the first time the game shows them. That is when you log in, or when you type `prompt`. From then on, Vosh follows each prompt you set in the game. It keeps your design and the draw switch as they are.
+
+Sometimes a color code conflicts with a code in that prompt. Or the pattern fills a value under a name that no prompt code fills, such as `health`. Then the pattern stays, and `#prompt` tells you why. A pattern that you set with `#prompt {regex}` never changes.
+
+An older version of Vosh shows the prompt of the game in every profile until you turn `prompt-capture` on again under Automation. Back in this version, Vosh moves the capture into your profiles again and turns the trigger off.
 
 ### 7.2 Set up loadouts
 
 <!-- id: characters-and-data.loadouts -->
 
-Loadouts flip whole groups of aliases, triggers, and macros on and off from one shared catalog. Loadout mode starts with a one time migration from per profile files.
+Loadouts turn whole groups of aliases, triggers, and macros on and off from one shared catalog. Loadout mode starts with a migration from the files of each profile. The migration runs one time.
 
-- Open Settings, choose Automation, click `Import…`, and find the `Shared catalog` section. Click `Preview…`.
-- Review the plan. The preview opens as a dialog in three sections. It asks you first to pick the version to keep of each item your profiles hold in different versions, with the one that was on already picked when only one was. `Merged as they are` counts the aliases, triggers, and macros that merge without a question, and `A loadout for each character` names the groups each loadout turns on and the presets each character gains or loses. The preview writes nothing.
-- Click `Apply`. Vosh copies each profile file to `profiles/legacy/`, writes the catalog and the loadouts, and takes the aliases, triggers, and macros out of each profile file. Every other setting stays with its profile except the presets. Loadout mode keeps one list of presets that are on, and every character shares it. The list starts with every preset that any profile file had on, and the preview names each character that gains or loses a preset. Every character shares one set of changes to the presets too. Changes your profiles agree on carry over, and where two profiles changed a preset in different ways, the wizard asks which version to keep, as it does for an alias. Loadout mode waits for the next launch, so click `Quit Vosh` in the dialog and reopen the app. Every loadout starts off, so each profile keeps on the items it had on, at launch and when you switch.
-- Reopen Settings and choose Automation, then Loadouts, which now appears after Presets. Turn on the loadouts you want live and click `Save`. The runtime enables the union of their groups across every active loadout.
+- Open Settings, choose Automation, and click `Import…`. Find the `Shared catalog` section and click `Preview…`.
+- Look at the plan. The preview opens as a dialog in three sections. First it asks you to choose the version to keep of each item that your profiles hold in different versions. When only one version was on, that version is already chosen.
+- `Merged as they are` counts the aliases, triggers, and macros that merge with no question. `A loadout for each character` names the groups that each loadout turns on. It also names the presets that each character gets or loses. The preview writes nothing.
+- Click `Apply`. Vosh copies each profile file to `profiles/legacy/` and writes the catalog and the loadouts. It removes the aliases, triggers, and macros from each profile file. Every other setting stays with its profile, but not the presets.
+- Loadout mode keeps one list of presets that are on, and every character shares it. The list starts with every preset that any profile file had on. The preview names each character that gets or loses a preset.
+- Every character also shares one set of changes to the presets. Changes that your profiles agree on stay. Where two profiles changed a preset in different ways, the wizard asks which version to keep, as it does for an alias.
+- Loadout mode waits for the next launch. So click `Quit Vosh` in the dialog and open the app again. Every loadout starts off. So each profile keeps on the items it had on, at launch and when you change profiles.
+- Open Settings again and choose Automation, then Loadouts. Loadouts now shows after Presets. Turn on the loadouts you want to use and click `Save`. Vosh turns on all the groups of every active loadout.
 
-The catalog keeps your folder names where it can. Each alias, trigger, and macro lands in a group that is on for exactly the profiles that had it on, so a folder two characters filled differently can become more than one group. `combat` holds what most characters kept in their combat folder, `combat (Healer)` holds the combat items only the Healer had, and `(Healer)` holds the items the Healer had outside any folder. Each profile file remembers which groups its folders became, so `#group combat on` and `#group combat off` still turn on and off exactly what that profile had in its combat folder.
+The catalog keeps your folder names where it can. Each alias, trigger, and macro goes into a group that is on for exactly the profiles that had it on. So a folder that two characters filled in different ways can become more than one group.
 
-A trigger two characters had in different versions keeps each version, and the second one takes a name that adds its characters, such as `greet (Healer)`. An alias or a macro keeps the one version you pick in the wizard, since its name is what you type or press. Triggers keep the order each character had them in, since every trigger that matches a line fires in that order. Where two characters had the same triggers in different orders, one of them gets its own copy of a trigger, named the same way.
+`combat` holds what most characters kept in their combat folder. `combat (Healer)` holds the combat items that only the Healer had. `(Healer)` holds the items the Healer had outside all folders. Each profile file remembers which groups its folders became. So `#group combat on` and `#group combat off` still turn on and off exactly what that profile had in its combat folder.
 
-Click `Turn all off`, then `Save`, to park the catalog dormant. Dormant disables every grouped alias, trigger, and macro, and it survives restarts and profile switches. Items without a group always stay live.
+When two characters had a trigger in different versions, the catalog keeps each version. The second one gets a name that adds its characters, such as `greet (Healer)`. An alias or a macro keeps the one version you choose in the wizard, because you type or press its name. Triggers keep the order each character had them in. This is because every trigger that matches a line fires in that order. When two characters had the same triggers in different orders, one of them gets its own copy of a trigger, named in the same way.
 
-Which loadouts are on belongs to the profile. While your sessions play one profile, a change in Loadouts reaches every profile that has not made its own choice. Once sessions play two or more profiles, a change there holds for the profile of the session in front alone, and the other profiles keep the loadouts they have on.
+To make the catalog dormant, click `Turn all off`, then `Save`. Dormant turns off every alias, trigger, and macro that is in a group. It stays through restarts and profile changes. Items with no group always stay on.
 
-When no active loadout declares any enabled groups, the loadouts impose nothing and each group stays on or off as you left it, unless you keep the catalog dormant. While they impose, and while the catalog is dormant, the switch on each catalog group in Automation waits, with a note that names the loadouts that decide it or says every loadout is off. Timers stay with each profile, so no loadout turns a timer group on or off.
+The set of loadouts that are on belongs to the profile. While your sessions play one profile, a change in Loadouts reaches every profile that hasn't made its own choice. When sessions play two or more profiles, a change there applies only to the profile of the session in front. The other profiles keep the loadouts they have on.
 
-Activation is the only edit Loadouts makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs once. It will not build a new catalog while `catalog.toml` or `loadouts.toml` sits in the app data folder, while `profiles/legacy/` holds the copies from an earlier run, or while an earlier run waits to finish at the next launch.
+When no active loadout lists any enabled groups, the loadouts set nothing. Each group then stays on or off as you left it, unless you keep the catalog dormant. While the loadouts set groups, and while the catalog is dormant, the switch on each catalog group in Automation waits. A note names the loadouts that decide the group, or says every loadout is off. Timers stay with each profile, so no loadout turns a timer group on or off.
 
-After the move, `catalog.toml` holds your aliases, triggers, and macros, with every one you add or change later. Each file in `profiles/legacy/` is a backup of its profile as it was before the move. Never copy a backup back while `catalog.toml` sits in the app data folder. Vosh would lay the old aliases, triggers, and macros of the backup over the catalog, turn on for that character items that only other characters had, and at the next save put the old versions in the catalog for every character. To keep your items, leave `catalog.toml` where it is and change them in Automation settings. To build a new catalog from the backups, quit Vosh first, since Vosh saves `catalog.toml` again as it quits. Then move `catalog.toml` and `loadouts.toml` out of the app data folder, copy the files in `profiles/legacy/` back over the ones in `profiles/`, and move `profiles/legacy/` out too. Each profile comes back as it was before the move, every setting included, and loses every change you made to its settings since. Your items as they are now stay in the `catalog.toml` you moved out. Then open Vosh again and run the wizard.
+The only edit that Loadouts makes is to turn loadouts on and off. To make or change loadouts, edit `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs one time. It doesn't make a new catalog in these cases.
+
+- While `catalog.toml` or `loadouts.toml` is in the app data folder.
+- While `profiles/legacy/` holds the copies from an earlier run.
+- While an earlier run waits to finish at the next launch.
+
+After the move, `catalog.toml` holds your aliases, triggers, and macros. It also holds every one you add or change later. Each file in `profiles/legacy/` is a backup of its profile as it was before the move. Never copy a backup back while `catalog.toml` is in the app data folder.
+
+If you do, Vosh puts the old aliases, triggers, and macros of the backup over the catalog. It turns on, for that character, items that only other characters had. At the next save, it puts the old versions in the catalog for every character. To keep your items, leave `catalog.toml` where it is, and change them in Automation settings.
+
+To make a new catalog from the backups, do these steps.
+
+- Quit Vosh first, because Vosh saves `catalog.toml` again when it quits.
+- Move `catalog.toml` and `loadouts.toml` out of the app data folder.
+- Copy the files in `profiles/legacy/` back over the files in `profiles/`.
+- Move `profiles/legacy/` out of the app data folder too.
+- Open Vosh again and run the wizard.
+
+Each profile then comes back as it was before the move, with every setting. It loses every change that you made to its settings since then. Your items as they are now stay in the `catalog.toml` that you moved out.
 
 ### 7.3 Import a TinTin++ file
 
 <!-- id: characters-and-data.tintin-import -->
 
-The `#import-tintin` command reads aliases and variables out of a TinTin++ `.tin` file and loads them into the live profile. It runs from the command line.
+The `#import-tintin` command reads aliases and variables from a TinTin++ `.tin` file. It loads them into the live profile. You run it from the command line.
 
-- Type `#import-tintin <path>` and point it at the `.tin` file. `~` expands in the path.
-- Read the echo. It prints `imported <path>` and a count line like `12 aliases, 4 vars`.
-- Check the `skipped (unsupported)` line. It tallies directives Vosh does not model by name, so you can port them by hand.
-- Check the `unparsed` count. It flags alias or variable lines the parser could not read.
+- Type `#import-tintin <path>` with the path of the `.tin` file. `~` expands in the path.
+- Read the echo. It prints `imported <path>` and a count line such as `12 aliases, 4 vars`.
+- Check the `skipped (unsupported)` line. It counts by name the directives that Vosh doesn't support, so you can move them by hand.
+- Check the `unparsed` count. It shows the alias or variable lines that the parser couldn't read.
 
-The importer handles `#alias {name} {expansion}` and `#variable {name} {value}`, with `#var` accepted as a short form. Nested braces and escaped braces inside the values parse correctly. The importer silently skips `#nop` lines and comments starting with `;`. Imported aliases overwrite existing aliases with the same name. Variables land at profile scope, so they persist with the profile.
+The importer reads `#alias {name} {expansion}` and `#variable {name} {value}`. It also takes `#var` as a short form. Nested braces and escaped braces in the values parse correctly. The importer skips `#nop` lines and comments that start with `;`, and doesn't tell you. Imported aliases overwrite existing aliases with the same name. Variables go into profile scope, so they stay with the profile.
 
-Example. `#import-tintin ~/aabahran.tin` imports the file from your home folder, and a skip line of `event=2 ticker=1` reports two `event` directives and one `ticker` directive left behind.
+Example. `#import-tintin ~/aabahran.tin` imports the file from your home folder. A skip line of `event=2 ticker=1` tells you that it left out two `event` directives and one `ticker` directive.
 
-Files from other clients go through Settings instead. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts plus anything rejected, not supported, or unreadable. A trigger that takes the name of a preset trigger stays out, so the preset keeps its own, and the summary lists it under `Left out, a preset uses the name`. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
+Files from other clients go through Settings. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts, and anything that was refused, not supported, or not readable.
+
+A trigger with the name of a preset trigger stays out, so the preset keeps its own trigger. The summary lists it under `Left out, a preset uses the name`. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
 
 ### 7.4 Search session logs
 
 <!-- id: characters-and-data.search-logs -->
 
-Vosh logs every session automatically and searches the store with regular expressions. A log is the record of one connection, so a session that connects three times saves three. The search lives in Settings under Logs.
+Vosh logs every session automatically. You can search the logs with regular expressions. A log is the record of one connection, so a session that connects three times saves three logs. The search is in Settings under Logs.
 
 - Open Settings, choose Logs, and click `Search logs…` in the Session logs section. The row counts your saved logs and lines.
 - Type a pattern in the search field. Patterns are regular expressions, and the view searches as you type.
-- Click `Aa` for case sensitive matching.
-- Pick what to search in the menu at the right. The view opens on `Last 7 days`. `This session` reads what the selected session saved since Vosh opened, and `Last 30 days` and `All time` reach further back. Each one reads the world the selected session dials. Under `One log`, pick a single connection to search only that one.
+- For case sensitive matching, click `Aa`.
+- In the menu at the right, choose what to search. The view opens on `Last 7 days`. `This session` reads what the selected session saved since Vosh opened. `Last 30 days` and `All time` go further back.
+- Each choice reads the world that the selected session dials. To search only one connection, choose it under `One log`.
 
-The view shows the newest 500 matches under day headings, oldest first, so it reads like the terminal. The count beside the pattern reads like `Newest 500 of 2,423 lines`, and earlier matches load as you scroll up. Each line keeps its original colors, and your matches are marked the way the find bar marks them. With no pattern the view shows the newest lines. Click `Logs` in the breadcrumb to go back.
+The view shows the newest 500 matches under day headings, oldest first, so it reads like the terminal. The count beside the pattern reads like `Newest 500 of 2,423 lines`. Earlier matches load as you scroll up.
 
-Example. The pattern `dragon|wyvern` finds lines containing either word.
+Each line keeps its original colors. Your matches are marked as the find bar marks them. With no pattern, the view shows the newest lines. To go back, click `Logs` in the breadcrumb.
 
-To keep a copy outside Vosh, click the save button left of the menu and choose `Plain text (.txt)`, `With colors (.log)` or `Web page (.html)`. Check `Include times` in the same menu first and each line starts with the time it came, as the log view shows it. When the file covers more than one day, each day's date sits above its lines. Vosh saves every line the menu picks, oldest first, to your Downloads folder with a name like `Vosh log, last 7 days.txt`, and the count beside the pattern names the file. A `.log` keeps the game's colors, so `less -R` or `cat` in a terminal shows them. A web page opens in any browser in the colors of the theme you see as you save, under a heading that names your character, the world and the time it covers. A file you save shows `> (hidden)` for every line `#logs forget-passwords` would clean, so it never holds a password, even one the log still keeps. With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text, with those lines hidden the same way. The count on General leaves out connections to `127.0.0.1` and `localhost`. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup. To leave a character out, turn off `Log sessions` in the Session logs section, and its sessions save nothing from the next connect on. A connection to `127.0.0.1` or `localhost`, like a test server you run beside Vosh, saves nothing until you turn `Log sessions` on.
+Example. The pattern `dragon|wyvern` finds lines that hold either word.
 
-`Keep logs for` in the same section keeps your logs `Forever` until you pick `1 year`, `90 days` or `30 days`. Then once a day Vosh deletes each log that ended longer ago than that, whole, and gives the space on disk back a little at a time. A heavy week of play takes about 85 MB. The first time Vosh deletes a log from a file an older version wrote, it rebuilds the file once, which takes a few seconds on a large log. Your game keeps going while it does, and the log writes the lines it held back once the rebuild ends. A search waits until it finishes, and so does a connect, even the reconnect after a drop. Every character shares this one, since they share one log file.
+To keep a copy outside Vosh, click the save button to the left of the menu. Choose `Plain text (.txt)`, `With colors (.log)`, or `Web page (.html)`. If you first turn on `Include times` in the same menu, each line starts with the time it came in, as the log view shows it. When the file covers more than one day, the date of each day is above its lines.
 
-The log keeps what the game sent and each line you sent, marked `> `. Each line of a snoop starts with the name of the player you snooped, like `Tolliver|`, so the pattern `^Tolliver\|` finds what Tolliver's screen showed. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a log saved before you updated can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.
+Vosh saves every line that the menu chooses, oldest first, to your Downloads folder. The file has a name such as `Vosh log, last 7 days.txt`. The count beside the pattern names the file. A `.log` keeps the colors of the game, so `less -R` or `cat` in a terminal shows them. A web page opens in any browser in the colors of the theme you see when you save. Its heading names your character, the world, and the time it covers.
 
-To share a stretch of play, save it as a scene. With one log picked, click `Save a scene…` beside the copy button. To start from the newest log of the session in front, on its last 15 minutes, click `Save a scene…` beside `Search logs…` or right click the terminal and choose `Save a scene…`. Pick the log, then type the time the scene starts in `From` and the time it ends in `To`, or click a time in the preview to start on that line and Shift click one to end there. `Prompts` and `Your commands` start off, and `Channels left out` starts with tell, newbie, pray, immortal and imp. A tell counts both ways, the ones you send and the ones you get. Click the close button on a channel to keep it, and `Add` to leave out another. The lines before you play and after you return to your account menu never go in, so a scene never names your other characters. The preview shows every line of the range, with what stays out drawn faint and the reason beside it. Choose `Text`, `ANSI` or `HTML` and click `Save scene`. Vosh saves the file to your Downloads folder, named after the first room in the range and the day, like `Thickening Woods, October 3.html`, and the main window says so with a button that shows the file. An HTML scene opens in any browser with the colors of the theme you see as you save, a heading with the place, your character and the time, and a line at the end that says what was left out. Lines saved before this version of Vosh carry no tag, so Vosh finds their prompts and channels by their text, and a note above the preview says so. While `Log sessions` is off for the profile, `Save a scene…` does nothing.
+A file you save shows `> (hidden)` for every line that `#logs forget-passwords` would clean. So the file never holds a password, even one that the log still keeps. With one log chosen, the copy button beside the menu copies that whole log to your clipboard as plain text. Those lines are hidden in the same way.
 
-Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many logs, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space about the size of `logs.sqlite`. When Vosh cannot finish it, the lines stay blanked, Vosh says so, and the next `#logs forget-passwords now` finishes the rewrite. A backup of your disk, like Time Machine, keeps its own copy of the old file. If you copied or shared one of those logs, change your password in the game.
+The count on General doesn't include connections to `127.0.0.1` and `localhost`. The store is `logs.sqlite` in the app data folder. It fills on every connection, so logging needs no setup. To leave a character out, turn off `Log sessions` in the Session logs section. Its sessions then save nothing from the next connection on. A connection to `127.0.0.1` or `localhost`, such as a test server you run beside Vosh, saves nothing until you turn `Log sessions` on.
+
+`Keep logs for` in the same section keeps your logs `Forever` until you choose `1 year`, `90 days`, or `30 days`. Then, once a day, Vosh deletes each whole log that ended longer ago than that. It gives the disk space back a little at a time. A heavy week of play takes about 85 MB.
+
+The first time Vosh deletes a log from a file that an older version wrote, it rebuilds the file one time. On a large log this takes a few seconds. Your game continues while it does. The log writes the lines it held back when the rebuild ends. A search waits until it finishes, and so does a connection, even the reconnect after a drop. Every character shares this setting, because they share one log file.
+
+The log keeps what the game sent and each line you sent, marked `> `. Each line of a snoop starts with the name of the player you snooped, such as `Tolliver|`. So the pattern `^Tolliver\|` finds what the screen of Tolliver showed. Lines that you type at a password prompt aren't saved. Each one shows as `> (hidden)` in its place.
+
+Older versions of Vosh saved those lines in full. So a log saved before you updated can still show your password after a `> `. The game also shows two kinds of password as you type them. These are the password you set for a new character, and any password you give a command such as `password <old> <new>`. The log saves those in full in every version.
+
+To share a part of your play, save it as a scene. With one log chosen, click `Save a scene…` beside the copy button.
+
+To start from the newest log of the session in front, on its last 15 minutes, click `Save a scene…` beside `Search logs…`. Or right click the terminal and choose `Save a scene…`. Choose the log. Then type the time the scene starts in `From` and the time it ends in `To`. Or click a time in the preview to start on that line, and Shift click a time to end there.
+
+`Prompts` and `Your commands` start off. `Channels left out` starts with tell, newbie, pray, immortal, and imp. A tell counts both ways, the tells you send and the tells you get. To keep a channel, click its close button. To leave out another channel, click `Add`.
+
+The lines before you play and after you go back to your account menu never go in. So a scene never names your other characters.
+
+The preview shows every line of the range. What stays out is faint, with the reason beside it. Choose `Text`, `ANSI`, or `HTML` and click `Save scene`. Vosh saves the file to your Downloads folder. Its name has the first room in the range and the day, such as `Thickening Woods, October 3.html`. The main window tells you so, with a button that shows the file.
+
+An HTML scene opens in any browser with the colors of the theme you see when you save. It has a heading with the place, your character, and the time. A line at the end tells what was left out. Lines saved before this version of Vosh have no tag. So Vosh finds their prompts and channels by their text, and a note above the preview tells you so. While `Log sessions` is off for the profile, `Save a scene…` does nothing.
+
+Type `#logs forget-passwords` to count the lines that hold a password. Vosh tells you how many it found and in how many logs. It never shows the lines. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`. Vosh rewrites `logs.sqlite`, so the old text is also gone from the disk.
+
+On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space of about the size of `logs.sqlite`. When Vosh can't finish it, the lines stay blank and Vosh tells you so. The next `#logs forget-passwords now` finishes the rewrite. A backup of your disk, such as Time Machine, keeps its own copy of the old file. If you copied or shared one of those logs, change your password in the game.
 
 ### 7.5 Check for updates
 
 <!-- id: characters-and-data.stay-updated -->
 
-Vosh checks for new builds and installs them in place. The controls live in Settings under General, in the Updates section.
+Vosh checks for new builds and installs them in place. The controls are in Settings under General, in the Updates section.
 
 - Open Settings. General opens by default. The Updates heading reads `You have Vosh <version>.` beside a `Check now` button.
-- Click `Check now`. The line reads `Checking for updates…`, then `Vosh is up to date.` when nothing is newer.
-- When a build is ready, the line reads `Vosh <version> is ready.` and the button turns into `Install and restart`. Click it and Vosh installs the build and relaunches on it.
-- Turn on `Check for updates when Vosh opens` to run the check at every start. It is off by default. With it on, a banner appears in the main window when an update is waiting.
+- Click `Check now`. The line reads `Checking for updates…`, then `Vosh is up to date.` when there is no newer build.
+- When a build is ready, the line reads `Vosh <version> is ready.` and the button changes to `Install and restart`. Click it. Vosh installs the build and starts again on it.
+- To check at every start, turn on `Check for updates when Vosh opens`. It is off by default. With it on, a banner shows in the main window when an update waits.
 
-Updates download from the project's GitHub releases, and Vosh checks every build's signature before installing.
+Updates download from the GitHub releases of the project. Vosh checks the signature of every build before it installs it.
 
-`Check for updates` is one of the four switches under Keep the same for every character, also in General. It is on by default, so one setting covers every character. Turn it off when one character should check on launch while the others stay quiet.
+`Check for updates` is one of the four switches under Keep the same for every character, also in General. It is on by default, so one setting covers every character. Turn it off when you want one character to check at launch and the others to stay quiet.
 
 ## Fix it
 
