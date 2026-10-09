@@ -142,7 +142,7 @@ If you clear the field, the row shows the character again. A name helps you tell
 
 With one session there is no sidebar. So `Rename session…` opens a form under the title with one `Name` field. Click `Save` to keep what you typed.
 
-The name shows in place of the character in the row, the title band, the window title, and the palette. It also shows in the questions before a close. The card beside the row still names the character with the world, such as `Tolliver on The Forsaken Lands 1825, profile Build`. The name stays with the session through a reconnect, another character, and your next launch.
+The name shows in place of the character in the row, the title band, the window title, and the command palette. It also shows in the questions before a close. The card beside the row still names the character with the world, such as `Tolliver on The Forsaken Lands 1825, profile Build`. The name stays with the session through a reconnect, another character, and your next launch.
 
 The selected row is the filled one. The title band and the window title follow it. They add the port after the world in the same way, so the band reads `Orla` and `The Forsaken Lands 1825`.
 
@@ -294,7 +294,7 @@ Scrollback opens in a split above the live terminal. You can read old output whi
 
 - Scroll the mouse wheel up over the terminal. The first notch opens the split, with history above and the live tail below. When you scroll more, the history moves line by line.
 - Or press `PageUp` to open the split and go up a page. Press `PageDown` to go down a page. On a Mac keyboard these keys are `Fn+Up` and `Fn+Down`.
-- Or press `Cmd+\` on macOS or `Ctrl+\` on Windows and Linux to open the split. Press it again to close the split. The View menu and the palette call it `Split terminal`.
+- Or press `Cmd+\` on macOS or `Ctrl+\` on Windows and Linux to open the split. Press it again to close the split. The View menu and the command palette call it `Split terminal`.
 - To see how far back you are, read the count at the top right of the terminal, such as `54 / 78`.
 - To change the size of the split, drag the divider between the history and the live tail. To set its color, go to Settings under Layout, then Split terminal.
 - There are three ways back to live. Scroll or page down to the bottom of the history, and the split closes on its own. Or press `Esc`. Or middle click the terminal.
@@ -359,18 +359,18 @@ The right click menu also has `Clear scrollback`. It empties what you can scroll
 
 The command palette runs Vosh commands from the keyboard. It has the View and Session commands, the Settings pages, your prompt, your aliases, and your sessions.
 
-- Press `Cmd+K` on macOS or `Ctrl+K` on Windows and Linux. You can also click the search button at the right end of the title band. The same shortcut closes the palette again.
+- Press `Cmd+K` on macOS or `Ctrl+K` on Windows and Linux. You can also click the search button at the right end of the title band. The same shortcut closes the command palette again.
 - With nothing typed, it lists the last few commands you ran under Recent. Then it lists View and Session.
 - Type a few letters to search every command. Entries with a title that starts with your text come first. Then come titles that hold your text anywhere. Then come the other words each entry answers to.
 - Move the selection with the arrow keys. Press `Enter` to run the highlighted entry. Some rows have a list behind them, such as `Choose theme`. `Enter` or `ArrowRight` opens the list. `ArrowLeft` or `Backspace` goes back out.
-- Press `Esc` to go out of a list, or to close the palette and run nothing.
+- Press `Esc` to go out of a list, or to close the command palette and run nothing.
 
 The palette sorts what it finds into five sections.
 
 - Input. `Customize prompt…`, `Draw your prompt`, and `Edit prompt as text…`. Also a row for each text that the writing card takes, such as `Write a note…`, `Report a bug…`, and `Edit your description…`.
 - View. `Show panel`, `Split terminal`, `Choose theme`, and a row for each pane, such as `Show map`. Also the rows that choose where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Get started`, and `Open settings`. Also a row for each Settings page, such as `Open trigger settings`.
 - Aliases. Every alias that is on. An alias that takes no arguments runs as soon as you choose it. An alias that takes arguments puts its name in the command line instead. You then finish the line and press `Enter`.
-- Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open. Also `Close session`, and `Hide sessions` or `Show sessions` with two or more sessions. Also `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect is always last, and the palette never opens with it selected.
+- Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open. Also `Close session`, and `Hide sessions` or `Show sessions` with two or more sessions. Also `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect is always last, and the command palette never opens with it selected.
 - Go to. Every open session by the name its row shows, while two or more are open. A character shows with the world beside it. The session in front has a check, and the first nine show their keys, `Cmd+1` to `Cmd+9`. Choose a session to bring it to the front. Or type a name or a port to find it.
 
 ### 2.8 Use the right click menu
@@ -431,7 +431,7 @@ You can also type `@` on a blank line to finish. To turn the notice off, use `Of
 
 The writing card also writes on the boards of the game. Notes, journal entries, applications, ideas, and bug and typo reports all open in it. So do your history, personality, and purpose.
 
-- Right click the terminal and choose `Write`, then the kind you want. Or find it in the palette, such as `Write a note…` or `Report a bug…`. The title of the card opens your drafts and every other kind.
+- Right click the terminal and choose `Write`, then the kind you want. Or find it in the command palette, such as `Write a note…` or `Report a bug…`. The title of the card opens your drafts and every other kind.
 - A note has `To` and `Subject` above its text. A journal entry, idea, bug, or typo goes to the immortals, so `To` reads `Immortal`.
 - A bug or typo report names the room you stand in. The game records it when you post. So post the report from the place where the bug happened.
 - `Write in a language` in the `⋯` menu adds a `Language` row to a note. The game decides whether you know the language well enough.
@@ -833,19 +833,19 @@ mud.on_gmcp("Char.State", function(data) state = data; draw() end)
 
 The panel on the right holds your panes. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
 
-- To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the palette. While the panel is hidden, your vitals move to the status line.
+- To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the command palette. While the panel is hidden, your vitals move to the status line.
 - To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues. Staff queues joins the list when the game sends it.
 - To open the menu of a pane, click the more button in its header. `Split right` and `Split down` put the first pane that the panel doesn't show beside it or under it. When the panel shows all the panes, they put in another Chat pane. On a Chat pane they put in another Chat pane.
 - In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
 - To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
 - To change the width of the panel, drag its left edge. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
-- To show or hide one pane, use its row in the View menu or the palette, such as `Show map`.
+- To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`.
 
-To start again, choose `Reset panel layout` in the View menu or the palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects. The panel keeps its width, and it stays shown or hidden.
+To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects. The panel keeps its width, and it stays shown or hidden.
 
 Settings under Characters draws the panel of each character under Panel layout. So you can see how each one is arranged.
 
-To open Settings, click the gear at the right end of the title band, after the panel button. You can also press `Cmd+,` on macOS or `Ctrl+,` on Windows and Linux. `Open settings` in the palette and the `Settings` list in the right click menu of the terminal also open it.
+To open Settings, click the gear at the right end of the title band, after the panel button. You can also press `Cmd+,` on macOS or `Ctrl+,` on Windows and Linux. `Open settings` in the command palette and the `Settings` list in the right click menu of the terminal also open it.
 
 ### 4.2 Use the map
 
@@ -853,7 +853,7 @@ To open Settings, click the gear at the right end of the title band, after the p
 
 The Map pane draws the map that the game sends. At first it is at the top of the panel. Its header names the area you are in.
 
-- To show or hide the map, choose `Show map` in the View menu or the palette. Or add it with `Add a pane` in the title band.
+- To show or hide the map, choose `Show map` in the View menu or the command palette. Or add it with `Add a pane` in the title band.
 - Read the rows under the drawing. The first row names the room you stand in. The name takes the color that the terminal shows it in, from the colors of your theme. Examples are gray for a room inside, yellow for a field, and blue for a lake you can't swim.
 - When the panel would make that color hard to see, the pane draws it a little lighter or darker. A few rooms take a color of their own from their area. The game leaves that color out of `Room.Info`, so the pane shows the usual color for their terrain.
 - The second row names the terrain and the region, such as `Inside` and `Coastal North`. The exits show at its right. The other rows list the people here. A name that more than one person shares has a count beside it. When more people are here than fit, the last row counts the others.
@@ -952,7 +952,7 @@ The Group pane shows the health of each member of your group. The Affects pane s
 - `Draining chips` groups and orders the chips in the same way. A chip that is running out has no tint of its own. A thin outline shows its full width. Yellow or red fills only the part that matches the hours it has left, and the whole chip when it is full.
 - The meters and the fills measure each affect against the most hours Vosh saw for it since you last cast it. Vosh remembers this for each character between logins. An affect that Vosh first sees part of the way through starts full. A permanent affect stays full.
 - `Marker` sets the mark beside each affect you track in `Timers first` and `Countdown`. Choose a dot, a square, plus and minus, or none. Plus and minus shows a plus while you have the affect and a minus while it is missing. In every shape, the color shows the state. With none, the hours and the red names still show it.
-- Turn on `Tint what to recast` to tint the affects to recast. A missing affect gets a red wash. An affect that will soon drop gets a yellow or red wash. This works in `Timers first` and `Countdown`. Both chip styles always mark what to recast.
+- Turn on `Tint what to recast` to tint the affects to recast. A missing affect gets a red wash. An affect that is about to drop gets a yellow or red wash. This works in `Timers first` and `Countdown`. Both chip styles always mark what to recast.
 - The hours follow the game unless you change them. One hour or none shows in bold red, and two hours shows in yellow. To change this, set `Running out at` and `Almost gone at` in Settings under Layout, then Affects. Or choose `Change when affects warn…` in the menu of the pane.
 - Each setting takes whole hours. Almost gone is never more than running out. So the same number for both skips the yellow. Each character keeps its own settings. The header counts the tracked affects that are missing and the ones running out.
 - The pane shows only whole rows. When some rows don't fit, the last entry tells how many more there are, such as `5 more`. Click it to scroll to them. Point away to scroll back.
@@ -967,7 +967,7 @@ When the game hides your affects or your group, as it does under lamented tears,
 
 The Staff queues pane lists the staff queues that need you, with the worst first. The game sends them only to immortals.
 
-- Log in on an immortal. The game sends `Imm.Queues` at login. `Show staff queues` then shows in the View menu, the palette, and `Add a pane`.
+- Log in on an immortal. The game sends `Imm.Queues` at login. `Show staff queues` then shows in the View menu, the command palette, and `Add a pane`.
 - To add the pane, use `Add a pane` in the title band, or choose `Show staff queues`. Until the queues come in, the pane says that they show when you log in as an immortal.
 - Read from the top down. Only queues with work show. Items past their deadline come first. Then come items in the last quarter before the deadline. Then come the rest, with the bigger backlog first.
 - The queues are Description checks, Applications, Journals, Votes, Notes, Bugs, Penalties, Ideas, and Typos.
@@ -1017,7 +1017,7 @@ Each session keeps its own snoops. Its row in the sessions sidebar shows an eye 
 
 The session log keeps each line of a snoop. The line starts with the name of the player, such as `Tolliver|`. To read it again after the tab is gone, search your logs for `^Tolliver\|`.
 
-While a snoop is open, type `snoop` in the palette. You then get `Go to snoop`, `Next snoop`, `Stop snooping Tolliver`, `Stop every snoop`, `Open snoop in a window`, and `Close ended snoops`. Snoop has no row in Settings.
+While a snoop is open, type `snoop` in the command palette. You then get `Go to snoop`, `Next snoop`, `Stop snooping Tolliver`, `Stop every snoop`, `Open snoop in a window`, and `Close ended snoops`. Snoop has no row in Settings.
 
 ## Tick and target
 
@@ -1086,7 +1086,7 @@ A theme sets the colors of the whole window, the terminal included. Themes are i
 - Choose a pair with a similar tone, such as Obsidian Ember by night and Gruvbox by day. Two dark themes feel like evening coming on. A dark theme and a light theme flash at every change.
 - When you go offline, the window keeps the theme it showed last, also through a relaunch. It keeps it until the game gives the time again.
 - To read a Ghostty, iTerm2, Kitty, or Alacritty theme file, click `Import…`. Vosh adds it to your own themes and changes to it.
-- Or choose `Choose theme` in the View menu or the palette. It lists every theme.
+- Or choose `Choose theme` in the View menu or the command palette. It lists every theme.
 
 A theme sets both layers of the window. The window layer covers the backgrounds, the text, the separators, and the accent. It also covers the warn, danger, and success colors. The terminal layer covers the background, the text, the cursor, the selection, and all sixteen ANSI colors. MUD text takes the sixteen colors of the theme while `Use the theme's colors for MUD text` is on under Terminal text. It is on for every theme until you turn it off.
 
@@ -1539,7 +1539,7 @@ In the find bar. `Enter` finds the next match, and `Shift+Enter` finds the previ
 
 In a snoop. `Cmd+F` opens Find on the tab in front. `Cmd+C` copies what you select. `Escape`, or any key that types, puts you back on the command line.
 
-In the command palette. `ArrowUp` and `ArrowDown` move the selection, and `Enter` runs the entry. `ArrowRight` opens a list such as Choose theme. `ArrowLeft` or `Backspace` goes back out of it. `Escape` goes back or closes the palette.
+In the command palette. `ArrowUp` and `ArrowDown` move the selection, and `Enter` runs the entry. `ArrowRight` opens a list such as Choose theme. `ArrowLeft` or `Backspace` goes back out of it. `Escape` goes back or closes the command palette.
 
 In the right click menu. `ArrowUp` and `ArrowDown` move through the items, and `Enter` chooses one. `ArrowRight` opens the Settings list, and `ArrowLeft` goes back out of it. `Escape` closes the list, then the menu.
 
