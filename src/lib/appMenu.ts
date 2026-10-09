@@ -109,10 +109,10 @@ function isSessionShortcut(id: AppShortcutId): id is SessionShortcutId {
 // Shift elsewhere. Both windows take them, and a macro keeps them in
 // the main window as it keeps a session key.
 const SETTINGS_SHORTCUTS = [
-  'settings-timers',
-  'settings-aliases',
-  'settings-triggers',
-  'settings-macros',
+  'settings-automation:timers',
+  'settings-automation:aliases',
+  'settings-automation:triggers',
+  'settings-automation:macros',
 ] as const satisfies readonly AppShortcutId[];
 
 /** A key that opens a Settings page. */

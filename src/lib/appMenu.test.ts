@@ -84,12 +84,12 @@ describe('resolveShortcut', () => {
     const run = (id: string) => ({ kind: 'run', id });
     const on = (p: ShortcutPress) => resolveShortcut(p, undefined, undefined, false);
     // Shift with 1 types ! on a US layout, and the physical key decides.
-    expect(on(press('!', 'Digit1', true))).toEqual(run('settings-timers'));
-    expect(on(press('@', 'Digit2', true))).toEqual(run('settings-aliases'));
-    expect(on(press('#', 'Digit3', true))).toEqual(run('settings-triggers'));
-    expect(on(press('$', 'Digit4', true))).toEqual(run('settings-macros'));
+    expect(on(press('!', 'Digit1', true))).toEqual(run('settings-automation:timers'));
+    expect(on(press('@', 'Digit2', true))).toEqual(run('settings-automation:aliases'));
+    expect(on(press('#', 'Digit3', true))).toEqual(run('settings-automation:triggers'));
+    expect(on(press('$', 'Digit4', true))).toEqual(run('settings-automation:macros'));
     // A layout that types something else on the digit row still reaches it.
-    expect(on(press('"', 'Digit2', true))).toEqual(run('settings-aliases'));
+    expect(on(press('"', 'Digit2', true))).toEqual(run('settings-automation:aliases'));
     // Without Shift the digit still goes to a session.
     expect(on(press('1', 'Digit1'))).toEqual({ kind: 'goto', place: 1 });
     // Ctrl with Alt is AltGr there, and types characters.
@@ -102,13 +102,13 @@ describe('resolveShortcut', () => {
     const on = (p: ShortcutPress) => resolveShortcut(p, undefined, undefined, true);
     const option = (key: string, code: string) => ({ ...press(key, code), alt: true });
     // Option with 1 types ¡ on a US layout, and the physical key decides.
-    expect(on(option('¡', 'Digit1'))).toEqual(run('settings-timers'));
-    expect(on(option('™', 'Digit2'))).toEqual(run('settings-aliases'));
-    expect(on(option('£', 'Digit3'))).toEqual(run('settings-triggers'));
-    expect(on(option('¢', 'Digit4'))).toEqual(run('settings-macros'));
+    expect(on(option('¡', 'Digit1'))).toEqual(run('settings-automation:timers'));
+    expect(on(option('™', 'Digit2'))).toEqual(run('settings-automation:aliases'));
+    expect(on(option('£', 'Digit3'))).toEqual(run('settings-automation:triggers'));
+    expect(on(option('¢', 'Digit4'))).toEqual(run('settings-automation:macros'));
     // Whatever the layout types there, as the digit itself.
-    expect(on(option('1', 'Digit1'))).toEqual(run('settings-timers'));
-    expect(on(option('&', 'Digit1'))).toEqual(run('settings-timers'));
+    expect(on(option('1', 'Digit1'))).toEqual(run('settings-automation:timers'));
+    expect(on(option('&', 'Digit1'))).toEqual(run('settings-automation:timers'));
     // Cmd Shift 3 and 4 are the system screenshot keys, and Vosh takes
     // no Shift digit on macOS.
     for (let place = 1; place <= 9; place += 1) {
@@ -125,10 +125,12 @@ describe('resolveShortcut', () => {
 
   it('reads the Settings keys from the same spot in both windows', () => {
     expect(settingsShortcutOf({ ...press('£', 'Digit3'), alt: true }, true)).toBe(
-      'settings-triggers',
+      'settings-automation:triggers',
     );
     expect(settingsShortcutOf(press('#', 'Digit3', true), true)).toBeNull();
-    expect(settingsShortcutOf(press('#', 'Digit3', true), false)).toBe('settings-triggers');
+    expect(settingsShortcutOf(press('#', 'Digit3', true), false)).toBe(
+      'settings-automation:triggers',
+    );
     expect(settingsShortcutOf({ ...press('£', 'Digit3'), alt: true }, false)).toBeNull();
     expect(settingsShortcutOf({ ...press('£', 'Digit3'), alt: true, ctrl: true }, true)).toBeNull();
   });
@@ -321,17 +323,17 @@ describe('appKeyOfMacro', () => {
 
   it('finds the Settings key a macro key shares, by the digit or what Option or Shift types', () => {
     const run = (id: string) => ({ kind: 'run', id });
-    expect(appKeyOfMacro('Alt+Meta+1', true)).toEqual(run('settings-timers'));
-    expect(appKeyOfMacro('Alt+Meta+¡', true)).toEqual(run('settings-timers'));
-    expect(appKeyOfMacro('Alt+Meta+™', true)).toEqual(run('settings-aliases'));
-    expect(appKeyOfMacro('Alt+Meta+3', true)).toEqual(run('settings-triggers'));
-    expect(appKeyOfMacro('Alt+Meta+£', true)).toEqual(run('settings-triggers'));
-    expect(appKeyOfMacro('Alt+Meta+¢', true)).toEqual(run('settings-macros'));
-    expect(appKeyOfMacro('Ctrl+Shift+1', false)).toEqual(run('settings-timers'));
-    expect(appKeyOfMacro('Ctrl+Shift+!', false)).toEqual(run('settings-timers'));
-    expect(appKeyOfMacro('Ctrl+Shift+2', false)).toEqual(run('settings-aliases'));
-    expect(appKeyOfMacro('Ctrl+Shift+#', false)).toEqual(run('settings-triggers'));
-    expect(appKeyOfMacro('Ctrl+Shift+4', false)).toEqual(run('settings-macros'));
+    expect(appKeyOfMacro('Alt+Meta+1', true)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Alt+Meta+¡', true)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Alt+Meta+™', true)).toEqual(run('settings-automation:aliases'));
+    expect(appKeyOfMacro('Alt+Meta+3', true)).toEqual(run('settings-automation:triggers'));
+    expect(appKeyOfMacro('Alt+Meta+£', true)).toEqual(run('settings-automation:triggers'));
+    expect(appKeyOfMacro('Alt+Meta+¢', true)).toEqual(run('settings-automation:macros'));
+    expect(appKeyOfMacro('Ctrl+Shift+1', false)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Ctrl+Shift+!', false)).toEqual(run('settings-automation:timers'));
+    expect(appKeyOfMacro('Ctrl+Shift+2', false)).toEqual(run('settings-automation:aliases'));
+    expect(appKeyOfMacro('Ctrl+Shift+#', false)).toEqual(run('settings-automation:triggers'));
+    expect(appKeyOfMacro('Ctrl+Shift+4', false)).toEqual(run('settings-automation:macros'));
     // Cmd Shift with a digit is no app key on macOS any more.
     expect(appKeyOfMacro('Shift+Meta+1', true)).toBeNull();
     expect(appKeyOfMacro('Shift+Meta+$', true)).toBeNull();

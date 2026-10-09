@@ -192,12 +192,9 @@ const PANE_TITLES: Record<OfferedPaneType, string> = {
   imm: 'Show staff queues',
 };
 
-// Each id is a Settings deep link (src/lib/settingsNav.ts) and, as
-// `settings-<id>`, a palette Recent id, so the old tab ids stay. The
-// move to eleven Settings groups brought back the vitals row, now for
-// the Vitals tab, and added rows for Accessibility, Prompt and the Logs
-// tab. The logs row keeps its id and opens the search, as the bare
-// link does, so the Logs tab row names its first section.
+// Each id is the Settings deep link the row opens (src/lib/settingsNav.ts)
+// and, as `settings-<id>`, its palette Recent id. RECENT_RENAMES maps
+// the old tab ids these rows used before to the links they open now.
 // The four Automation pages carry the Settings keys, Cmd+Option+1 to 4
 // on macOS and Ctrl+Shift+1 to 4 elsewhere, read for the platform as
 // the palette builds.
@@ -208,17 +205,21 @@ const SETTINGS_TABS: {
   shortcut?: SettingsShortcutId;
 }[] = [
   {
-    id: 'themes',
+    id: 'appearance:theme',
     title: 'Open theme settings',
     keywords: 'appearance catalog editor terminal palette colors',
   },
   {
-    id: 'typography',
+    id: 'appearance:text',
     title: 'Open terminal text settings',
     keywords: 'appearance font face size typography',
   },
-  { id: 'tick', title: 'Open tick settings', keywords: 'automation timer warn' },
-  { id: 'panels', title: 'Open panel layout settings', keywords: 'characters panes layout' },
+  { id: 'automation:timers#tick', title: 'Open tick settings', keywords: 'automation timer warn' },
+  {
+    id: 'characters#layout',
+    title: 'Open panel layout settings',
+    keywords: 'characters panes layout',
+  },
   { id: 'general', title: 'Open general settings', keywords: 'updates scope' },
   {
     id: 'accessibility',
@@ -241,40 +242,40 @@ const SETTINGS_TABS: {
     keywords: 'command line caret cursor spell check paste history writing card',
   },
   {
-    id: 'profiles',
+    id: 'characters',
     title: 'Open character settings',
     keywords: 'profiles characters hosts login tracked affects',
   },
   {
-    id: 'triggers',
+    id: 'automation:triggers',
     title: 'Open trigger settings',
     keywords: 'automation patterns actions',
-    shortcut: 'settings-triggers',
+    shortcut: 'settings-automation:triggers',
   },
   {
-    id: 'aliases',
+    id: 'automation:aliases',
     title: 'Open alias settings',
     keywords: 'automation command shortcuts',
-    shortcut: 'settings-aliases',
+    shortcut: 'settings-automation:aliases',
   },
   {
-    id: 'macros',
+    id: 'automation:macros',
     title: 'Open macro settings',
     keywords: 'automation key bindings',
-    shortcut: 'settings-macros',
+    shortcut: 'settings-automation:macros',
   },
   {
-    id: 'timers',
+    id: 'automation:timers',
     title: 'Open timer settings',
     keywords: 'automation recurring commands interval',
-    shortcut: 'settings-timers',
+    shortcut: 'settings-automation:timers',
   },
   {
-    id: 'import',
+    id: 'automation#import',
     title: 'Import from another client…',
     keywords: 'automation tintin mushclient mudlet gmud cmud zmud',
   },
-  { id: 'logs', title: 'Search logs', keywords: 'history search session' },
+  { id: 'logs:search', title: 'Search logs', keywords: 'history search session' },
   {
     id: 'logs:session-logs',
     title: 'Open log settings',
@@ -772,10 +773,43 @@ const RECENT_KEY = 'vosh.palette.recent';
 const RECENT_KEEP = 8;
 export const RECENT_SHOWN = 3;
 
+// The Settings rows once carried the old Settings tab ids, so Recent
+// may still hold them. readRecent renames them once to the links the
+// rows open now and marks the list with RECENT_VERSION.
+const RECENT_VERSION_KEY = 'vosh.palette.recentVersion';
+const RECENT_VERSION = '2';
+const RECENT_RENAMES: Readonly<Record<string, string>> = {
+  'settings-themes': 'settings-appearance:theme',
+  'settings-typography': 'settings-appearance:text',
+  'settings-tick': 'settings-automation:timers#tick',
+  'settings-panels': 'settings-characters#layout',
+  'settings-profiles': 'settings-characters',
+  'settings-triggers': 'settings-automation:triggers',
+  'settings-aliases': 'settings-automation:aliases',
+  'settings-macros': 'settings-automation:macros',
+  'settings-timers': 'settings-automation:timers',
+  'settings-import': 'settings-automation#import',
+  'settings-logs': 'settings-logs:search',
+};
+
+function storedRecent(): string[] {
+  const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+  return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function renameOldRecent(): void {
+  if (localStorage.getItem(RECENT_VERSION_KEY) === RECENT_VERSION) return;
+  const before = storedRecent();
+  const after = [...new Set(before.map((id) => RECENT_RENAMES[id] ?? id))];
+  const next = JSON.stringify(after);
+  if (next !== JSON.stringify(before)) localStorage.setItem(RECENT_KEY, next);
+  localStorage.setItem(RECENT_VERSION_KEY, RECENT_VERSION);
+}
+
 export function readRecent(): string[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+    renameOldRecent();
+    return storedRecent();
   } catch {
     return [];
   }

@@ -73,7 +73,7 @@ describe('the Settings list in the terminal menu', () => {
   it('opens each list where the palette row for it does', () => {
     const palette: Record<string, string> = golden.palette;
     for (const row of lists) {
-      const sent = palette[`settings-${row.id}`];
+      const sent = palette[`settings-${row.link}`];
       expect(sent, row.label).toBeDefined();
       expect(formatSettingsTarget(resolveSettingsTarget(sent)), row.label).toBe(row.link);
     }

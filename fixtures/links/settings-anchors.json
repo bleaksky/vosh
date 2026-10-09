@@ -1,5 +1,5 @@
 {
-  "notes": "Taken from the code at 7dced45, and moved for the Settings layout decision of October 8. The Settings deep links that search, the palette and other windows open, where each one lands, the anchors each Settings page draws as data-st-anchor, and the help topics its book buttons open. search lists the search index rows in order. palette maps each palette row that opens Settings, by the id the palette keeps in Recent, to the link it sends. senders maps the pane menu Edit tracked affects and Change when affects warn items, the Layout panes row and the Logs Save a scene and Search logs buttons to the links each one sends, first with the profile in use named Ilsabet and then with no profile known. links maps each link string to where it lands. settings layout moves maps each link the Settings layout decision moved to the tab it opens now, and from menus holds the links the vitals pane menu, the prompt card, the terminal menu and the palette send that no test presses. from other pages and windows holds every link in senders. anchors lists what each page draws on every link, opened cold and warm, with the Prompt section on the Prompt page in each of its four states. src/settings/settingsAnchors.test.tsx holds the code to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
+  "notes": "Taken from the code at 7dced45, moved for the Settings layout decision of October 8, and renamed for D15, which gave each palette row the link it opens as its id. The Settings deep links that search, the palette and other windows open, where each one lands, the anchors each Settings page draws as data-st-anchor, and the help topics its book buttons open. search lists the search index rows in order. palette maps each palette row that opens Settings, by the id the palette keeps in Recent, to the link it sends. senders maps the pane menu Edit tracked affects and Change when affects warn items, the Layout panes row and the Logs Save a scene and Search logs buttons to the links each one sends, first with the profile in use named Ilsabet and then with no profile known. links maps each link string to where it lands. settings layout moves maps each link the Settings layout decision moved to the tab it opens now, and from menus holds the links the vitals pane menu, the prompt card, the terminal menu and the palette send that no test presses. from other pages and windows holds every link in senders. anchors lists what each page draws on every link, opened cold and warm, with the Prompt section on the Prompt page in each of its four states. src/settings/settingsAnchors.test.tsx holds the code to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
   "search": [
     "general:connection#world",
     "general:connection#host",
@@ -117,22 +117,22 @@
     "accessibility:screen-reader#long-bursts"
   ],
   "palette": {
-    "settings-themes": "themes",
-    "settings-typography": "typography",
-    "settings-tick": "tick",
-    "settings-panels": "panels",
+    "settings-appearance:theme": "appearance:theme",
+    "settings-appearance:text": "appearance:text",
+    "settings-automation:timers#tick": "automation:timers#tick",
+    "settings-characters#layout": "characters#layout",
     "settings-general": "general",
     "settings-accessibility": "accessibility",
     "settings-vitals": "vitals",
     "settings-prompt": "prompt",
     "settings-input": "input",
-    "settings-profiles": "profiles",
-    "settings-triggers": "triggers",
-    "settings-aliases": "aliases",
-    "settings-macros": "macros",
-    "settings-timers": "timers",
-    "settings-import": "import",
-    "settings-logs": "logs",
+    "settings-characters": "characters",
+    "settings-automation:triggers": "automation:triggers",
+    "settings-automation:aliases": "automation:aliases",
+    "settings-automation:macros": "automation:macros",
+    "settings-automation:timers": "automation:timers",
+    "settings-automation#import": "automation#import",
+    "settings-logs:search": "logs:search",
     "settings-logs:session-logs": "logs:session-logs"
   },
   "senders": {
@@ -228,7 +228,16 @@
     "from menus": {
       "vitals:customize-vitals": "vitals:customize-vitals",
       "logs:scene": "logs:scene",
-      "logs:session-logs": "logs:session-logs"
+      "logs:session-logs": "logs:session-logs",
+      "appearance:theme": "appearance:theme",
+      "appearance:text": "appearance:text",
+      "automation:timers#tick": "automation:timers#tick",
+      "characters#layout": "characters#layout",
+      "automation:triggers": "automation:triggers",
+      "automation:aliases": "automation:aliases",
+      "automation:macros": "automation:macros",
+      "automation:timers": "automation:timers",
+      "automation#import": "automation#import"
     },
     "from other pages and windows": {
       "characters#tracked": "characters#tracked",

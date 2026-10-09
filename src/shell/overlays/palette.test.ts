@@ -9,13 +9,14 @@ import {
   chooseTheme,
   initialSelection,
   paletteSections,
+  readRecent,
   themeEntries,
   themesInGalleryOrder,
   type PaletteDeps,
 } from './palette';
 import { CommandPalette } from './CommandPalette';
 import { appShortcut } from '../../lib/appMenu';
-import { resolveSettingsTarget } from '../../lib/settingsNav';
+import { formatSettingsTarget, resolveSettingsTarget } from '../../lib/settingsNav';
 import type { SessionRow } from '../../ipc/session';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -209,13 +210,17 @@ describe('paletteSections', () => {
     const sections = paletteSections(buildPaletteEntries(deps()), '', [
       'disconnect',
       'find',
-      'settings-themes',
+      'settings-appearance:theme',
       'gone',
       'profile-save',
       'help',
     ]);
     expect(sections[0].label).toBe('Recent');
-    expect(sections[0].rows.map((r) => r.id)).toEqual(['find', 'settings-themes', 'profile-save']);
+    expect(sections[0].rows.map((r) => r.id)).toEqual([
+      'find',
+      'settings-appearance:theme',
+      'profile-save',
+    ]);
   });
 
   it('lists New session… with its key once you type, leading the Session rows', () => {
@@ -383,7 +388,7 @@ describe('paletteSections', () => {
     const sections = paletteSections(entries, 'settings', ['find']);
     expect(sections.map((s) => s.label)).toEqual(['View']);
     expect(sections[0].rows[0].id).toBe('settings');
-    expect(sections[0].rows.map((r) => r.id)).toContain('settings-themes');
+    expect(sections[0].rows.map((r) => r.id)).toContain('settings-appearance:theme');
   });
 });
 
@@ -468,46 +473,73 @@ describe('settings rows', () => {
   const settingsRows = (over: Partial<PaletteDeps> = {}) =>
     buildPaletteEntries(deps(over)).filter((r) => r.id.startsWith('settings-'));
 
-  it('keeps the old ids so Recent rows survive', () => {
-    const ids = settingsRows().map((r) => r.id);
-    for (const id of [
-      'themes',
-      'typography',
-      'tick',
-      'panels',
-      'general',
-      'profiles',
-      'triggers',
-      'aliases',
-      'macros',
-      'timers',
-      'import',
-      'logs',
-      'vitals',
-    ]) {
-      expect(ids).toContain(`settings-${id}`);
+  it('names each row by the link it opens', () => {
+    const rows = settingsRows();
+    for (const row of rows) {
+      const link = row.id.slice('settings-'.length);
+      expect(formatSettingsTarget(resolveSettingsTarget(link))).toBe(link);
     }
     // A Recent row for an entry the palette no longer has drops out
     // quietly.
     const recent = paletteSections(buildPaletteEntries(deps()), '', [
       'settings-gone',
-      'settings-themes',
+      'settings-appearance:theme',
     ]);
-    expect(recent[0].rows.map((r) => r.id)).toEqual(['settings-themes']);
+    expect(recent[0].rows.map((r) => r.id)).toEqual(['settings-appearance:theme']);
+  });
+
+  it('renames the old tab ids in Recent once', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    });
+    try {
+      store.set(
+        'vosh.palette.recent',
+        JSON.stringify([
+          'settings-themes',
+          'find',
+          'settings-tick',
+          'settings-automation:triggers',
+          'settings-automation:triggers',
+          'settings-logs',
+          'settings-general',
+        ]),
+      );
+      const renamed = [
+        'settings-appearance:theme',
+        'find',
+        'settings-automation:timers#tick',
+        'settings-automation:triggers',
+        'settings-logs:search',
+        'settings-general',
+      ];
+      expect(readRecent()).toEqual(renamed);
+      expect(JSON.parse(store.get('vosh.palette.recent') ?? '')).toEqual(renamed);
+      const ids = new Set(buildPaletteEntries(deps()).map((r) => r.id));
+      for (const id of renamed) expect(ids.has(id)).toBe(true);
+      // The rename runs once, so a later list stays as written.
+      store.set('vosh.palette.recent', JSON.stringify(['settings-themes']));
+      expect(readRecent()).toEqual(['settings-themes']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('names the places the rows open now', () => {
     const title = (id: string) => settingsRows().find((r) => r.id === `settings-${id}`)?.title;
-    expect(title('themes')).toBe('Open theme settings');
-    expect(title('typography')).toBe('Open terminal text settings');
-    expect(title('panels')).toBe('Open panel layout settings');
-    expect(title('profiles')).toBe('Open character settings');
+    expect(title('appearance:theme')).toBe('Open theme settings');
+    expect(title('appearance:text')).toBe('Open terminal text settings');
+    expect(title('characters#layout')).toBe('Open panel layout settings');
+    expect(title('characters')).toBe('Open character settings');
     expect(title('input')).toBe('Open input settings');
-    expect(title('import')).toBe('Import from another client…');
+    expect(title('automation#import')).toBe('Import from another client…');
     expect(title('accessibility')).toBe('Open accessibility settings');
     expect(title('vitals')).toBe('Open vitals settings');
     expect(title('prompt')).toBe('Open prompt settings');
-    expect(title('logs')).toBe('Search logs');
+    expect(title('logs:search')).toBe('Search logs');
     expect(title('logs:session-logs')).toBe('Open log settings');
   });
 
@@ -516,21 +548,21 @@ describe('settings rows', () => {
       .filter((r) => r.keys)
       .map((r) => [r.id, r.keys]);
     expect(keyed).toEqual([
-      ['settings-triggers', appShortcut('settings-triggers')],
-      ['settings-aliases', appShortcut('settings-aliases')],
-      ['settings-macros', appShortcut('settings-macros')],
-      ['settings-timers', appShortcut('settings-timers')],
+      ['settings-automation:triggers', appShortcut('settings-automation:triggers')],
+      ['settings-automation:aliases', appShortcut('settings-automation:aliases')],
+      ['settings-automation:macros', appShortcut('settings-automation:macros')],
+      ['settings-automation:timers', appShortcut('settings-automation:timers')],
     ]);
     // Cmd+Option on macOS, since Cmd Shift 3 and 4 take screenshots
     // there, and Ctrl+Shift on Windows and Linux.
-    expect(appShortcut('settings-timers', true)).toBe('Mod+Alt+1');
-    expect(appShortcut('settings-aliases', true)).toBe('Mod+Alt+2');
-    expect(appShortcut('settings-triggers', true)).toBe('Mod+Alt+3');
-    expect(appShortcut('settings-macros', true)).toBe('Mod+Alt+4');
-    expect(appShortcut('settings-timers', false)).toBe('Mod+Shift+1');
-    expect(appShortcut('settings-aliases', false)).toBe('Mod+Shift+2');
-    expect(appShortcut('settings-triggers', false)).toBe('Mod+Shift+3');
-    expect(appShortcut('settings-macros', false)).toBe('Mod+Shift+4');
+    expect(appShortcut('settings-automation:timers', true)).toBe('Mod+Alt+1');
+    expect(appShortcut('settings-automation:aliases', true)).toBe('Mod+Alt+2');
+    expect(appShortcut('settings-automation:triggers', true)).toBe('Mod+Alt+3');
+    expect(appShortcut('settings-automation:macros', true)).toBe('Mod+Alt+4');
+    expect(appShortcut('settings-automation:timers', false)).toBe('Mod+Shift+1');
+    expect(appShortcut('settings-automation:aliases', false)).toBe('Mod+Shift+2');
+    expect(appShortcut('settings-automation:triggers', false)).toBe('Mod+Shift+3');
+    expect(appShortcut('settings-automation:macros', false)).toBe('Mod+Shift+4');
   });
 
   it('opens each row on a place the resolver knows', () => {

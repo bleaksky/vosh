@@ -195,7 +195,7 @@ export function SettingsWindow() {
   // elsewhere with 1 to 4, open their page here as they do from the
   // main window. No macro runs in this window, so the key always works.
   // Taking the key keeps the macOS menu row from opening the page a
-  // second time. Each id is the palette's `settings-<tab id>`. A key a
+  // second time. Each id is the palette's `settings-<link>`. A key a
   // field already took, like a macro key being recorded, stays there.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
