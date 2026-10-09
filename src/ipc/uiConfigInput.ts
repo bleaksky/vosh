@@ -9,6 +9,7 @@ import {
   INPUT_TYPE_COLORS_CHANGED,
 } from './events';
 import type { UiConfig } from './uiConfig';
+import { normalizeTextSize } from '../lib/textSize';
 
 /** Caret shapes the command line can paint. Each one renders inside the
  *  same anchor box as the default block, so switching shapes never
@@ -46,13 +47,11 @@ export function normalizeInputLineBackground(value: unknown): InputLineBackgroun
 /** What the command line Size row saves to follow your terminal size. */
 export const INPUT_LINE_SIZE_TERMINAL = 0;
 
-/** A saved command line size as the page reads it, held to 6 to 64 as
- *  Rust holds it. Anything but a number follows the terminal size. */
+/** A saved command line size as the page reads it, on the nearest half
+ *  step and held to 6 to 64 as Rust holds it. Anything but a number
+ *  follows the terminal size. */
 export function normalizeInputLineSize(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return INPUT_LINE_SIZE_TERMINAL;
-  const size = Math.round(value);
-  if (size === INPUT_LINE_SIZE_TERMINAL) return size;
-  return Math.min(64, Math.max(6, size));
+  return normalizeTextSize(value, INPUT_LINE_SIZE_TERMINAL, true);
 }
 
 /** A saved color, or null for an empty or missing one. */

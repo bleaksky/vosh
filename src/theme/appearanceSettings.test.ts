@@ -20,6 +20,7 @@ import {
   themeCaption,
   withBaseColor,
 } from './appearanceSettings';
+import { SCALABLE } from '../lib/textSize';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
 import { CHROME_COLOR_KEYS } from './chrome';
 import type { CustomTheme } from '../ipc/theme';
@@ -96,11 +97,19 @@ describe('sizeChoicesWithTerminal', () => {
     expect(sizeChoicesWithTerminal(12).map((c) => c.value)).toEqual([
       '0',
       '11',
+      '11.5',
       '12',
+      '12.5',
       '13',
+      '13.5',
       '14',
+      '14.5',
       '15',
+      '15.5',
       '16',
+      '16.5',
+      '17',
+      '17.5',
       '18',
     ]);
   });
@@ -161,20 +170,56 @@ describe('fontChoices', () => {
 });
 
 describe('sizeChoices', () => {
-  it('offers the board sizes in points', () => {
+  it('offers every half step from 11 to 18 in points for a font that scales', () => {
     expect(sizeChoices(13).map((c) => c.label)).toEqual([
       '11 pt',
+      '11.5 pt',
       '12 pt',
+      '12.5 pt',
       '13 pt',
+      '13.5 pt',
       '14 pt',
+      '14.5 pt',
       '15 pt',
+      '15.5 pt',
       '16 pt',
+      '16.5 pt',
+      '17 pt',
+      '17.5 pt',
       '18 pt',
     ]);
+    // The arrow keys move a select one option along, so each step is a half.
+    const values = sizeChoices(13).map((c) => Number(c.value));
+    for (let i = 1; i < values.length; i += 1) expect(values[i] - values[i - 1]).toBe(0.5);
+    expect(sizeChoices(13)).toEqual(sizeChoices(13, SCALABLE));
   });
 
   it('keeps a current size outside the list, in order', () => {
     expect(sizeChoices(24).map((c) => c.value)).toEqual([
+      '11',
+      '11.5',
+      '12',
+      '12.5',
+      '13',
+      '13.5',
+      '14',
+      '14.5',
+      '15',
+      '15.5',
+      '16',
+      '16.5',
+      '17',
+      '17.5',
+      '18',
+      '24',
+    ]);
+    expect(sizeChoices(9)[0]).toEqual({ value: '9', label: '9 pt' });
+    expect(sizeChoices(20.5).at(-1)).toEqual({ value: '20.5', label: '20.5 pt' });
+  });
+
+  it('keeps a bitmap only font to whole sizes, or to its strikes', () => {
+    const whole = { half_sizes: false, strikes: [] };
+    expect(sizeChoices(13, whole).map((c) => c.value)).toEqual([
       '11',
       '12',
       '13',
@@ -182,10 +227,12 @@ describe('sizeChoices', () => {
       '15',
       '16',
       '18',
-      '24',
     ]);
-    expect(sizeChoices(17).map((c) => c.value)).toContain('17');
-    expect(sizeChoices(9)[0]).toEqual({ value: '9', label: '9 pt' });
+    const strikes = { half_sizes: false, strikes: [12, 16] };
+    expect(sizeChoices(16, strikes).map((c) => c.label)).toEqual(['12 pt', '16 pt']);
+    // A size you saved for another font stays listed, so the select shows it.
+    expect(sizeChoices(13.5, strikes).map((c) => c.value)).toEqual(['12', '13.5', '16']);
+    expect(sizeChoicesWithTerminal(0, strikes).map((c) => c.value)).toEqual(['0', '12', '16']);
   });
 });
 
