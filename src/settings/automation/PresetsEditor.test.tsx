@@ -23,7 +23,7 @@ const bus = vi.hoisted(() => ({
   /** What preset_edits_get answers, by preset id. */
   edits: {} as Record<string, unknown>,
   /** The triggers triggers_export answers and triggers_import writes. */
-  stored: [] as { name: string; group?: string }[],
+  stored: [] as { name: string; group?: string; preset?: string }[],
   /** What alerts_permission answers, and alerts_ask_permission after
    *  you choose. */
   permission: 'granted' as string,
@@ -914,8 +914,11 @@ describe('Your changes and Reset to preset', () => {
       },
     };
     const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, edits);
+    // A trigger of yours of the name, which only Settings could refuse,
+    // stays where it is.
     bus.stored = [
-      { name: 'buff.sanctuary', group: 'buffs' },
+      { name: 'buff.sanctuary', group: 'buffs', preset: 'disarm_buff_fade' },
+      { name: 'buff.sanctuary', group: 'Maren' },
       { name: 'rest', group: 'mine' },
     ];
     await editor.pick('Disarms and fading buffs');
@@ -931,7 +934,11 @@ describe('Your changes and Reset to preset', () => {
       edits: { triggers: { 'buff.sanctuary': { group: { value: '', was: '' } } } },
       profile: undefined,
     });
-    expect(bus.stored).toEqual([{ name: 'buff.sanctuary' }, { name: 'rest', group: 'mine' }]);
+    expect(bus.stored).toEqual([
+      { name: 'buff.sanctuary', preset: 'disarm_buff_fade' },
+      { name: 'buff.sanctuary', group: 'Maren' },
+      { name: 'rest', group: 'mine' },
+    ]);
   });
 
   it('clears the parts of an alert preset you changed', async () => {

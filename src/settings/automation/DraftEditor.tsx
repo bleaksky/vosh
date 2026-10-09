@@ -64,8 +64,9 @@ interface DraftEditorProps<T> {
   pinned?: PinnedPart | null;
   /** Select the pinned block each time this goes up. */
   pinnedSeq?: number;
-  /** Select the item with this key, by keyOf, and bring its row into
-   *  view each time `seq` goes up, as a deep link asks. */
+  /** Select the item with this key, by linkKeyOf or else keyOf, and
+   *  bring its row into view each time `seq` goes up, as a deep link
+   *  asks. */
   selectKey?: { key: string; seq: number } | null;
   /** Set the filter to `text` each time `seq` goes up, as a link asks. */
   filterTo?: { text: string; seq: number } | null;
@@ -330,7 +331,8 @@ export function DraftEditor<T>({
   useEffect(() => {
     if (!selectKey || !draft || selectSeqDone.current === selectKey.seq) return;
     selectSeqDone.current = selectKey.seq;
-    const item = draft.items.find((i) => spec.keyOf(i.value) === selectKey.key);
+    const linkKey = spec.linkKeyOf ?? spec.keyOf;
+    const item = draft.items.find((i) => linkKey(i.value) === selectKey.key);
     if (!item) return;
     setFilter('');
     setSelected(item.uid);

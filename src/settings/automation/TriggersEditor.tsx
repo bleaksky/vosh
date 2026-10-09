@@ -176,6 +176,9 @@ function triggersSpec(): KindSpec<TriggerCard> {
       ),
     }),
     keyOf: triggerKey,
+    // A preset's card links to its triggers by name. A preset trigger's
+    // name is its own, so the first of the name is the one.
+    linkKeyOf: (t) => t.name,
     blank: blankTrigger,
     json: {
       toText: (values) => jsonListText(values.filter((t) => !t.preset)),
