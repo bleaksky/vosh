@@ -2,7 +2,7 @@
 
 All notable changes to Vosh. Newest first.
 
-## v0.95.0 - 2026-10-08
+## v0.95.1 - 2026-10-09
 
 Write your descriptions, notes and history in a card built for it, save a scene to share, and shape the command line your way. This is the test build before 1.0.
 
@@ -34,6 +34,7 @@ Write your descriptions, notes and history in a card built for it, save a scene 
 - A reconnect from the account menu now knows which character you play.
 - Help is rewritten in short, plain sentences.
 - Vosh no longer offers Berkeley Mono. A setting that named it draws in the bundled JetBrains Mono.
+- Scrolling back down fast to close the scrollback split no longer stops Vosh with an error. If something does go wrong, the notice sits in the corner, counts repeats, and closes with Close or Escape, so you can keep playing.
 - Windows builds are not signed yet. If SmartScreen warns you, choose More info and then Run anyway.
 
 ## v0.9.0 - 2026-10-06

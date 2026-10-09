@@ -22,6 +22,9 @@ const bus = vi.hoisted(() => ({
   /** How wide each new xterm is. */
   cols: 80,
   held: [] as ((bytes: number[]) => void)[],
+  /** Each call that reached a stand in xterm's renderer: a refresh or a
+   *  scroll. */
+  drawn: [] as string[],
   /** Every stand in xterm, its hidden input and its key handler. */
   terms: [] as {
     textarea: { tabIndex: number };
@@ -72,6 +75,15 @@ vi.mock('@xterm/xterm', () => {
       this.keys = keys;
     }
     scrollToLine() {}
+    refresh() {
+      bus.drawn.push('refresh');
+    }
+    scrollLines(n: number) {
+      bus.drawn.push(`scrollLines(${n})`);
+    }
+    scrollToBottom() {
+      bus.drawn.push('scrollToBottom');
+    }
     resized: ((size: { cols: number; rows: number }) => void)[] = [];
     onResize = (cb: (size: { cols: number; rows: number }) => void) => {
       this.resized.push(cb);
@@ -172,7 +184,9 @@ vi.mock('./xterm/xtermBlink', () => ({
     dispose() {}
   },
 }));
-vi.mock('./xterm/xtermWebgl', () => ({ xtermWebgl: () => ({ load() {}, release() {} }) }));
+vi.mock('./xterm/xtermWebgl', () => ({
+  xtermWebgl: () => ({ load() {}, release() {}, dispose() {} }),
+}));
 vi.mock('./xterm/xtermMirror', () => ({
   XtermMirror: class {
     mirrors() {
@@ -215,6 +229,7 @@ beforeAll(async () => {
     },
   );
   vi.stubGlobal('requestAnimationFrame', () => 0);
+  vi.stubGlobal('cancelAnimationFrame', () => {});
   vi.stubGlobal('Node', FakeNode);
   vi.stubGlobal('Element', FakeElement);
   vi.stubGlobal('HTMLElement', FakeElement);
@@ -503,5 +518,59 @@ describe('the mark your echo starts with', () => {
     await act(async () => themeChanged('vellum'));
     expect(bus.marks.slice(given)).toEqual([gt]);
     await act(async () => root.unmount());
+  });
+});
+
+// The split's history pane unmounts as a wheel closes the split, and xterm
+// lets its renderer go. A handle the host still holds, or a scrollback
+// load that lands after, must not reach it: a refresh or a scroll of a
+// disposed xterm queues a frame that reads the missing renderer and
+// throws (`_renderer.value.dimensions`).
+describe('a pane that went', () => {
+  it('lets its host go of the handle and reaches xterm no more', async () => {
+    const { Terminal } = await import('./Terminal');
+    bus.hold = true;
+    bus.drawn = [];
+    let ready: import('./terminalHandle').TerminalHandle | null = null;
+    const gone: unknown[] = [];
+    const loaded = vi.fn();
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () =>
+      root.render(
+        createElement(Terminal, {
+          session: 1,
+          quiet: true,
+          fontFamily: 'monospace',
+          fontSize: 13,
+          lineHeight: 1.2,
+          themeTerminalColors: false,
+          onReady: (handle) => {
+            ready = handle;
+          },
+          onGone: (handle) => gone.push(handle),
+          onScrollbackLoaded: loaded,
+        }),
+      ),
+    );
+    const handle = ready as unknown as import('./terminalHandle').TerminalHandle;
+    handle.refresh();
+    expect(bus.drawn).toEqual(['refresh']);
+    bus.drawn = [];
+
+    await act(async () => root.unmount());
+    expect(gone).toEqual([handle]);
+    handle.refresh();
+    handle.scrollLines(3);
+    handle.scrollPages(1);
+    handle.scrollToBottom();
+    expect(handle.isAtBottom()).toBe(true);
+    expect(bus.drawn).toEqual([]);
+
+    // Its scrollback lands after it went, and the host hears nothing.
+    const [load] = bus.held.splice(0);
+    bus.hold = false;
+    await act(async () => load?.([...new TextEncoder().encode('The day has begun.\r\n')]));
+    expect(loaded).not.toHaveBeenCalled();
+    expect(bus.drawn).toEqual([]);
   });
 });

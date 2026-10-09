@@ -154,6 +154,11 @@ export function terminalArea({
               onReady={(handle) => {
                 historyTermRef.current = handle;
               }}
+              // The split closed or another session shows. Nothing may
+              // reach the pane that went, so the ref lets go of it.
+              onGone={(handle) => {
+                if (historyTermRef.current === handle) historyTermRef.current = null;
+              }}
               onScrollbackLoaded={onHistoryLoaded}
               onScrollPosition={onHistoryScroll}
             />
