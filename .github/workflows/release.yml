@@ -5,6 +5,10 @@ name: release
 # bundle builds. Each platform then builds the Tauri bundle and uploads
 # its artifacts to a draft GitHub release, which you publish by hand.
 #
+# Run it by hand from the Actions tab to build every package from a
+# branch without a release. Nothing is tagged, and the packages land as
+# artifacts on the run, so you can install them before any version.
+#
 # Signing. tauri-action signs and notarizes the macOS builds when the
 # six Apple secrets are set, and the repository sets all six, so the
 # release notes say so plainly. Windows builds ship unsigned for now.
@@ -95,6 +99,7 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.label }}-cargo-${{ hashFiles('rust-toolchain.toml', '**/Cargo.lock') }}
 
       - name: Build app
+        id: tauri
         uses: tauri-apps/tauri-action@v0
         env:
           # tauri-action uploads built artifacts to the draft GitHub
@@ -124,9 +129,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # A tag builds into its draft release. A run by hand leaves the
+        # names empty, so tauri-action builds and uploads nothing.
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'vosh ${{ github.ref_name }}'
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('vosh {0}', github.ref_name) || '' }}
           releaseBody: |
             Builds for macOS, Windows and Linux.
             The Mac builds are signed and notarized by Apple.
@@ -135,3 +142,30 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
+
+      # Gatekeeper must accept the Mac app as a download would see it.
+      # codesign checks the Developer ID signature with the hardened
+      # runtime, stapler checks that Apple's notary ticket is stapled
+      # on, and spctl asks Gatekeeper itself. Any failure fails the job.
+      - name: Check the Mac app passes Gatekeeper
+        if: matrix.platform == 'macos-latest'
+        run: |
+          app="target/${{ matrix.target }}/release/bundle/macos/Vosh.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --display --verbose=2 "$app" 2>&1 | grep -E 'Authority=Developer ID Application|flags=.*runtime'
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+
+      - name: Keep the packages on a run by hand
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vosh-${{ matrix.label }}
+          path: |
+            target/**/release/bundle/dmg/*.dmg
+            target/**/release/bundle/msi/*.msi
+            target/**/release/bundle/nsis/*.exe
+            target/**/release/bundle/deb/*.deb
+            target/**/release/bundle/rpm/*.rpm
+            target/**/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
