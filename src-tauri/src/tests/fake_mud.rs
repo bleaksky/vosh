@@ -605,6 +605,51 @@ async fn the_tick_counts_down_in_your_idle_prompt_and_waits_while_you_read() {
     h.finish(grid).await;
 }
 
+// Your health over a pulse and over a tick, through the real session.
+// The fake game's `tick` prints the line the Reset on pattern matches,
+// so each one is a tick of the game. A pulse change follows each prompt,
+// and a tick change holds until the next tick. A reconnect starts both
+// again. The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn health_changes_over_a_pulse_and_over_a_tick() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(vosh_prompt::PromptConfig {
+        template: "<%hp> [%hp_change] {%hp_tick}".into(),
+        ..codes(PROMPT)
+    })
+    .await;
+    h.connect().await;
+    h.until_last_row("<1020> [] {}").await;
+    h.type_line("#tick on {^The hour passes}").await;
+    h.type_line("tick").await;
+    h.until_shown("The hour passes.").await;
+    h.until_last_row("<1020> [] {}").await;
+
+    // The guard hits you, and the prompt shows what you lost.
+    let lost = 1020 - vosh_prompt::testkit::mud::FIGHT_HIT;
+    let hurt = vosh_prompt::testkit::mud::FIGHT_HIT;
+    h.type_line("fight").await;
+    h.until_last_row(&format!("<{hurt}> [-{lost}] {{}}")).await;
+
+    // Ticks within two seconds of each other are one tick.
+    tokio::time::sleep(Duration::from_millis(2_100)).await;
+    h.type_line("tick").await;
+    h.until_last_row(&format!("<{hurt}> [] {{-{lost}}}")).await;
+
+    // The fight ends and your health comes back. The tick change holds.
+    h.type_line("fight").await;
+    h.until_last_row(&format!("<1020> [+{lost}] {{-{lost}}}"))
+        .await;
+
+    // A new connection starts both again.
+    h.disconnect().await;
+    h.connect().await;
+    h.until_last_row("<1020> [] {}").await;
+    h.finish(grid).await;
+}
+
 // The guard keeps other tests off the shared native grid, which every
 // session output also feeds. No task of the session takes it.
 #[allow(clippy::await_holding_lock)]
