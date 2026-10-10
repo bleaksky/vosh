@@ -634,7 +634,8 @@ pub(crate) fn second_start<R: Runtime>(app: &AppHandle<R>) {
 // The context-menu "Check Spelling While Typing" item works, which
 // means the action `toggleContinuousSpellChecking:` is dispatchable
 // through the responder chain. We mirror that path: query
-// isContinuousSpellCheckingEnabled first, then send the toggle
+// isContinuousSpellCheckingEnabled first, or the state WebKit saved in
+// the app's defaults when the view has no getter, then send the toggle
 // action only if it is off, so we never flip it back off. All
 // sends are gated with respondsToSelector: — earlier unguarded
 // sends of NSTextView-only selectors crashed the app at launch.
@@ -667,10 +668,14 @@ pub(crate) fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(
                 return;
             }
             if r_tog.as_bool() {
+                // WKWebView has no getter, and the toggle saves its state
+                // in the app's defaults, so the saved state says whether
+                // it is on. Toggling without reading it turned spell
+                // check off at every other launch.
                 let enabled: Bool = if r_get.as_bool() {
                     objc2::msg_send![raw, isContinuousSpellCheckingEnabled]
                 } else {
-                    Bool::NO
+                    Bool::new(saved_continuous_spellcheck())
                 };
                 if enabled.as_bool() {
                     tracing::info!("macos spellcheck: already enabled, no toggle needed");
@@ -683,6 +688,15 @@ pub(crate) fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(
             }
         }
     })
+}
+
+/// The continuous spell check state the web view saved in the app's defaults,
+/// false when it never saved one.
+#[cfg(target_os = "macos")]
+fn saved_continuous_spellcheck() -> bool {
+    use objc2_foundation::{NSString, NSUserDefaults};
+    let key = NSString::from_str("WebContinuousSpellCheckingEnabled");
+    NSUserDefaults::standardUserDefaults().boolForKey(&key)
 }
 
 #[cfg(test)]
