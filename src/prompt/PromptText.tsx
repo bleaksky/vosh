@@ -9,7 +9,7 @@ import {
   TOKEN_ROWS,
 } from './textEdit';
 import type { PromptToken } from '../ipc/promptDesign';
-import { Button, PlusIcon, VisuallyHidden } from '../ui';
+import { Button, CopyIcon, PlusIcon, VisuallyHidden } from '../ui';
 
 // Edit as text: your design byte for byte in the terminal's face, each
 // token colored by what it is, wrapping only between tokens. The token
@@ -55,28 +55,27 @@ function caretOf(el: HTMLElement): { start: number; end: number } | null {
   return { start, end: start + range.toString().length };
 }
 
-/** Put the caret at `offset` in `el`'s text. */
-function placeCaret(el: HTMLElement, offset: number): void {
+/** The text node and offset at `offset` in `el`'s text. */
+function pointAt(el: HTMLElement, offset: number): [Node, number] {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let left = offset;
   let node = walker.nextNode();
   while (node) {
     const length = node.textContent?.length ?? 0;
-    if (left <= length) {
-      const range = document.createRange();
-      range.setStart(node, left);
-      range.collapse(true);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-      return;
-    }
+    if (left <= length) return [node, left];
     left -= length;
     node = walker.nextNode();
   }
+  return [el, el.childNodes.length];
+}
+
+/** Select `start` to `end` in `el`'s text, or put the caret at `start`
+ *  when they match. */
+function placeCaret(el: HTMLElement, start: number, end = start): void {
   const range = document.createRange();
-  range.selectNodeContents(el);
-  range.collapse(false);
+  range.setStart(...pointAt(el, start));
+  if (end > start) range.setEnd(...pointAt(el, end));
+  else range.collapse(true);
   const sel = window.getSelection();
   sel?.removeAllRanges();
   sel?.addRange(range);
@@ -105,6 +104,12 @@ export function PromptText({
     caretRef.current = next;
   };
   const [marked, setMarked] = useState<number | null>(null);
+  const [copied, setCopied] = useState<'Copied' | 'Copy failed' | null>(null);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(null), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
 
   // A change from elsewhere, an undo among them, replaces the text.
   useEffect(() => {
@@ -141,12 +146,13 @@ export function PromptText({
       ? fieldHtml(text, tokens, marked)
       : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  // The markup changes under the caret, so it goes back where it was.
+  // The markup changes under the caret, so it and any selection go back
+  // where they were.
   useLayoutEffect(() => {
     const el = fieldRef.current;
     if (!el) return;
     if (el.innerHTML !== html) el.innerHTML = html;
-    if (document.activeElement === el) placeCaret(el, caret.current.end);
+    if (document.activeElement === el) placeCaret(el, caret.current.start, caret.current.end);
   }, [html]);
 
   // Edit prompt as text… puts you in the field.
@@ -241,6 +247,17 @@ export function PromptText({
       <div className="pc-piece-actions">
         <Button icon={<PlusIcon />} onClick={onInsertValue}>
           Insert value…
+        </Button>
+        <Button
+          icon={<CopyIcon />}
+          onClick={() => {
+            navigator.clipboard.writeText(text).then(
+              () => setCopied('Copied'),
+              () => setCopied('Copy failed'),
+            );
+          }}
+        >
+          {copied ?? 'Copy design'}
         </Button>
       </div>
     </div>
