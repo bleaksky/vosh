@@ -205,6 +205,7 @@ vitals_hide_when_pinned = false
 moons_position = "before-time"
 chip_style = "icon_value"
 status_style = "strip"
+panel_side = "left"
 tick_count = "down_past_zero"
 game_time = "12h"
 affects_style = "chips"

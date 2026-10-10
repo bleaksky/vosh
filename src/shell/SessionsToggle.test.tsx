@@ -69,8 +69,8 @@ describe('the sessions toggle', () => {
   });
 
   it('reads in the secondary tone while the sidebar shows and the tertiary one while it hides', () => {
-    expect(attr(toggle('macos', true), 'class')).toBe('shell-icon-button');
-    expect(attr(toggle('macos', false), 'class')).toBe('shell-icon-button is-quiet');
+    expect(attr(toggle('macos', true), 'class')).toBe('shell-icon-button is-side');
+    expect(attr(toggle('macos', false), 'class')).toBe('shell-icon-button is-side is-quiet');
   });
 
   it('wears no pressed state on top of its label', () => {

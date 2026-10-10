@@ -6,7 +6,9 @@ import { PaneSizer, type SizedPane } from '../terminal/paneSizer';
 import frameCss from '../styles/frame.css?raw';
 import overlaysCss from '../styles/overlays.css?raw';
 import { PANEL_WIDTH_MIN, PANEL_WIDTH_MIN_FRAMELESS } from '../panel/paneLayout';
+import sessionsCss from '../styles/sessions.css?raw';
 import { AppShell } from './AppShell';
+import { edgeGrowth } from './shellEdges';
 
 /** The bounds the live pane gave the native surface. */
 const bounds = vi.hoisted(() => [] as { y: number; height: number }[]);
@@ -186,6 +188,41 @@ describe('the sessions column', () => {
       expect(placed, selector).toMatch(/grid-column: 2 \/ 3;/);
       expect(placed, selector).toMatch(/grid-row: 2 \/ 3;/);
     }
+  });
+});
+
+describe('the panel on the left', () => {
+  const rule = (css: string, selector: string) =>
+    css.match(
+      new RegExp(`\\n${selector.replace(/[.[\]()'=]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`),
+    )?.[1] ?? '';
+  const left = ".shell[data-panel-side='left']";
+
+  it('says which side the panel sits on', () => {
+    expect(draw('macos', 300)).toContain('data-panel-side="right"');
+  });
+
+  it('swaps the panel and the sessions columns and keeps the terminal between', () => {
+    expect(rule(frameCss, left)).toMatch(
+      /grid-template-columns: var\(--panel-col, var\(--panel-w\)\) minmax\(0, 1fr\) var\(--sessions-col, 0px\);/,
+    );
+    expect(rule(frameCss, `${left} .shell-slot-sessions`)).toMatch(/grid-column: 3;/);
+    expect(rule(frameCss, `${left} .shell-slot-band`)).toMatch(/grid-column: 1 \/ 3;/);
+    expect(frameCss).toContain(
+      `${left} .shell-slot-panel,\n${left} .shell-panel-edge {\n  grid-column: 1;`,
+    );
+    expect(frameCss).toContain(`${left} .shell-panel-edge {\n  justify-self: end;`);
+    expect(rule(sessionsCss, `${left} .shell-sessions-edge`)).toMatch(
+      /grid-column: 3;\n {2}justify-self: start;/,
+    );
+  });
+
+  it('widens each column with a drag or a key toward the middle', () => {
+    expect(edgeGrowth('panel', 'right', -10)).toBe(10);
+    expect(edgeGrowth('sessions', 'right', 10)).toBe(10);
+    expect(edgeGrowth('panel', 'left', 10)).toBe(10);
+    expect(edgeGrowth('sessions', 'left', -10)).toBe(10);
+    expect(edgeGrowth('panel', 'left', -8)).toBe(-8);
   });
 });
 

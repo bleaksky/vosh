@@ -719,3 +719,20 @@
     animation: none;
   }
 }
+
+/* Panel side Left puts the sidebar in the last column. Its line and
+   its handle move to its left side, and New session ends 17 in from
+   the line there. */
+.shell[data-panel-side='left'] .shell-sessions {
+  box-shadow: inset 1px 0 0 var(--sep);
+}
+
+.shell[data-panel-side='left'] .shell-sessions-actions {
+  right: auto;
+  left: 17px;
+}
+
+.shell[data-panel-side='left'] .shell-sessions-edge {
+  grid-column: 3;
+  justify-self: start;
+}

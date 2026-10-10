@@ -25,7 +25,7 @@ export function SessionsToggle({ pressed, onToggle }: Props) {
   return (
     <button
       type="button"
-      className={pressed ? 'shell-icon-button' : 'shell-icon-button is-quiet'}
+      className={pressed ? 'shell-icon-button is-side' : 'shell-icon-button is-side is-quiet'}
       aria-label={label}
       title={`${label} (${shortcutLabel(spec)})`}
       aria-keyshortcuts={ariaKeyshortcuts(spec)}

@@ -22,8 +22,9 @@ type Placement =
       /** The button that opened the menu. Presses on it are left to its
        *  own toggle. */
       anchor: HTMLElement | null;
-      /** Center under the button, or line up the right edges. */
-      align: 'center' | 'end';
+      /** Center under the button, or line up the left or the right
+       *  edges. */
+      align: 'center' | 'start' | 'end';
       at?: undefined;
     }
   | { at: { x: number; y: number }; anchor?: undefined; align?: undefined };
