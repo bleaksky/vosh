@@ -157,12 +157,19 @@ export class PaneSizer {
   // height changes. The line height is in the cell: xterm multiplies its
   // glyph box by it and centers the box in the cell, so the box height
   // rides along and the surface puts its baseline where xterm's is.
+  //
+  // The width is floored, as xterm's WebGL renderer floors it. A pane
+  // that shows again reports first from the DOM renderer, which keeps
+  // the fraction, and WebGL takes over a moment later. Rounded, the two
+  // disagreed by a pixel, so each switch rebuilt the atlas twice and
+  // resized the grid between them, and a pane that fell back to DOM
+  // kept the wider cell.
   reportCellMetrics(): void {
     if (!this.nativeSurfaceOn || !this.pane.shown()) return;
     const device = this.pane.term.dimensions?.device;
     const cell = device?.cell;
     if (!device || !cell?.width || !cell?.height) return;
-    const width = Math.round(cell.width);
+    const width = Math.floor(cell.width);
     const height = Math.round(cell.height);
     const charHeight = Math.round(device.char?.height ?? 0);
     const key = `${width},${height},${charHeight}`;
@@ -176,7 +183,7 @@ export class PaneSizer {
   }
 
   // The cell size a band outside the grid lays its characters out on.
-  // The native grid draws xterm's device cell rounded to whole pixels
+  // The native grid draws xterm's device cell in whole pixels
   // (reportCellMetrics above), and xterm draws its own.
   reportCellSize(): void {
     const onCellSize = this.pane.onCellSize();
@@ -186,7 +193,7 @@ export class PaneSizer {
     if (!cell?.width || !cell?.height) return;
     const dpr = window.devicePixelRatio || 1;
     const native = !this.pane.quiet() && nativeSurfaceEnabled();
-    const width = (native ? Math.round(cell.width) : cell.width) / dpr;
+    const width = (native ? Math.floor(cell.width) : cell.width) / dpr;
     const height = (native ? Math.round(cell.height) : cell.height) / dpr;
     const key = `${width},${height},${term.cols}`;
     if (key === this.lastCellSize) return;
