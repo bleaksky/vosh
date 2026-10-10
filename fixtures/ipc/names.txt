@@ -268,6 +268,7 @@ event vosh://settings-goto-tab page heard
 event vosh://snoop-find app heard
 event vosh://spellcheck-prompt-changed page heard
 event vosh://split-divider-changed page heard
+event vosh://status-style-changed app page heard
 event vosh://terminal-clicked app heard
 event vosh://terminal-cursor app heard
 event vosh://terminal-line-height-changed page heard

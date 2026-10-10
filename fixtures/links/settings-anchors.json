@@ -55,6 +55,7 @@
     "layout:status#tick-time",
     "layout:status#game-time",
     "layout:status#tick-counts",
+    "layout:status#status-style",
     "layout:affects#affects-style",
     "layout:affects#affects-marker",
     "layout:affects#affects-tint",
@@ -280,6 +281,7 @@
       "show-panel",
       "split",
       "status",
+      "status-style",
       "tick-counts",
       "tick-time"
     ],

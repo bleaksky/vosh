@@ -2015,6 +2015,20 @@ Triggers were still keyed by name alone, so two triggers with one name in differ
 
 Help 3.11 now covers triggers, 3.2 says where save errors show and that two groups can share a name, 3.3 says what `#trigger` replaces, and the command lists name the group of `#untrigger`.
 
+#### October 9. Status bar styles
+
+You found the status bar small and hard to read at a glance. After the mockups you asked for every style as a choice, on October 9. Chip style folds into Compact, and Meters is the default. The build is 6a16688f to the commit of this record on feat/status-bar-styles from one-window 5c0f8a91.
+
+- Setting. `status_style` in the profile's `[ui]` table is `meters`, `compact`, `strip` or `dashboard`. The file writes it only off Meters, and an unknown value saves as Meters. A replace sends it on `vosh://status-style-changed`, and `src/stores/config/statusStyleStore.ts` keeps it in every window.
+- Settings. A Style row heads Layout, Status line, in a select, since four names do not fit as segments. Its description says what the picked style draws. Tick and time now sets the labels of Compact and rests while another style is on. Search finds the row as Status bar style.
+- Height. `AppShell` sets `data-status-style` on the frame, and frame.css gives Strip and Meters 32 px and Dashboard 44 px, scaled by your panel size as Compact's 28 is.
+- Styles. `src/shell/StatusBar.tsx` draws Strip, Dashboard and Meters from the items `StatusLine` reads, and Compact stays in `StatusLine`. Each shows Not connected, then your character and the room while the panel holds your vitals, or your vitals, your opponent and your target, or your vitals text. Then the tick, the game time, the moons and the round trip. Each vital takes your Customize vitals color, or the play palette's red, blue and green, lifted as the panel lifts them.
+- Give way. `src/shell/statusBarFit.ts` lists the order each style lets parts go. The bar lets one more go while its items run past its edge, before the frame paints, and starts over on a new width or a new set of items. A round trip from 300 ms and the tick always stay. Compact keeps its measured order in `statusLineFit.ts`.
+
+Where it departs from the mockups. The Strip and Dashboard boards made each reading a button with a click. No reading has an action yet, so each is plain text with a title, and a right click on your vitals still opens the vitals menu. The tick reads Tick while it counts up and Next tick while it counts down. The vitals text keeps the terminal face in every style.
+
+Help 4.4 says what each style draws and how the styles give way, and 5.1 says Tick and time sets Compact alone.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
