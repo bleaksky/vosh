@@ -24,6 +24,7 @@ import {
   SearchIcon,
   ToothedGearIcon,
 } from '../ui/icons';
+import type { PanelSide } from '../ipc/uiConfig';
 import { PanelIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
 import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
@@ -67,6 +68,9 @@ interface Props {
   /** Close a session from that list, asking first while it is
    *  connected. */
   onCloseSession?: (session: number) => void;
+  /** The side the panel sits on. Add a pane's menu opens toward the
+   *  middle from it. */
+  panelSide?: PanelSide;
 }
 
 export function TitleBand({
@@ -81,6 +85,7 @@ export function TitleBand({
   renameInRow,
   listSessions = false,
   onCloseSession,
+  panelSide = 'right',
 }: Props) {
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
@@ -162,7 +167,7 @@ export function TitleBand({
         </button>
         <button
           type="button"
-          className={`shell-icon-button${panelOpen ? '' : ' is-quiet'}`}
+          className={`shell-icon-button is-side${panelOpen ? '' : ' is-quiet'}`}
           // The label says what a press does, so no pressed state on top
           // of it ("Hide panel, pressed" reads backward).
           aria-label={panelLabel}
@@ -205,6 +210,7 @@ export function TitleBand({
       {menu === 'add' && panelOpen && (
         <AddPaneMenu
           anchor={addRef.current}
+          align={panelSide === 'left' ? 'start' : 'end'}
           paneTree={paneTree}
           onAdd={(ref) => {
             closeMenu();
@@ -223,11 +229,13 @@ export function TitleBand({
 // prompt and the band should not draw again for each one.
 function AddPaneMenu({
   anchor,
+  align,
   paneTree,
   onAdd,
   onClose,
 }: {
   anchor: HTMLElement | null;
+  align: 'start' | 'end';
   paneTree: PaneSplit | null;
   onAdd: (ref: PaneRef) => void;
   onClose: () => void;
@@ -239,7 +247,7 @@ function AddPaneMenu({
   // A second Chat pane starts on tell, and the menu says so.
   const chatOnTell = chatRefToAdd(paneTree).props.channel === 'tell';
   return (
-    <ShellMenu anchor={anchor} align="end" label="Add a pane" onClose={onClose}>
+    <ShellMenu anchor={anchor} align={align} label="Add a pane" onClose={onClose}>
       {builtIns.length === 0 && luaToAdd.length === 0 && (
         <li role="none" className="menu-note">
           Every pane is showing.

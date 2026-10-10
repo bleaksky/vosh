@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   type CSSProperties,
   type KeyboardEvent,
@@ -7,7 +8,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react';
-import type { StatusStyle } from '../ipc/uiConfig';
+import type { PanelSide, StatusStyle } from '../ipc/uiConfig';
 import { isMacPlatform } from '../lib/shortcuts';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../panel/paneLayout';
 import {
@@ -18,6 +19,7 @@ import {
   SESSIONS_WIDTH_STOCK,
   sessionsColumn,
 } from './sessionsColumn';
+import { edgeGrowth, type Edge } from './shellEdges';
 
 // The one window frame. A CSS grid with the sessions column,
 // the terminal column and the panel column. Rows are the 32 px title
@@ -53,15 +55,18 @@ import {
 // top 32, the way the panel's edge is the panel's. Each drag writes its
 // columns straight to the root and keeps the width on release.
 //
+// Panel side Left mirrors the frame. The panel takes the first column
+// and the sessions sidebar the last, the band's buttons go with what
+// they open, and each edge drags and steps the other way. The root says
+// which with data-panel-side, and frame.css swaps the columns, so no
+// slot moves to a new parent and nothing remounts.
+//
 // On Windows and Linux the panel draws at least 248 px wide, so the
 // title band's buttons and window controls all sit over it. A saved
 // width under that stays saved, and macOS draws it as saved.
 
 /** Arrow keys on either edge move it this far. */
 const KEY_STEP = 8;
-
-/** The panel's edge, or the sessions sidebar's line. */
-type Edge = 'panel' | 'sessions';
 
 interface Props {
   panelOpen: boolean;
@@ -98,6 +103,8 @@ interface Props {
   statusLine: ReactNode;
   /** The status bar style, which sets the bar's height. */
   statusStyle?: StatusStyle;
+  /** The side the panel sits on. The sessions sidebar takes the other. */
+  panelSide?: PanelSide;
   panel: ReactNode;
   onMouseUp?: (event: MouseEvent<HTMLElement>) => void;
   /** Floating surfaces: menus, the palette, toasts, dialogs. */
@@ -135,6 +142,7 @@ export function AppShell({
   input,
   statusLine,
   statusStyle = 'compact',
+  panelSide = 'right',
   panel,
   onMouseUp,
   children,
@@ -157,6 +165,15 @@ export function AppShell({
   useEffect(() => {
     if (panelRef.current) panelRef.current.inert = !panelOpen;
   }, [panelOpen]);
+
+  // A side switch moves the terminal without resizing it, which no
+  // ResizeObserver hears, so the panes measure their place again now.
+  const sideSeen = useRef(panelSide);
+  useLayoutEffect(() => {
+    if (sideSeen.current === panelSide) return;
+    sideSeen.current = panelSide;
+    window.dispatchEvent(new Event('resize'));
+  }, [panelSide]);
 
   // The width an edge lands on: the panel past the sessions column and
   // the terminal's floor, the sidebar never so wide that it would fold.
@@ -197,10 +214,8 @@ export function AppShell({
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    // The panel sits on the right, so a drag left widens it, and the
-    // sidebar on the left, so a drag right widens it.
     const moved = e.clientX - drag.startX;
-    const next = clampEdge(drag.edge, drag.start + (drag.edge === 'panel' ? -moved : moved));
+    const next = clampEdge(drag.edge, drag.start + edgeGrowth(drag.edge, panelSide, moved));
     if (next === drag.last) return;
     drag.last = next;
     preview(drag.edge, next);
@@ -218,12 +233,12 @@ export function AppShell({
   };
 
   const onKeyDown = (edge: Edge) => (e: KeyboardEvent<HTMLDivElement>) => {
-    // Left widens the panel and narrows the sidebar.
-    const step = e.key === 'ArrowLeft' ? KEY_STEP : e.key === 'ArrowRight' ? -KEY_STEP : 0;
-    if (step === 0) return;
+    // Left and Right step the edge the way a drag would.
+    const dx = e.key === 'ArrowLeft' ? -KEY_STEP : e.key === 'ArrowRight' ? KEY_STEP : 0;
+    if (dx === 0) return;
     e.preventDefault();
-    const next =
-      edge === 'panel' ? clampEdge(edge, width + step) : clampEdge(edge, sessionsWidth - step);
+    const step = edgeGrowth(edge, panelSide, dx);
+    const next = clampEdge(edge, (edge === 'panel' ? width : sessionsWidth) + step);
     preview(edge, next);
     keep(edge, next);
   };
@@ -240,6 +255,7 @@ export function AppShell({
       className="shell window-edge"
       data-panel={panelOpen ? 'open' : 'hidden'}
       data-status-style={statusStyle}
+      data-panel-side={panelSide}
       data-lead={sessionsToggle === null ? undefined : sessions === null ? 'band' : 'sidebar'}
       style={frame}
       onMouseUp={onMouseUp}

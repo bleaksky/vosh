@@ -68,13 +68,18 @@ export function menuBelow(button: MenuBox): MenuPlacement {
  *  the window's top left. The title band's menus hang here. */
 export function menuUnder(
   anchor: { getBoundingClientRect: () => MenuBox } | null,
-  align: 'center' | 'end',
+  align: 'center' | 'start' | 'end',
   gap: number,
 ): MenuPlacer {
   return (size, viewport) => {
     if (!anchor) return { left: EDGE, top: EDGE, maxHeight: viewport.height - 2 * EDGE };
     const r = anchor.getBoundingClientRect();
-    const ideal = align === 'center' ? (r.left + r.right - size.width) / 2 : r.right - size.width;
+    const ideal =
+      align === 'center'
+        ? (r.left + r.right - size.width) / 2
+        : align === 'start'
+          ? r.left
+          : r.right - size.width;
     const left = Math.round(Math.max(EDGE, Math.min(ideal, viewport.width - size.width - EDGE)));
     const top = Math.round(r.bottom + gap);
     return { left, top, maxHeight: viewport.height - top - EDGE };

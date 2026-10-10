@@ -32,6 +32,7 @@ import type { SettingsPageProps } from '../pageTypes';
 import { GameTimeRow } from './GameTimeRow';
 import { TickCountRow } from './TickCountRow';
 import { StatusStyleRow } from './StatusStyleRow';
+import { PanelSideRow } from './PanelSideRow';
 import { TickTimeStyleRow } from './TickTimeStyleRow';
 import { VitalsGallery } from './VitalsGallery';
 import {
@@ -124,6 +125,7 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
             unitName="points"
           />
         </Row>
+        <PanelSideRow config={config} setConfig={setConfig} onError={onError} />
         <LinkRow
           label="Panes and tracked affects"
           description={

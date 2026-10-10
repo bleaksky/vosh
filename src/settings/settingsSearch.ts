@@ -264,6 +264,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'panel', 'panel-width'),
   },
   {
+    label: 'Side',
+    description: 'Put the panel on the left and your sessions on the right.',
+    keywords: 'panel side left right mirror swap flip sessions sidebar',
+    target: at('layout', 'panel', 'panel-side'),
+  },
+  {
     label: 'Panes and tracked affects',
     description: 'Vosh saves these for each character.',
     keywords: 'panel panes layout map affects characters',
