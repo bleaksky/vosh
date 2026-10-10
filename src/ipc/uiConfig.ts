@@ -319,6 +319,8 @@ export interface UiConfig {
    *  The value alone, a caption before each value, or an icon before
    *  each. The moons are icons already, so only Caption changes them. */
   chip_style: ChipStyle;
+  /** How the status bar draws, one of STATUS_STYLES. */
+  status_style: StatusStyle;
   /** Which way the status line tick counts, one of TICK_COUNTS. */
   tick_count: TickCount;
   /** The clock the status line reads the game time on, one of
@@ -368,6 +370,20 @@ export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
  *  value alone, the default. */
 export function normalizeChipStyle(raw: unknown): ChipStyle {
   return raw === 'caption_value' || raw === 'icon_value' ? raw : 'value_only';
+}
+
+/** The ways the status bar draws. `meters`, the default, fills the
+ *  bar with a zone for each vital and the tick. `compact` is the quiet
+ *  line, with the tick and the time labeled by chip_style. `strip`
+ *  adds gauges on a raised ground, and `dashboard` puts a caption over
+ *  each value on a taller bar. */
+export const STATUS_STYLES = ['meters', 'compact', 'strip', 'dashboard'] as const;
+export type StatusStyle = (typeof STATUS_STYLES)[number];
+
+/** Read a stored or broadcast status bar style. Anything unknown is
+ *  Meters, the default. */
+export function normalizeStatusStyle(raw: unknown): StatusStyle {
+  return STATUS_STYLES.find((style) => style === raw) ?? 'meters';
 }
 
 /** The ways the status line tick counts. `up`, the default, shows the
@@ -485,6 +501,7 @@ export interface RawUiConfig {
   vitals_legacy_style?: string | null;
   vitals_legacy_text?: unknown;
   chip_style?: string;
+  status_style?: string;
   tick_count?: string;
   game_time?: string;
   affects_style?: string;
@@ -646,6 +663,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         ? cfg.vitals_legacy_text
         : null,
     chip_style: normalizeChipStyle(cfg.chip_style),
+    status_style: normalizeStatusStyle(cfg.status_style),
     tick_count: normalizeTickCount(cfg.tick_count),
     game_time: normalizeGameTime(cfg.game_time),
     affects_style: normalizeAffectsStyle(cfg.affects_style),

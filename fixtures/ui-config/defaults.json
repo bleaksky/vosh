@@ -69,6 +69,7 @@
     "vitals_text_previous": [],
     "vitals_hit": false,
     "chip_style": "value_only",
+    "status_style": "meters",
     "tick_count": "up",
     "game_time": "24h",
     "affects_style": "timers",

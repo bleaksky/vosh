@@ -540,6 +540,9 @@ fn generate(seed: u64) -> Set {
         }
         config.ui.vitals_values = rng.pick(&["current-max", "current", "percent"]).into();
         config.ui.chip_style = rng.pick(&["value_only", "caption", "icon"]).into();
+        config.ui.status_style = rng
+            .pick(&["meters", "compact", "strip", "dashboard"])
+            .into();
         if rng.chance(50) {
             config.ui.tracked_affects = vec![TrackedAffect {
                 name: format!("Sanctuary {i}"),
