@@ -2,6 +2,16 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.95.3 - 2026-10-10
+
+Choose how your status bar looks, put the panel on the left, and keep spell check on.
+
+- The status bar has four styles. Meters, the new default, fills the bar with your vitals, your opponent and the tick so you can read them at a glance. Compact is the old quiet line. Strip adds small gauges, and Dashboard puts a caption over each value. Pick one in Settings › Layout › Status line.
+- Put the panel on the left in Settings › Layout › Panel. Your sessions move to the right, and the title band buttons go with them.
+- Spell check on chat lines no longer turns itself off every other time you open Vosh.
+- Select all and copy keep your selection in the prompt design text, and a Copy design button copies the whole design.
+- A snoop window closes when you stop snooping after the game's hot reboot.
+
 ## v0.95.2 - 2026-10-09
 
 Pick text sizes in half steps, and give each character its own aliases and triggers with the same names.
