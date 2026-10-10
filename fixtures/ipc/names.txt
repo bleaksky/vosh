@@ -247,6 +247,7 @@ event vosh://native-copied app heard
 event vosh://native-grid-size app heard
 event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
+event vosh://panel-side-changed app page heard
 event vosh://paste-line-delay-changed page heard
 event vosh://plugins-changed app heard
 event vosh://preset-edits-changed app heard

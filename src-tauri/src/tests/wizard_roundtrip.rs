@@ -543,6 +543,7 @@ fn generate(seed: u64) -> Set {
         config.ui.status_style = rng
             .pick(&["meters", "compact", "strip", "dashboard"])
             .into();
+        config.ui.panel_side = rng.pick(&["right", "left"]).into();
         if rng.chance(50) {
             config.ui.tracked_affects = vec![TrackedAffect {
                 name: format!("Sanctuary {i}"),

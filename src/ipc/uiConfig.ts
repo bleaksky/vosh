@@ -321,6 +321,8 @@ export interface UiConfig {
   chip_style: ChipStyle;
   /** How the status bar draws, one of STATUS_STYLES. */
   status_style: StatusStyle;
+  /** The side the panel sits on, one of PANEL_SIDES. */
+  panel_side: PanelSide;
   /** Which way the status line tick counts, one of TICK_COUNTS. */
   tick_count: TickCount;
   /** The clock the status line reads the game time on, one of
@@ -384,6 +386,17 @@ export type StatusStyle = (typeof STATUS_STYLES)[number];
  *  Meters, the default. */
 export function normalizeStatusStyle(raw: unknown): StatusStyle {
   return STATUS_STYLES.find((style) => style === raw) ?? 'meters';
+}
+
+/** The sides the panel sits on. `right`, the default, or `left`. The
+ *  sessions sidebar takes the other side. */
+export const PANEL_SIDES = ['right', 'left'] as const;
+export type PanelSide = (typeof PANEL_SIDES)[number];
+
+/** Read a stored or broadcast panel side. Anything unknown is the
+ *  right, the default. */
+export function normalizePanelSide(raw: unknown): PanelSide {
+  return raw === 'left' ? 'left' : 'right';
 }
 
 /** The ways the status line tick counts. `up`, the default, shows the
@@ -502,6 +515,7 @@ export interface RawUiConfig {
   vitals_legacy_text?: unknown;
   chip_style?: string;
   status_style?: string;
+  panel_side?: string;
   tick_count?: string;
   game_time?: string;
   affects_style?: string;
@@ -664,6 +678,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         : null,
     chip_style: normalizeChipStyle(cfg.chip_style),
     status_style: normalizeStatusStyle(cfg.status_style),
+    panel_side: normalizePanelSide(cfg.panel_side),
     tick_count: normalizeTickCount(cfg.tick_count),
     game_time: normalizeGameTime(cfg.game_time),
     affects_style: normalizeAffectsStyle(cfg.affects_style),

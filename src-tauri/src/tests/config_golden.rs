@@ -440,6 +440,7 @@ fn full_ui() -> UiConfig {
         moons_position: "before-time".into(),
         chip_style: "icon_value".into(),
         status_style: "strip".into(),
+        panel_side: "left".into(),
         tick_count: "down_past_zero".into(),
         game_time: "12h".into(),
         affects_style: "chips".into(),
