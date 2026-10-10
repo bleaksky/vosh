@@ -951,9 +951,16 @@ With `Text`, `Edit your text…` opens `Your vitals text` over the terminal. `Va
 
 Each default draws the panel you already know, so nothing changes until you choose something. One line drops the Health, Mana, and Moves labels only when they don't fit beside the values. This happens under about 360 pt with health of four digits. It keeps the values and meters. `Current` and `Percent` keep the labels, even on a narrow panel. A panel too narrow for even the values puts them in rows.
 
-When you turn off `Show the panel` under Layout, your vitals move to the status line. There they follow `Values` and `Warn before you run low`, but they never draw a meter. In a fight your opponent comes after them, with its health in yellow. When the target you set is the mob you fight, the two share one item. A target on another mob keeps its own item after it.
+When you turn off `Show the panel` under Layout, your vitals move to the status line. The style of the status line sets how they look there. To choose a style, go to Settings under Layout, then Status line, and pick one in `Style`.
 
-When the line is too short, things give way in this order. First the name of your opponent, then the labels. Then each value falls back to the current number. Then the moons, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
+- `Meters` is the default. Your vitals, your opponent, and the tick each fill a part of the line, as wide as the value. Low health gets a stronger fill.
+- `Compact` is a quiet line in small text. Each vital shows its label and its value, with no meter.
+- `Strip` puts a small gauge beside each vital and a bar beside the tick, on a raised background.
+- `Dashboard` makes the line taller. It puts a small caption over each value and a thin bar under each vital.
+
+Every style follows `Values` and `Warn before you run low`. Meters, Strip, and Dashboard draw each vital in the color you pick under `Customize vitals`. In a fight your opponent comes after your vitals, with its health in yellow. When the target you set is the mob you fight, the two share one item. A target on another mob keeps its own item after it. While the panel shows your vitals, Meters, Strip, and Dashboard show the room you are in. Strip and Dashboard also show your character.
+
+When the line is too short, things give way. In `Compact`, the name of your opponent goes first, then the labels. Then each value falls back to the current number. Then the moons, a round trip under 300 ms, and the game time go. The other styles first remove your character, the area, and the moons. Then they remove the labels, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
 
 When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter. This is the same in the panel and on the status line. Nothing turns yellow or red while they are hidden. Your numbers come back with the next update that the game sends. In a fight, the opponent row reads `?` in the same way when the game hides its health or sends none. Its health on the status line does the same.
 
@@ -1066,7 +1073,8 @@ When the tick comes, the count starts again, the sound plays, and your `Send eac
 - While the game is late, the tick pulses gently in the warn color until the tick comes. When Reduce motion is on in your system settings, it stays still in the warn color.
 - To choose which way the tick counts, use the Tick counts row in Settings under Layout, then Status line. `Up` shows the seconds since the last tick. It keeps counting past `Every` while the game is late, such as `31s`.
 - `Down` shows the seconds left until the tick. It goes from `Every` right after a tick down to `1s` in its last second. It waits at `0s` when the game is late. `Down past 0` counts down in the same way, but continues below zero until the tick comes. An early tick starts either count again at once.
-- The Tick and time row at the top of the card sets how the status line shows the tick, the time, and the moons. `Value` shows each value alone, such as `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a ring before the tick.
+- The Tick and time row sets how the `Compact` style shows the tick, the time, and the moons. `Value` shows each value alone, such as `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a ring before the tick. The other styles label these on their own, so the row is off while one of them is on.
+- Meters and Strip show the tick as a bar that fills as the seconds go by. Dashboard shows a ring. With `Down`, the label reads `Next tick`.
 - When the ring counts up, it fills clockwise as the seconds go by. It closes when the tick is due, and stays closed while the game is late. When it counts down, it shows the time left and empties clockwise toward the top. While the game is late, only the faint ring shows.
 - With `Icon`, the time has the sun on its path over the horizon before it. The sun rises on the left, is highest at midday, and sets on the right. After dark, it goes under the horizon as an open dot.
 - To choose the clock for the game time, use the Game time row under Tick and time. `24 hour` reads like `18:00`. `12 hour` reads like `6:00 PM`, with `12:00 AM` at midnight and `12:00 PM` at noon. Each character keeps its own choice.

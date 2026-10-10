@@ -125,4 +125,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Current State
 
-Vosh 0.9.0 is out. The refactor before 1.0 follows `docs/refactor-plan.md`, which holds the status of every item and track. Every item through R26 is built. R26 proved on October 8 that a run by hand builds every package and that Gatekeeper accepts the signed and notarized Mac app, and your install of each package from that run waits for you. R23 item 5 marks the refactor done last, after one-window merges into main. The last commit of each item updates this section.
+Vosh 0.9.0 is out. The refactor before 1.0 follows `docs/refactor-plan.md`, which holds the status of every item and track. Every item through R26 is built. R26 proved on October 8 that a run by hand builds every package and that Gatekeeper accepts the signed and notarized Mac app, and your install of each package from that run waits for you. The status bar styles of October 9 are built and wait for your check. R23 item 5 marks the refactor done last, after one-window merges into main. The last commit of each item updates this section.
