@@ -2029,6 +2029,17 @@ Where it departs from the mockups. The Strip and Dashboard boards made each read
 
 Help 4.4 says what each style draws and how the styles give way, and 5.1 says Tick and time sets Compact alone.
 
+#### October 10. Panel side
+
+You asked for a choice to put the panel on the left, with the sessions sidebar moving to the right, on October 10, and chose to mirror the band's buttons with them. The build is on feat/panel-side from one-window 33b37794.
+
+- Setting. `panel_side` in the profile's `[ui]` table is `right` or `left`. The file writes it only off Right, and an unknown value saves as Right. A replace sends it on `vosh://panel-side-changed`, and `src/stores/config/panelSideStore.ts` keeps it in every window.
+- Settings. A Side row in Layout, Panel, after Width, as Right and Left segments. Search finds it by side, left, right, mirror and swap.
+- Frame. `AppShell` sets `data-panel-side` on the frame, and frame.css swaps the panel and sessions columns, so no slot changes parent and nothing remounts. The band spans the panel and the terminal. The panel's edge draws on its right and the sidebar's line on its left. `src/shell/shellEdges.ts` turns each drag and arrow key so a move toward the middle widens the column. A side switch sends a resize, since the terminal moves without resizing and the native grid reads its place from the page.
+- Band. The band's buttons sit at the left end in mirrored order, after the traffic lights on macOS. Add a pane opens its menu from its left edge. The sessions toggle takes the top right corner. On Windows and Linux the window controls stay at the top right, and the toggle sits 8 clear of them. The panel and sessions glyphs turn so each line sits on its column's side. The sidebar that slides over a narrow window comes in from the right.
+
+Help 4.1 says how to move the panel and what moves with it, and the sessions section says the sidebar sits across from the panel.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

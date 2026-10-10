@@ -71,7 +71,7 @@ Variables set with `#var` have session scope. They clear when the next connectio
 
 <!-- id: get-connected.sessions -->
 
-Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, with one row for each session. With one session, the sidebar hides on its own.
+Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the side of the window across from the panel, with one row for each session. At first that is the left side. With one session, the sidebar hides on its own.
 
 Each row has two lines. The first line starts with a mark that shows the state of the session. Then comes its name. At the end is a count when something waits for you there. The second line tells what the session is doing.
 
@@ -857,15 +857,16 @@ Triggers work differently. Two groups can each have a trigger with the same name
 
 <!-- id: shape.arrange-panels -->
 
-The panel on the right holds your panes. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
+The panel holds your panes. At first it is on the right side of the window. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
 
 - To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the command palette. While the panel is hidden, your vitals move to the status line.
 - To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues. Staff queues joins the list when the game sends it.
 - To open the menu of a pane, click the more button in its header. `Split right` and `Split down` put the first pane that the panel doesn't show beside it or under it. When the panel shows all the panes, they put in another Chat pane. On a Chat pane they put in another Chat pane.
 - In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
 - To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
-- To change the width of the panel, drag its left edge. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
+- To change the width of the panel, drag its inner edge, the edge next to the terminal. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
 - To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`.
+- To put the panel on the left side, go to Settings under Layout, then Panel, and set `Side` to `Left`. The sessions sidebar moves to the right side. The panel buttons in the title band move to the left end with the panel, and the sessions button moves to the right end. On macOS the window buttons stay at the top left. On Windows and Linux, minimize, maximize, and close stay at the top right. Each profile keeps its own side.
 
 To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects. The panel keeps its width, and it stays shown or hidden.
 
