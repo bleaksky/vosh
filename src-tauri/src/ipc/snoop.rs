@@ -38,7 +38,7 @@ fn stop_line(name: Option<&str>) -> String {
 /// Stop the snoop of `name`, or every snoop with no name. The line goes
 /// to the game the way a quick key's does, with its echo and its row in
 /// the session log, and no alias sees it. The tab waits for the game to
-/// say the snoop ended, then goes.
+/// say the snoop ended, or for its next prompt, then goes.
 #[tauri::command]
 pub(crate) async fn snoop_stop<R: tauri::Runtime>(
     app: AppHandle<R>,
