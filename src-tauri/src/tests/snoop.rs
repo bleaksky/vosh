@@ -211,11 +211,17 @@ async fn stop_asks_the_game_and_an_end_you_did_not_ask_for_keeps_the_tab() {
     })
     .await;
     h.until_shown("snoop stop Tolliver").await;
-    // The tab waits for the game.
-    assert_eq!(tabs(&h), [tab("Tolliver", true), tab("Maren", true)]);
-    h.servers[0].push(&packet(STOP));
-    h.until("the confirm", |h| tabs(h) == [tab("Maren", true)])
+    // The fake game answers with its prompt and no Snoop.Stop, as the
+    // game does after a hot reboot forgot the snoop, so the tab goes.
+    h.until("the prompt", |h| tabs(h) == [tab("Maren", true)])
         .await;
+    // A Snoop.Stop that comes after changes nothing. The repeat start of
+    // Maren that follows sends the list again once both landed.
+    let before = lists(&h).len();
+    h.servers[0].push(&packet(STOP));
+    h.servers[0].push(&state(true, "Maren"));
+    h.until("the late stop", |h| lists(h).len() > before).await;
+    assert_eq!(tabs(&h), [tab("Maren", true)]);
 
     // Maren left the game, so her tab stays as ended until you close it.
     h.servers[0].push(&state(false, "Maren"));
