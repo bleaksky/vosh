@@ -94,12 +94,12 @@ describe('StatusLineSection', () => {
         onError={() => undefined}
       />,
     );
-    expect(labels(html)).toEqual(['Tick and time', 'Game time', 'Tick counts']);
+    expect(labels(html)).toEqual(['Style', 'Tick and time', 'Game time', 'Tick counts']);
     expect(pressed(html)).toEqual(['Icon', '12 hour', 'Down']);
     const anchors = SETTINGS_ROWS.filter(
       (r) => r.target.group === 'layout' && r.target.section === 'status',
     ).map((r) => r.target.anchor);
-    expect(anchors).toEqual(['tick-time', 'game-time', 'tick-counts']);
+    expect(anchors).toEqual(['tick-time', 'game-time', 'tick-counts', 'status-style']);
     for (const anchor of anchors) expect(html).toContain(`data-st-anchor="${anchor}"`);
   });
 });

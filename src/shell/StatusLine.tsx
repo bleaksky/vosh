@@ -5,6 +5,8 @@ import type { VitalsOptions } from '../ipc/uiConfigVitals';
 import { useBandEnv } from '../prompt/useBandEnv';
 import { usePlayPalette } from '../theme/fitGameColors';
 import { useChipStyle } from '../stores/config/chipStyleStore';
+import { useStatusStyle } from '../stores/config/statusStyleStore';
+import { useRoom } from '../stores/gmcp/roomStore';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useGameTime } from '../stores/config/gameTimeStore';
 import { useSelected } from '../stores/session/sessionsStore';
@@ -29,8 +31,10 @@ import {
   sameMob,
   vitalRows,
   vitalsOn,
+  vitalInks,
   widestVital,
   VITAL_LABELS,
+  type VitalInks,
   type ShownVital,
   type VitalTone,
 } from '../panel/vitalsView';
@@ -43,8 +47,15 @@ import { FIT_ALL, statusLineFit, type StatusLineFit } from './statusLineFit';
 import { roundTripText, roundTripTone, SLOW_MS, WIDEST_ROUND_TRIP } from './roundTrip';
 import { statusMoons } from './statusMoons';
 import { useVitalsMenu } from '../panel/useVitalsMenu';
+import { StatusBar } from './StatusBar';
 import { VisuallyHidden } from '../ui';
 
+// The status bar under the input band, in the style you pick under
+// Style in Settings (status_style). This file reads the stores for
+// every style and draws Compact itself. StatusBar.tsx draws Strip,
+// Dashboard and Meters from the same items, and AppShell sets the
+// bar's height from the style. What follows is Compact.
+//
 // The quiet line under the input band: your vitals when
 // the line carries them, your opponent, your target, then the tick, the
 // round trip to the game, then the tick, the game time, and the moons
@@ -93,8 +104,8 @@ import { VisuallyHidden } from '../ui';
 // time reads on the 24 or 12 hour clock you pick in Settings and takes
 // a daylight tint from your theme. The moons in the sky show
 // as phase icons in their own colors, with a word for an eclipse, the
-// triad, or a near alignment. The chip style in Settings shows each
-// value alone, after a caption, or after an icon.
+// triad, or a near alignment. Tick and time in Settings (chip_style)
+// shows each value alone, after a caption, or after an icon.
 
 /** The line splits each row of your text at its push, so the push
  *  needs no room and the session renders the text one cell wide. */
@@ -102,6 +113,8 @@ const LINE_COLS = 1;
 
 interface Props {
   connected: boolean;
+  /** Your character, or null before you log in. */
+  character: string | null;
   /** The line carries your vitals, since the panel is hidden or Show
    *  your vitals in is Status line. */
   showVitals: boolean;
@@ -109,7 +122,8 @@ interface Props {
   textColors: TextColors;
 }
 
-export function StatusLine({ connected, showVitals, textColors }: Props) {
+export function StatusLine({ connected, character, showVitals, textColors }: Props) {
+  const style = useStatusStyle();
   const target = useTarget();
   const vitals = useVitals();
   const combat = useCombat();
@@ -120,31 +134,79 @@ export function StatusLine({ connected, showVitals, textColors }: Props) {
   const clock = useClock(connected);
   const roundTrip = useRoundTrip();
   const lineRef = useRef<HTMLDivElement | null>(null);
-  const fit = useStatusFit(lineRef, items, clock, connected, roundTrip);
+  const compact = style === 'compact';
+  const fit = useStatusFit(lineRef, items, clock, connected, roundTrip, compact);
+  const room = useRoom().info;
+  const inks = useBarInks(options.colors);
+  const faceVersion = usePanelFaceVersion();
   const vitalsMenu = useVitalsMenu();
 
   return (
     <div
       ref={lineRef}
-      className="shell-statusline"
+      className={`shell-statusline${compact ? '' : ' is-bar'}`}
+      data-style={style}
       role="group"
       aria-label="Status"
       onContextMenu={(e) => {
         if (e.target instanceof Element && e.target.closest(VITALS_ITEMS)) vitalsMenu.open(e);
       }}
     >
-      {!connected && <span>{NOT_CONNECTED}</span>}
-      <StatusItemsView items={items} fit={fit} />
-      {roundTrip !== null && fit.roundTrip && <RoundTripItem ms={roundTrip} />}
-      <StatusClock
-        style={clock.style}
-        tick={clock.tick}
-        time={fit.time ? clock.time : null}
-        moons={fit.moons ? clock.moons : null}
-      />
+      {compact ? (
+        <>
+          {!connected && <span>{NOT_CONNECTED}</span>}
+          <StatusItemsView items={items} fit={fit} />
+          {roundTrip !== null && fit.roundTrip && <RoundTripItem ms={roundTrip} />}
+          <StatusClock
+            style={clock.style}
+            tick={clock.tick}
+            time={fit.time ? clock.time : null}
+            moons={fit.moons ? clock.moons : null}
+          />
+        </>
+      ) : (
+        <StatusBar
+          style={style}
+          connected={connected}
+          character={character}
+          room={!showVitals && room ? { name: room.name, area: room.area } : null}
+          items={{
+            text: items.text ? <VitalsTextItem text={items.text} /> : null,
+            rows: items.rows,
+            foe: items.foe,
+            target: items.target,
+          }}
+          inks={inks}
+          tick={clock.tick}
+          time={clock.time}
+          moons={clock.moons}
+          roundTrip={roundTrip}
+          faceVersion={faceVersion}
+        />
+      )}
       {vitalsMenu.menu}
     </div>
   );
+}
+
+/** The play palette's slots each vital takes when you picked no color
+ *  for it under Customize vitals: bright red, blue and green on a dark
+ *  theme, and the plain ones on a light theme. */
+const BAR_SLOTS = {
+  dark: { hp: 9, mana: 12, move: 10 },
+  light: { hp: 1, mana: 4, move: 2 },
+} as const;
+
+/** The color of each vital on the Strip, Dashboard and Meters bars,
+ *  lifted on the ground as the panel lifts them. */
+function useBarInks(colors: VitalsOptions['colors']): Required<VitalInks> {
+  const theme = useActiveTheme();
+  const palette = usePlayPalette();
+  return useMemo(() => {
+    const tokens = themeTokens(theme);
+    const slots = BAR_SLOTS[tokens.appearance === 'dark' ? 'dark' : 'light'];
+    return vitalInks({ ...slots, ...colors }, palette, tokens) as Required<VitalInks>;
+  }, [theme, palette, colors]);
 }
 
 const NOT_CONNECTED = 'Not connected';
@@ -164,7 +226,8 @@ export function RoundTripItem({ ms }: { ms: number }) {
 
 /** The items a right click opens the vitals menu on: your vitals, your
  *  opponent and your vitals text. */
-const VITALS_ITEMS = '.shell-status-vital, .shell-status-foe, .shell-status-text';
+const VITALS_ITEMS =
+  '.shell-status-vital, .shell-status-foe, .shell-status-text, .shell-bar-vital, .shell-bar-foe';
 
 /** How the line fits while it carries your quiet form: the widths
  *  statusLineFit weighs, measured in the panel face at your panel size
@@ -175,12 +238,13 @@ function useStatusFit(
   clock: ClockProps,
   connected: boolean,
   roundTrip: number | null,
+  compact: boolean,
 ): StatusLineFit {
   const room = useLineRoom(lineRef);
   const faceVersion = usePanelFaceVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const font = useMemo(() => `${readPanelTextPx()}px ${readPanelFace()}`, [faceVersion]);
-  if (!items.quiet || room === null) return FIT_ALL;
+  if (!compact || !items.quiet || room === null) return FIT_ALL;
   const measure = (text: string) => textWidth(text, font, faceVersion);
   return statusLineFit({
     room,
@@ -368,15 +432,7 @@ function StatusItemsView({ items, fit }: { items: StatusItems; fit: StatusLineFi
   const { text, rows, foe, target } = items;
   return (
     <>
-      {text && (
-        <span className="shell-status-text" style={{ color: text.env.fg }}>
-          {text.pieces.map((cells, i) => (
-            <span key={i} className="shell-status-text-piece">
-              <TextRuns cells={cells} env={text.env} />
-            </span>
-          ))}
-        </span>
-      )}
+      {text && <VitalsTextItem text={text} />}
       {rows.map((row) => (
         <span key={row.key} className="shell-status-vital">
           <Hideable shown={fit.labels}>{VITAL_LABELS[row.key]}</Hideable>
@@ -396,6 +452,19 @@ function StatusItemsView({ items, fit }: { items: StatusItems; fit: StatusLineFi
         </span>
       )}
     </>
+  );
+}
+
+/** Your vitals text on one line, in the terminal face. */
+function VitalsTextItem({ text }: { text: LineText }) {
+  return (
+    <span className="shell-status-text" style={{ color: text.env.fg }}>
+      {text.pieces.map((cells, i) => (
+        <span key={i} className="shell-status-text-piece">
+          <TextRuns cells={cells} env={text.env} />
+        </span>
+      ))}
+    </span>
   );
 }
 

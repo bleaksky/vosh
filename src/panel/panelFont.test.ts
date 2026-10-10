@@ -155,6 +155,7 @@ describe('the panel faces in the stylesheets', () => {
       '.pane-chip: var(--font-panel-game)',
       '.shell-statusline: var(--font-panel)',
       '.shell-statusline > .shell-status-text: var(--font-panel-game)',
+      '.shell-bar .shell-status-text: var(--font-panel-game)',
       '.map-glyph-grid: var(--font-panel-glyph)',
       '.panel-host: var(--font-panel)',
       '.pane-lua-line: var(--font-panel-game)',

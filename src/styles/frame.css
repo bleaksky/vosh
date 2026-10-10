@@ -689,3 +689,429 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ── Status bar styles ─────────────────────────────────────────────── */
+
+/* Strip and Meters stand 32 px tall and Dashboard 44, scaled by your
+   panel size over 12 as Compact's 28 is. The row and the bar read the
+   same --status-line. */
+.shell[data-status-style='strip'],
+.shell[data-status-style='meters'] {
+  --status-line: round(32px * var(--panel-text-px, 12) / 12, 1px);
+}
+
+.shell[data-status-style='dashboard'] {
+  --status-line: round(44px * var(--panel-text-px, 12) / 12, 1px);
+}
+
+/* A styled bar fills the line edge to edge under a hairline. Its items
+   run in .shell-bar, which lets parts go while they run past its edge
+   (statusBarFit.ts). Values read 13 px over your size, labels 12. */
+.shell-statusline.is-bar {
+  align-items: stretch;
+  padding: 0;
+  border-top: 1px solid var(--sep);
+}
+
+.shell-statusline > .shell-bar {
+  flex: 1 1 auto;
+}
+
+.shell-bar {
+  --bar-value-px: round(13px * var(--panel-text-px, 12) / 12, 1px);
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--secondary);
+}
+
+.shell-bar-value {
+  color: var(--text);
+}
+
+.shell-bar-value.is-strong {
+  font-weight: 500;
+}
+
+.shell-bar-dim,
+.shell-bar-value.is-dim {
+  color: var(--tertiary);
+}
+
+.shell-bar .is-low {
+  color: var(--danger-text);
+}
+
+.shell-bar .is-hidden {
+  color: var(--tertiary);
+}
+
+.shell-bar-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-bar-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.shell-bar-spring {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shell-bar-moons,
+.shell-bar-time,
+.shell-bar-rtt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.shell-bar-moons {
+  gap: 4px;
+}
+
+.shell-bar-moons > svg,
+.shell-bar-time > svg {
+  flex: none;
+  display: block;
+}
+
+.shell-bar-alignment {
+  margin-left: 2px;
+  color: var(--warn);
+}
+
+/* The round trip's dot or lit bars in the success tone while fine,
+   then the warn and danger tones, with the reading in tertiary while
+   fine. Unlit bars draw on the track. */
+.shell-bar-rtt {
+  --rtt-ink: var(--success);
+  color: var(--tertiary);
+}
+
+.shell-bar-rtt.is-warn {
+  --rtt-ink: var(--warn);
+  color: var(--warn);
+}
+
+.shell-bar-rtt.is-danger {
+  --rtt-ink: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.shell-bar-rtt circle,
+.shell-bar-rtt rect.is-lit {
+  fill: var(--rtt-ink);
+}
+
+.shell-bar-rtt rect {
+  fill: var(--track);
+}
+
+/* The tick turns the warn tone in its last seconds, and pulses while
+   it runs late, as on Compact. */
+.shell-bar-tick {
+  --bar-ink: var(--secondary);
+}
+
+.shell-bar-tick.is-warn {
+  --bar-ink: var(--warn);
+  color: var(--warn);
+}
+
+.shell-bar-tick.is-warn .shell-bar-value {
+  color: var(--warn);
+}
+
+.shell-bar-tick.is-warn.is-overdue {
+  animation: shell-tick-late 1s ease-in-out infinite;
+}
+
+.shell-bar-secs {
+  min-width: 3ch;
+  text-align: right;
+}
+
+.shell-bar-foe {
+  --bar-ink: var(--warn);
+}
+
+/* Your vitals text in the terminal face, ending in an ellipsis where
+   its room runs out. */
+.shell-bar .shell-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-panel-game);
+  white-space: pre;
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}
+
+/* Strip. Items 4 apart on the raised ground, a hairline 14 px tall
+   between groups. Each vital reads its label, a 4 px gauge in its
+   color and its value, and the tick a 72 px bar. */
+.shell-bar.is-strip {
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--raised);
+}
+
+.shell-bar-group {
+  display: contents;
+}
+
+.shell-bar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--r-key);
+}
+
+.shell-bar-room,
+.shell-bar-target,
+.shell-bar-item.shell-bar-foe,
+.is-strip > .shell-status-text {
+  flex: 0 1 auto;
+  min-width: 72px;
+  overflow: hidden;
+}
+
+.shell-bar-room > .shell-bar-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-bar-item.shell-bar-target > .shell-bar-value {
+  margin-left: -2px;
+}
+
+.shell-bar-seam {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  background: var(--sep);
+}
+
+.shell-bar-gauge {
+  display: inline-block;
+  flex: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.shell-bar-gauge > span,
+.shell-bar-under > span {
+  display: block;
+  height: 100%;
+  background: var(--bar-ink, var(--secondary));
+}
+
+.shell-bar-gauge.is-tick {
+  width: 72px;
+}
+
+.shell-bar-gauge.is-tick > span,
+.shell-bar-fill {
+  transition: width 0.9s linear;
+}
+
+.shell-bar-item.shell-bar-tick.is-warn {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+/* Dashboard. Segments cut by hairlines, each a 10 px caption over a
+   13 px value. Your vitals and your opponent draw a 2 px bar under
+   their value in their color. */
+.shell-bar.is-dashboard {
+  background: var(--inputband);
+}
+
+.shell-bar-seg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  flex: none;
+  padding: 0 14px;
+  border-right: 1px solid var(--sep);
+}
+
+.shell-bar-seg.is-right {
+  border-right: 0;
+  border-left: 1px solid var(--sep);
+}
+
+.shell-bar-seg.is-shrink {
+  flex: 0 1 auto;
+  min-width: 72px;
+  overflow: hidden;
+}
+
+.shell-bar-seg.is-metered {
+  min-width: 76px;
+}
+
+.shell-bar-cap {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: round(10px * var(--panel-text-px, 12) / 12, 1px);
+  line-height: round(12px * var(--panel-text-px, 12) / 12, 1px);
+  color: var(--secondary);
+}
+
+.shell-bar-val {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--bar-value-px);
+  line-height: round(17px * var(--panel-text-px, 12) / 12, 1px);
+  color: var(--text);
+}
+
+.shell-bar-seg.is-metered > .shell-bar-val {
+  margin-bottom: 4px;
+}
+
+.shell-bar-under {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.shell-bar-seg.shell-bar-tick.is-warn {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
+.shell-bar-ring {
+  flex: none;
+}
+
+.shell-bar-ring circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.shell-bar-ring circle.is-track {
+  stroke-opacity: 0.3;
+}
+
+/* Meters. Zones edge to edge, 1 px apart on the window ground. A zone
+   with a meter fills with its color at 13 percent, 26 for low Health,
+   as wide as its value, over a 2 px edge in its color. The room and
+   your vitals text take three shares and end in an ellipsis. */
+.shell-bar.is-meters {
+  gap: 1px;
+  background: var(--bg);
+}
+
+.shell-bar-zone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1 0 auto;
+  padding: 0 12px;
+  background: var(--raised);
+}
+
+.shell-bar-zone.is-wide {
+  flex: 3 1 0;
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.shell-bar-zone.is-shrink {
+  flex: 1 1 0;
+  min-width: 96px;
+  overflow: hidden;
+}
+
+.shell-bar-zone.is-note,
+.shell-bar-zone.is-cluster {
+  flex: none;
+}
+
+.shell-bar-zone.is-cluster {
+  gap: 12px;
+  padding: 0 12px;
+}
+
+.shell-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  border-bottom: 2px solid var(--bar-ink);
+  background: color-mix(in srgb, var(--bar-ink) 13%, transparent);
+}
+
+.shell-bar-vital.is-low > .shell-bar-fill {
+  background: color-mix(in srgb, var(--bar-ink) 26%, transparent);
+}
+
+.shell-bar-tick.is-warn > .shell-bar-fill {
+  background: color-mix(in srgb, var(--bar-ink) 24%, transparent);
+}
+
+.shell-bar-label {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-bar-room > .shell-bar-label {
+  color: var(--text);
+}
+
+.shell-bar-zone > .shell-bar-value {
+  position: relative;
+  flex: none;
+  font-size: var(--bar-value-px);
+  font-weight: 500;
+}
+
+.shell-bar-room > .shell-bar-value {
+  font-weight: 400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-bar-tick.is-warn.is-overdue {
+    animation: none;
+  }
+
+  .shell-bar-gauge.is-tick > span,
+  .shell-bar-fill {
+    transition: none;
+  }
+}

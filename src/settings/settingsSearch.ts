@@ -337,7 +337,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Tick and time',
-    description: 'How the tick, the game time, and the moons show in the status line.',
+    description: 'How the tick, the game time, and the moons show when the status line is Compact.',
     keywords: 'chip style caption icon value clock sun moon moons phase',
     target: at('layout', 'status', 'tick-time'),
   },
@@ -353,6 +353,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'Up shows the seconds since the last tick and Down the seconds left until the next. Down waits at 0 when the game is late, and Down past 0 keeps counting below zero until the tick lands.',
     keywords: 'tick count countdown count down up direction reverse late negative minus below zero',
     target: at('layout', 'status', 'tick-counts'),
+  },
+  {
+    label: 'Status bar style',
+    description:
+      'Meters fills the bar with your vitals and the tick, Compact is a quiet row of values, Strip sits on a raised ground, and Dashboard puts a caption over each value.',
+    keywords: 'status bar look meters compact strip dashboard',
+    target: at('layout', 'status', 'status-style'),
   },
   // The Affects card sits above Split terminal on the page. Its rows come last
   // here, since search breaks a tie by this order and `chip style`

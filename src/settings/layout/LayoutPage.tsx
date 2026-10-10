@@ -31,6 +31,7 @@ import { useSettingsAutoSave } from '../useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { GameTimeRow } from './GameTimeRow';
 import { TickCountRow } from './TickCountRow';
+import { StatusStyleRow } from './StatusStyleRow';
 import { TickTimeStyleRow } from './TickTimeStyleRow';
 import { VitalsGallery } from './VitalsGallery';
 import {
@@ -187,6 +188,7 @@ export function StatusLineSection({
       title="Status line"
       help={{ topic: 'tick.tick-timer', subject: 'the tick timer' }}
     >
+      <StatusStyleRow config={config} setConfig={setConfig} onError={onError} />
       <TickTimeStyleRow config={config} setConfig={setConfig} onError={onError} />
       <GameTimeRow config={config} setConfig={setConfig} onError={onError} />
       <TickCountRow config={config} setConfig={setConfig} onError={onError} />

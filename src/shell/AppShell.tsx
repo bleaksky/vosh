@@ -7,6 +7,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react';
+import type { StatusStyle } from '../ipc/uiConfig';
 import { isMacPlatform } from '../lib/shortcuts';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../panel/paneLayout';
 import {
@@ -95,6 +96,8 @@ interface Props {
   reader?: ReactNode;
   input: ReactNode;
   statusLine: ReactNode;
+  /** The status bar style, which sets the bar's height. */
+  statusStyle?: StatusStyle;
   panel: ReactNode;
   onMouseUp?: (event: MouseEvent<HTMLElement>) => void;
   /** Floating surfaces: menus, the palette, toasts, dialogs. */
@@ -131,6 +134,7 @@ export function AppShell({
   reader = null,
   input,
   statusLine,
+  statusStyle = 'compact',
   panel,
   onMouseUp,
   children,
@@ -235,6 +239,7 @@ export function AppShell({
       ref={rootRef}
       className="shell window-edge"
       data-panel={panelOpen ? 'open' : 'hidden'}
+      data-status-style={statusStyle}
       data-lead={sessionsToggle === null ? undefined : sessions === null ? 'band' : 'sidebar'}
       style={frame}
       onMouseUp={onMouseUp}
