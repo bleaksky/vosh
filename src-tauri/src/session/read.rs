@@ -195,6 +195,9 @@ async fn handle_event<R: tauri::Runtime>(
             // never reads as a stall.
             let prompted = ends_on_prompt(conn.accumulator.partial());
             conn.stream.game_prompted(prompted);
+            if prompted {
+                end_unanswered_stops(conn, batch);
+            }
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
@@ -228,6 +231,7 @@ async fn handle_event<R: tauri::Runtime>(
                 deliver_line_step(conn, log_sink, batch, &open, step).await?;
             }
             conn.stream.game_prompted(true);
+            end_unanswered_stops(conn, batch);
             conn.writer.marker();
             Ok(())
         }
@@ -261,6 +265,14 @@ async fn handle_event<R: tauri::Runtime>(
 
 /// Paint a partial that waited and send it out. `seen_output` becomes
 /// the output count after it.
+/// The game showed its prompt, so a snoop stop it never answered ends
+/// (see [`super::snoop::Snoops::prompted`]) and the tab list goes out.
+fn end_unanswered_stops<R: tauri::Runtime>(conn: &Conn<R>, batch: &mut ReadBatch) {
+    if conn.session.connection.lock().snoops.prompted() {
+        batch.snoop = true;
+    }
+}
+
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     let out = {
         let mut c = conn.session.connection.lock();

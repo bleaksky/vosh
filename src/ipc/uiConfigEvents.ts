@@ -24,6 +24,8 @@ import {
   WRITING_OFFER_CHANGED,
   WRITING_ASK_POST_CHANGED,
   SPLIT_DIVIDER_CHANGED,
+  STATUS_STYLE_CHANGED,
+  PANEL_SIDE_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
   THEME_TERMINAL_COLORS_CHANGED,
   TICK_COUNT_CHANGED,
@@ -32,10 +34,14 @@ import {
   normalizeChipStyle,
   normalizeGameTime,
   normalizeScrollbackLines,
+  normalizeStatusStyle,
+  normalizePanelSide,
   normalizeTerminalLineHeight,
   normalizeTickCount,
   type ChipStyle,
   type GameTime,
+  type StatusStyle,
+  type PanelSide,
   type TerminalLineHeight,
   type TickCount,
 } from './uiConfig';
@@ -78,6 +84,26 @@ export async function subscribeTickCountChanged(
 export async function subscribeGameTimeChanged(cb: (value: GameTime) => void): Promise<UnlistenFn> {
   return listen<unknown>(GAME_TIME_CHANGED, (event) => {
     cb(normalizeGameTime(event.payload));
+  });
+}
+
+/** Hear a new status bar style saved from Settings, or the one a
+ *  profile switch brings. */
+export async function subscribeStatusStyleChanged(
+  cb: (value: StatusStyle) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(STATUS_STYLE_CHANGED, (event) => {
+    cb(normalizeStatusStyle(event.payload));
+  });
+}
+
+/** Hear a new panel side saved from Settings, or the one a profile
+ *  switch brings. */
+export async function subscribePanelSideChanged(
+  cb: (value: PanelSide) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(PANEL_SIDE_CHANGED, (event) => {
+    cb(normalizePanelSide(event.payload));
   });
 }
 

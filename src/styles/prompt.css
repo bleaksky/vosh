@@ -1504,6 +1504,7 @@
 
 .pc-body.pc-text .pc-piece-actions {
   justify-content: flex-start;
+  gap: 8px;
 }
 
 /* The card's marks on your prompt, over the terminal and under the card:

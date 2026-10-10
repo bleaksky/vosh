@@ -95,6 +95,8 @@
     "vitals_text_previous": ["%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v"],
     "vitals_hit": true,
     "chip_style": "icon_value",
+    "status_style": "strip",
+    "panel_side": "left",
     "tick_count": "down",
     "game_time": "12h",
     "affects_style": "chips",

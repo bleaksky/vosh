@@ -188,6 +188,9 @@ pub(crate) struct Snoops {
     /// Text for the log, each with the name of its player, in the order
     /// it ended.
     log: Vec<(String, String)>,
+    /// The players whose tab a prompt closed while it waited on Stop.
+    /// Their text stays out until the game starts or ends their snoop.
+    dropped: Vec<String>,
 }
 
 impl Snoops {
@@ -232,6 +235,7 @@ impl Snoops {
     /// The game started a snoop. A player you snooped before gets the
     /// tab back, live, with its old text.
     fn start(&mut self, name: &str) {
+        self.dropped.retain(|n| n != name);
         match self.find(name) {
             Some(tab) => tab.state = State::Live,
             None => self.tabs.push(Tab::new(name)),
@@ -242,6 +246,7 @@ impl Snoops {
     /// The game ended a snoop. The one you pressed Stop on goes, and any
     /// other stays as ended.
     fn stop(&mut self, name: &str, now_ms: i64) {
+        self.dropped.retain(|n| n != name);
         let Some(at) = self.tabs.iter().position(|tab| tab.name == name) else {
             return;
         };
@@ -257,6 +262,9 @@ impl Snoops {
     /// A player's screen got `text`. Text for a player with no tab opens
     /// one, since the game only sends it for a snoop.
     fn output(&mut self, name: &str, text: &str, now_ms: i64) {
+        if self.dropped.iter().any(|n| n == name) {
+            return;
+        }
         let at = match self.tabs.iter().position(|tab| tab.name == name) {
             Some(at) => at,
             None => {
@@ -286,6 +294,7 @@ impl Snoops {
     /// stays as ended, and one you pressed Stop on goes. The partial of
     /// each goes in the log.
     pub(crate) fn link_ended(&mut self, now_ms: i64) {
+        self.dropped.clear();
         for at in 0..self.tabs.len() {
             self.end_log(at);
         }
@@ -310,6 +319,30 @@ impl Snoops {
                 self.list_changed = true;
             }
         }
+    }
+
+    /// The game showed its prompt. It answers a stop before its next
+    /// prompt, so a snoop you pressed Stop on that it has not ended by
+    /// now goes. A hot reboot keeps the link but forgets every snoop, and
+    /// then the game answers that you snoop nobody and sends no
+    /// Snoop.Stop. A prompt already on its way when you pressed Stop can
+    /// close the tab before the game reads the stop, so that player's
+    /// text stays out until the game starts or ends the snoop. Returns
+    /// whether a tab went.
+    pub(crate) fn prompted(&mut self) -> bool {
+        let mut changed = false;
+        while let Some(at) = self
+            .tabs
+            .iter()
+            .position(|tab| tab.state == State::Stopping)
+        {
+            self.end_log(at);
+            self.dropped.push(self.tabs[at].name.clone());
+            self.remove(at);
+            changed = true;
+        }
+        self.list_changed |= changed;
+        changed
     }
 
     /// Close the ended tab of `name`, or every ended tab with no name,
@@ -508,6 +541,38 @@ mod tests {
         start(&mut s, "Maren");
         assert_eq!(tabs(&s), [tab("Maren", true, None)]);
         assert_eq!(s.all()[0].text, "kept\n\r");
+    }
+
+    #[test]
+    fn a_prompt_closes_a_stop_the_game_never_answered() {
+        let mut s = Snoops::default();
+        start(&mut s, "Tolliver");
+        start(&mut s, "Maren");
+        assert!(!s.prompted());
+        // A hot reboot forgot the snoop, so no Snoop.Stop comes.
+        s.stopping(Some("Tolliver"));
+        assert!(s.prompted());
+        assert_eq!(tabs(&s), [tab("Maren", true, None)]);
+        // Text that was on its way opens no tab.
+        output(&mut s, "Tolliver", "late\n\r", 5);
+        assert_eq!(tabs(&s), [tab("Maren", true, None)]);
+        // A new snoop of the player opens a tab again.
+        start(&mut s, "Tolliver");
+        output(&mut s, "Tolliver", "again\n\r", 6);
+        assert_eq!(tabs(&s)[1], tab("Tolliver", true, None));
+        assert_eq!(s.all()[1].text, "again\n\r");
+    }
+
+    #[test]
+    fn a_late_stop_lets_the_players_text_open_a_tab_again() {
+        let mut s = Snoops::default();
+        start(&mut s, "Orla");
+        s.stopping(None);
+        assert!(s.prompted());
+        stop(&mut s, "Orla", 3);
+        assert_eq!(tabs(&s), Vec::new());
+        output(&mut s, "Orla", "back\n\r", 4);
+        assert_eq!(tabs(&s), [tab("Orla", true, None)]);
     }
 
     #[test]

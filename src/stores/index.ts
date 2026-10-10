@@ -8,6 +8,8 @@ import { startAlertNoticeStore } from './session/alertNoticeStore';
 import { startAffectsStore } from './gmcp/affectsStore';
 import { startChatColorsStore } from './config/chatColorsStore';
 import { startChipStyleStore } from './config/chipStyleStore';
+import { startStatusStyleStore } from './config/statusStyleStore';
+import { startPanelSideStore } from './config/panelSideStore';
 import { startCombatStore } from './gmcp/combatStore';
 import { startEchoMarkStore } from './config/echoMarkStore';
 import { startLineLookStore } from './config/lineLookStore';
@@ -80,6 +82,8 @@ export function startStores(): void {
   startTickCountStore();
   startGameTimeStore();
   startChipStyleStore();
+  startStatusStyleStore();
+  startPanelSideStore();
   startEchoMarkStore();
   startLineMarkStore();
   startLineLookStore();

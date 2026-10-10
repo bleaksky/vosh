@@ -71,7 +71,7 @@ Variables set with `#var` have session scope. They clear when the next connectio
 
 <!-- id: get-connected.sessions -->
 
-Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, with one row for each session. With one session, the sidebar hides on its own.
+Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the side of the window across from the panel, with one row for each session. At first that is the left side. With one session, the sidebar hides on its own.
 
 Each row has two lines. The first line starts with a mark that shows the state of the session. Then comes its name. At the end is a count when something waits for you there. The second line tells what the session is doing.
 
@@ -857,15 +857,16 @@ Triggers work differently. Two groups can each have a trigger with the same name
 
 <!-- id: shape.arrange-panels -->
 
-The panel on the right holds your panes. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
+The panel holds your panes. At first it is on the right side of the window. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
 
 - To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the command palette. While the panel is hidden, your vitals move to the status line.
 - To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues. Staff queues joins the list when the game sends it.
 - To open the menu of a pane, click the more button in its header. `Split right` and `Split down` put the first pane that the panel doesn't show beside it or under it. When the panel shows all the panes, they put in another Chat pane. On a Chat pane they put in another Chat pane.
 - In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
 - To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
-- To change the width of the panel, drag its left edge. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
+- To change the width of the panel, drag its inner edge, the edge next to the terminal. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
 - To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`.
+- To put the panel on the left side, go to Settings under Layout, then Panel, and set `Side` to `Left`. The sessions sidebar moves to the right side. The panel buttons in the title band move to the left end with the panel, and the sessions button moves to the right end. On macOS the window buttons stay at the top left. On Windows and Linux, minimize, maximize, and close stay at the top right. Each profile keeps its own side.
 
 To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects. The panel keeps its width, and it stays shown or hidden.
 
@@ -951,9 +952,16 @@ With `Text`, `Edit your text…` opens `Your vitals text` over the terminal. `Va
 
 Each default draws the panel you already know, so nothing changes until you choose something. One line drops the Health, Mana, and Moves labels only when they don't fit beside the values. This happens under about 360 pt with health of four digits. It keeps the values and meters. `Current` and `Percent` keep the labels, even on a narrow panel. A panel too narrow for even the values puts them in rows.
 
-When you turn off `Show the panel` under Layout, your vitals move to the status line. There they follow `Values` and `Warn before you run low`, but they never draw a meter. In a fight your opponent comes after them, with its health in yellow. When the target you set is the mob you fight, the two share one item. A target on another mob keeps its own item after it.
+When you turn off `Show the panel` under Layout, your vitals move to the status line. The style of the status line sets how they look there. To choose a style, go to Settings under Layout, then Status line, and pick one in `Style`.
 
-When the line is too short, things give way in this order. First the name of your opponent, then the labels. Then each value falls back to the current number. Then the moons, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
+- `Meters` is the default. Your vitals, your opponent, and the tick each fill a part of the line, as wide as the value. Low health gets a stronger fill.
+- `Compact` is a quiet line in small text. Each vital shows its label and its value, with no meter.
+- `Strip` puts a small gauge beside each vital and a bar beside the tick, on a raised background.
+- `Dashboard` makes the line taller. It puts a small caption over each value and a thin bar under each vital.
+
+Every style follows `Values` and `Warn before you run low`. Meters, Strip, and Dashboard draw each vital in the color you pick under `Customize vitals`. In a fight your opponent comes after your vitals, with its health in yellow. When the target you set is the mob you fight, the two share one item. A target on another mob keeps its own item after it. While the panel shows your vitals, Meters, Strip, and Dashboard show the room you are in. Strip and Dashboard also show your character.
+
+When the line is too short, things give way. In `Compact`, the name of your opponent goes first, then the labels. Then each value falls back to the current number. Then the moons, a round trip under 300 ms, and the game time go. The other styles first remove your character, the area, and the moons. Then they remove the labels, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
 
 When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter. This is the same in the panel and on the status line. Nothing turns yellow or red while they are hidden. Your numbers come back with the next update that the game sends. In a fight, the opponent row reads `?` in the same way when the game hides its health or sends none. Its health on the status line does the same.
 
@@ -1030,7 +1038,7 @@ The choice saves in the `[prompt]` table of your profile as `show`. An older ver
 When you snoop a player in the game, a split opens at the top of the terminal column. It shows what the screen of that player shows, in the colors of the game. Your own terminal stays under it, next to your command line, and your caret stays where it was. Vosh asks the game for snoop on every connection, so you have nothing to turn on. A character who never snoops sees no change.
 
 - There is one tab for each player you snoop. A green dot marks a snoop that runs, and a ring marks a snoop that ended. A tab behind the front tab gets brighter and gets a dot when new lines come in. Point at a tab to see how long that player has been quiet.
-- To stop the snoop of the player in front, click `Stop`. It sends `snoop stop Tolliver`. The tab goes away when the game says that the snoop ended. `Stop every snoop` in the more menu sends `snoop stop`, which ends all of them.
+- To stop the snoop of the player in front, click `Stop`. It sends `snoop stop Tolliver`. The tab goes away when the game says that the snoop ended, or when the game shows its next prompt. A game reboot can stop your snoops without a message, and then the next prompt removes the tab. `Stop every snoop` in the more menu sends `snoop stop`, which ends all of them.
 - A snoop can end in other ways, such as when you type the command, when Tolliver quits, or when your connection drops. Then the tab stays with the last thing it showed and tells when it ended. To remove it, click `Close`. When you snoop Tolliver again, the same tab continues.
 - Each tab keeps 5,000 lines in the font and size of your terminal, wrapped at words like your own terminal. `Find` in the more menu searches the tab in front. So does `Cmd+F` while you're in the snoop. `Cmd+C` copies what you select there.
 - Your triggers, highlights, gags, and sounds never act on snoop text, because you wrote them for your own screen. Your Lua still gets `Snoop.Start`, `Snoop.Stop`, and `Snoop.Output` like any other GMCP.
@@ -1066,7 +1074,8 @@ When the tick comes, the count starts again, the sound plays, and your `Send eac
 - While the game is late, the tick pulses gently in the warn color until the tick comes. When Reduce motion is on in your system settings, it stays still in the warn color.
 - To choose which way the tick counts, use the Tick counts row in Settings under Layout, then Status line. `Up` shows the seconds since the last tick. It keeps counting past `Every` while the game is late, such as `31s`.
 - `Down` shows the seconds left until the tick. It goes from `Every` right after a tick down to `1s` in its last second. It waits at `0s` when the game is late. `Down past 0` counts down in the same way, but continues below zero until the tick comes. An early tick starts either count again at once.
-- The Tick and time row at the top of the card sets how the status line shows the tick, the time, and the moons. `Value` shows each value alone, such as `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a ring before the tick.
+- The Tick and time row sets how the `Compact` style shows the tick, the time, and the moons. `Value` shows each value alone, such as `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a ring before the tick. The other styles label these on their own, so the row is off while one of them is on.
+- Meters and Strip show the tick as a bar that fills as the seconds go by. Dashboard shows a ring. With `Down`, the label reads `Next tick`.
 - When the ring counts up, it fills clockwise as the seconds go by. It closes when the tick is due, and stays closed while the game is late. When it counts down, it shows the time left and empties clockwise toward the top. While the game is late, only the faint ring shows.
 - With `Icon`, the time has the sun on its path over the horizon before it. The sun rises on the left, is highest at midday, and sets on the right. After dark, it goes under the horizon as an open dot.
 - To choose the clock for the game time, use the Game time row under Tick and time. `24 hour` reads like `18:00`. `12 hour` reads like `6:00 PM`, with `12:00 AM` at midnight and `12:00 PM` at noon. Each character keeps its own choice.

@@ -119,6 +119,8 @@ pub(crate) struct UiConfigPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vitals_legacy_text: Option<String>,
     pub chip_style: String,
+    pub status_style: String,
+    pub panel_side: String,
     pub tick_count: String,
     pub game_time: String,
     pub affects_style: String,
@@ -214,6 +216,8 @@ impl UiConfigPayload {
             vitals_legacy_style: ui.vitals.legacy_style(),
             vitals_legacy_text: ui.vitals.legacy_text(),
             chip_style: ui.chip_style.clone(),
+            status_style: ui.status_style.clone(),
+            panel_side: ui.panel_side.clone(),
             tick_count: ui.tick_count.clone(),
             game_time: ui.game_time.clone(),
             affects_style: ui.affects_style.clone(),
@@ -327,6 +331,8 @@ pub(crate) enum UiField {
     VitalsTextPrevious(Vec<String>),
     VitalsHit(bool),
     ChipStyle(String),
+    StatusStyle(String),
+    PanelSide(String),
     TickCount(String),
     GameTime(String),
     AffectsStyle(String),
@@ -525,6 +531,8 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             }
             UiField::VitalsHit(v) => ui.vitals_hit = v,
             UiField::ChipStyle(v) => ui.chip_style = cfg::coerce_chip_style(v),
+            UiField::StatusStyle(v) => ui.status_style = cfg::coerce_status_style(v),
+            UiField::PanelSide(v) => ui.panel_side = cfg::coerce_panel_side(v),
             UiField::TickCount(v) => ui.tick_count = cfg::coerce_tick_count(v),
             UiField::GameTime(v) => ui.game_time = cfg::coerce_game_time(v),
             UiField::AffectsStyle(v) => ui.affects_style = cfg::coerce_affects_style(v),
@@ -1564,6 +1572,30 @@ mod tests {
         // An unknown clock saves as the 24 hour one.
         ui.game_time = "noon".into();
         assert_eq!(through_payload(&ui).game_time, "24h");
+    }
+
+    #[test]
+    fn status_style_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.status_style, "meters");
+        for style in ["meters", "compact", "strip", "dashboard"] {
+            ui.status_style = style.into();
+            assert_eq!(through_payload(&ui).status_style, style);
+        }
+        ui.status_style = "loud".into();
+        assert_eq!(through_payload(&ui).status_style, "meters");
+    }
+
+    #[test]
+    fn panel_side_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.panel_side, "right");
+        for side in ["right", "left"] {
+            ui.panel_side = side.into();
+            assert_eq!(through_payload(&ui).panel_side, side);
+        }
+        ui.panel_side = "up".into();
+        assert_eq!(through_payload(&ui).panel_side, "right");
     }
 
     #[test]

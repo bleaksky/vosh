@@ -564,6 +564,26 @@ pub(crate) struct UiConfig {
     /// values coerce back to `"value_only"` server-side.
     #[serde(default = "default_chip_style")]
     pub chip_style: String,
+    /// How the status bar draws. `meters` (the default) fills the bar
+    /// with a zone for each vital and the tick, `compact` is the quiet
+    /// line that `chip_style` labels, `strip` adds gauges on a raised
+    /// ground, and `dashboard` puts a caption over each value on a
+    /// taller bar. Written only once it differs from the default, and
+    /// unknown values coerce back to `meters` on save.
+    #[serde(
+        default = "default_status_style",
+        skip_serializing_if = "is_default_status_style"
+    )]
+    pub status_style: String,
+    /// The side the panel sits on, `right` (the default) or `left`. The
+    /// sessions sidebar takes the other side, and the band buttons go
+    /// with what they open. Written only once it differs from the
+    /// default, and unknown values coerce back to `right` on save.
+    #[serde(
+        default = "default_panel_side",
+        skip_serializing_if = "is_default_panel_side"
+    )]
+    pub panel_side: String,
     /// Which way the status line tick counts. `up` (the default) shows
     /// the seconds since the last tick, `down` the seconds left until
     /// the next and waits at 0 while the game runs late, and
@@ -1017,6 +1037,48 @@ pub(crate) fn coerce_tick_count(value: String) -> String {
         value
     } else {
         default_tick_count()
+    }
+}
+
+/// The ways the status bar draws. Anything else saves as the default,
+/// Meters.
+pub(crate) const STATUS_STYLES: [&str; 4] = ["meters", "compact", "strip", "dashboard"];
+
+fn default_status_style() -> String {
+    "meters".to_string()
+}
+
+fn is_default_status_style(value: &str) -> bool {
+    value == "meters"
+}
+
+/// Keep a known status bar style and turn anything else into `meters`.
+pub(crate) fn coerce_status_style(value: String) -> String {
+    if STATUS_STYLES.contains(&value.as_str()) {
+        value
+    } else {
+        default_status_style()
+    }
+}
+
+/// The sides the panel can sit on. Anything else saves as the default,
+/// the right.
+pub(crate) const PANEL_SIDES: [&str; 2] = ["right", "left"];
+
+fn default_panel_side() -> String {
+    "right".to_string()
+}
+
+fn is_default_panel_side(value: &str) -> bool {
+    value == "right"
+}
+
+/// Keep a known panel side and turn anything else into `right`.
+pub(crate) fn coerce_panel_side(value: String) -> String {
+    if PANEL_SIDES.contains(&value.as_str()) {
+        value
+    } else {
+        default_panel_side()
     }
 }
 
@@ -1542,6 +1604,8 @@ impl Default for UiConfig {
             vitals_hit: false,
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
+            status_style: default_status_style(),
+            panel_side: default_panel_side(),
             tick_count: default_tick_count(),
             game_time: default_game_time(),
             affects_style: default_affects_style(),
@@ -3350,6 +3414,55 @@ name = "haste"
         // before the row.
         assert!(!file("24h").contains("game_time"));
         assert_eq!(file("24h"), ProfileConfig::default().to_toml().unwrap());
+    }
+
+    #[test]
+    fn the_status_style_round_trips_and_stays_out_of_the_file_at_meters() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.status_style, "meters");
+        for style in super::STATUS_STYLES {
+            ui.status_style = style.into();
+            assert_eq!(through_toml(&ui).status_style, style);
+        }
+        let file = |status_style: &str| {
+            ProfileConfig {
+                ui: UiConfig {
+                    status_style: status_style.into(),
+                    ..UiConfig::default()
+                },
+                ..ProfileConfig::default()
+            }
+            .to_toml()
+            .unwrap()
+        };
+        assert!(file("strip").contains("status_style = \"strip\""));
+        assert_eq!(file("meters"), ProfileConfig::default().to_toml().unwrap());
+        assert_eq!(super::coerce_status_style("dashboard".into()), "dashboard");
+        assert_eq!(super::coerce_status_style("loud".into()), "meters");
+    }
+
+    #[test]
+    fn the_panel_side_round_trips_and_stays_out_of_the_file_at_right() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.panel_side, "right");
+        for side in super::PANEL_SIDES {
+            ui.panel_side = side.into();
+            assert_eq!(through_toml(&ui).panel_side, side);
+        }
+        let file = |panel_side: &str| {
+            ProfileConfig {
+                ui: UiConfig {
+                    panel_side: panel_side.into(),
+                    ..UiConfig::default()
+                },
+                ..ProfileConfig::default()
+            }
+            .to_toml()
+            .unwrap()
+        };
+        assert!(file("left").contains("panel_side = \"left\""));
+        assert_eq!(file("right"), ProfileConfig::default().to_toml().unwrap());
+        assert_eq!(super::coerce_panel_side("up".into()), "right");
     }
 
     #[test]

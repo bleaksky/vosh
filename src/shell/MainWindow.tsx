@@ -47,6 +47,8 @@ import {
 } from '../stores/session/sessionsStore';
 import { useConnection } from '../stores/session/useConnection';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
+import { useStatusStyle } from '../stores/config/statusStyleStore';
+import { usePanelSide } from '../stores/config/panelSideStore';
 import { useScreenReader } from '../stores/config/screenReaderStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
@@ -88,6 +90,8 @@ function MainWindow() {
   // band and the palette show, hide, and size the panel through it,
   // and the panel edits the tree through it.
   const panelLayout = usePanelLayout();
+  const statusStyle = useStatusStyle();
+  const panelSide = usePanelSide();
   // Where your prompt shows, and whether this profile reads one.
   const promptShow = usePromptShow();
   const promptPinned = promptShow?.show === 'pinned' && promptShow.capture;
@@ -512,6 +516,7 @@ function MainWindow() {
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
           onCloseSession={closing.closeSession}
+          panelSide={panelSide}
         />
       }
       snoop={
@@ -527,9 +532,12 @@ function MainWindow() {
       terminal={terminalAreaElement}
       reader={<ScreenReaderFeed />}
       input={inputElement}
+      statusStyle={statusStyle}
+      panelSide={panelSide}
       statusLine={
         <StatusLine
           connected={connection.live}
+          character={connection.character ?? null}
           showVitals={lineShowsVitals}
           textColors={textColors}
         />

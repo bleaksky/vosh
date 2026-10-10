@@ -247,6 +247,7 @@ event vosh://native-copied app heard
 event vosh://native-grid-size app heard
 event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
+event vosh://panel-side-changed app page heard
 event vosh://paste-line-delay-changed page heard
 event vosh://plugins-changed app heard
 event vosh://preset-edits-changed app heard
@@ -268,6 +269,7 @@ event vosh://settings-goto-tab page heard
 event vosh://snoop-find app heard
 event vosh://spellcheck-prompt-changed page heard
 event vosh://split-divider-changed page heard
+event vosh://status-style-changed app page heard
 event vosh://terminal-clicked app heard
 event vosh://terminal-cursor app heard
 event vosh://terminal-line-height-changed page heard

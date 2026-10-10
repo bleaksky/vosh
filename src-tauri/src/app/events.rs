@@ -357,6 +357,14 @@ pub(crate) const GAME_TIME_CHANGED: &str = "vosh://game-time-changed";
 /// a replace. Settings sends its own saves. The payload is the style,
 /// such as `"value_only"`. `subscribeChipStyleChanged` hears it.
 pub(crate) const CHIP_STYLE_CHANGED: &str = "vosh://chip-style-changed";
+/// Sent to every window with the status bar style, on a replace.
+/// Settings sends its own saves. The payload is the style, such as
+/// `"meters"`. `subscribeStatusStyleChanged` hears it.
+pub(crate) const STATUS_STYLE_CHANGED: &str = "vosh://status-style-changed";
+/// Sent to every window with the side the panel sits on, on a replace.
+/// Settings sends its own saves. The payload is `"right"` or `"left"`.
+/// `subscribePanelSideChanged` hears it.
+pub(crate) const PANEL_SIDE_CHANGED: &str = "vosh://panel-side-changed";
 /// Sent to every window with the Affects pane's style, marker, tint,
 /// and the hours at which an affect runs out and is almost gone,
 /// whenever they change: a pick from the pane menu, a Settings save
@@ -681,6 +689,8 @@ pub(crate) struct ProfileUiEvents {
     pub(crate) tick_count: String,
     pub(crate) game_time: String,
     pub(crate) chip_style: String,
+    pub(crate) status_style: String,
+    pub(crate) panel_side: String,
     pub(crate) affects_display: AffectsDisplay,
     pub(crate) chat_colors: std::collections::BTreeMap<String, String>,
     pub(crate) tick: TickConfig,
@@ -697,6 +707,8 @@ impl ProfileUiEvents {
             event_json(TICK_COUNT_CHANGED, &self.tick_count),
             event_json(GAME_TIME_CHANGED, &self.game_time),
             event_json(CHIP_STYLE_CHANGED, &self.chip_style),
+            event_json(STATUS_STYLE_CHANGED, &self.status_style),
+            event_json(PANEL_SIDE_CHANGED, &self.panel_side),
             event_json(AFFECTS_DISPLAY_CHANGED, &self.affects_display),
             event_json(CHAT_COLORS_CHANGED, &self.chat_colors),
             event_json(TICK_CONFIG_CHANGED, &self.tick),
@@ -732,6 +744,8 @@ pub(crate) fn profile_ui_events(state: &AppState, p: &Profile) -> ProfileUiEvent
         tick_count: p.ui.tick_count.clone(),
         game_time: p.ui.game_time.clone(),
         chip_style: p.ui.chip_style.clone(),
+        status_style: p.ui.status_style.clone(),
+        panel_side: p.ui.panel_side.clone(),
         affects_display: AffectsDisplay::of(&p.ui),
         chat_colors: p.ui.chat_colors.clone(),
         tick: p.tick.config.clone(),
@@ -1059,6 +1073,8 @@ mod tests {
         file.ui.chip_style = "caption_value".into();
         file.ui.tick_count = "down_past_zero".into();
         file.ui.game_time = "12h".into();
+        file.ui.status_style = "dashboard".into();
+        file.ui.panel_side = "left".into();
         let _ = file.apply_to(&mut profile);
         let events = super::profile_ui_events(&state, &profile);
         assert_eq!(
@@ -1072,6 +1088,14 @@ mod tests {
         assert_eq!(
             event_payload(&events, "vosh://game-time-changed"),
             serde_json::json!("12h")
+        );
+        assert_eq!(
+            event_payload(&events, "vosh://status-style-changed"),
+            serde_json::json!("dashboard")
+        );
+        assert_eq!(
+            event_payload(&events, "vosh://panel-side-changed"),
+            serde_json::json!("left")
         );
 
         // A reset puts back the 24 hour clock.
@@ -1167,6 +1191,8 @@ mod tests {
                 "vosh://tick-count-changed",
                 "vosh://game-time-changed",
                 "vosh://chip-style-changed",
+                "vosh://status-style-changed",
+                "vosh://panel-side-changed",
                 "vosh://affects-display-changed",
                 "vosh://chat-colors-changed",
                 "vosh://tick-config-changed",
