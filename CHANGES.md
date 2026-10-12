@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.95.4 - 2026-10-12
+
+Letters hold still when you switch sessions.
+
+- On macOS, the game text no longer stretches to the right for a moment as you switch sessions, and it no longer stays stretched until you switch away and back.
+
 ## v0.95.3 - 2026-10-10
 
 Choose how your status bar looks, put the panel on the left, and keep spell check on.
