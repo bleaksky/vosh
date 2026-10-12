@@ -3,15 +3,19 @@ import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 import { PaneSizer, type SizedPane } from './paneSizer';
 
-const native = vi.hoisted(() => ({ on: false }));
+const native = vi.hoisted(() => ({ on: false, metrics: [] as unknown[] }));
 vi.mock('./terminalRenderer', () => ({ nativeSurfaceEnabled: () => native.on }));
 vi.mock('../ipc/nativeSurface', () => ({
   nativeSurfaceSetBounds: () => Promise.resolve(),
-  nativeSurfaceSetCellMetrics: () => Promise.resolve(),
+  nativeSurfaceSetCellMetrics: (m: unknown) => {
+    native.metrics.push(m);
+    return Promise.resolve();
+  },
 }));
 
 beforeEach(() => {
   native.on = false;
+  native.metrics = [];
 });
 
 /** A pane the FitAddon would fit at 153 by 40, as xterm's own cell and
@@ -53,5 +57,27 @@ describe('PaneSizer.fitKept', () => {
     const history = pane(true);
     history.sizer.fitKept();
     expect(history.resize).toHaveBeenCalledWith(153, 40);
+  });
+});
+
+describe('PaneSizer.reportCellMetrics', () => {
+  it('reports one cell from the DOM renderer and from WebGL', () => {
+    // A pane that shows again reports from the DOM renderer, which keeps
+    // the fraction, before WebGL takes over with the width floored.
+    // Rounded, 16.86 read 17 and then 16, and each switch rebuilt the
+    // atlas twice.
+    native.on = true;
+    const { sizer } = pane(false);
+    const term = (sizer as unknown as { pane: SizedPane }).pane.term as unknown as {
+      dimensions: unknown;
+    };
+    const cell = (width: number) => ({
+      device: { cell: { width, height: 34 }, char: { height: 34 } },
+    });
+    term.dimensions = cell(16.86);
+    sizer.reportCellMetrics();
+    term.dimensions = cell(16);
+    sizer.reportCellMetrics();
+    expect(native.metrics).toEqual([{ width: 16, height: 34, charHeight: 34 }]);
   });
 });
