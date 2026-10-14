@@ -103,6 +103,15 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
   // local index on each navigation and wrap it against that count.
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // A search went out and its count has not come back yet. The native
+  // surface answers a search with true at once and sends the count a
+  // moment later, so a count of none that answers it means no match.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!asked.current) return;
+    asked.current = false;
+    if (results?.count === 0) setStatus('miss');
+  }, [results]);
 
   useImperativeHandle(
     ref,
@@ -139,12 +148,14 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
 
   const runNext = () => {
     if (query.length === 0) return;
+    asked.current = true;
     const hit = onFindNext(query, options);
     setStatus(hit ? 'hit' : 'miss');
     if (hit) setActiveIndex((i) => (count > 0 ? (i + 1 + count) % count : 0));
   };
   const runPrevious = () => {
     if (query.length === 0) return;
+    asked.current = true;
     const hit = onFindPrevious(query, options);
     setStatus(hit ? 'hit' : 'miss');
     if (hit) setActiveIndex((i) => (count > 0 ? (i - 1 + count) % count : 0));
@@ -153,6 +164,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
   // Any change to the query or match options restarts the search, so
   // the next navigation should land on the first hit again.
   const resetSearch = () => {
+    asked.current = false;
     setStatus('idle');
     setActiveIndex(-1);
   };
