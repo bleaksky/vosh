@@ -13,7 +13,8 @@ import { SunPathIcon } from './icons';
 import { MoonPhaseIcon } from './MoonPhaseIcon';
 import type { ClockMoons, ClockTick, ClockTime } from './StatusClock';
 import { roundTripText, roundTripTone, type RoundTripTone } from './roundTrip';
-import { partsGone, tickShare, useGiveWay, BAR_GIVE_WAY, type BarStyle } from './statusBarFit';
+import { useGiveWay } from '../lib/useGiveWay';
+import { partsGone, tickShare, BAR_GIVE_WAY, type BarStyle } from './statusBarFit';
 
 // The Strip, Dashboard and Meters styles of the status bar, drawn from
 // plain values so a test can render every case. StatusLine reads the
