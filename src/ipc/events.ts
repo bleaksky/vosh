@@ -65,6 +65,7 @@ export const TRACKED_AFFECTS_CHANGED = 'vosh://tracked-affects-changed';
 export const TICK_COUNT_CHANGED = 'vosh://tick-count-changed';
 export const STATUS_STYLE_CHANGED = 'vosh://status-style-changed';
 export const PANEL_SIDE_CHANGED = 'vosh://panel-side-changed';
+export const STATS_STYLE_CHANGED = 'vosh://stats-style-changed';
 export const GAME_TIME_CHANGED = 'vosh://game-time-changed';
 export const CHIP_STYLE_CHANGED = 'vosh://chip-style-changed';
 export const AFFECTS_DISPLAY_CHANGED = 'vosh://affects-display-changed';

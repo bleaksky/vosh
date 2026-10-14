@@ -71,6 +71,7 @@
     "chip_style": "value_only",
     "status_style": "compact",
     "panel_side": "right",
+    "stats_style": "sheet",
     "tick_count": "up",
     "game_time": "24h",
     "affects_style": "timers",

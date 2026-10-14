@@ -5,7 +5,8 @@
 //! `src/test/aabahranViews.test.ts` hold both readings to one record.
 //! No webview store reads Char.State or Room.Weather, so their records
 //! are the engine's alone (`ENGINE_ONLY` in that test) until a pane
-//! brings their stores back.
+//! brings their stores back. The engine does not read Char.Stats, so its
+//! record is the page's alone ([`PAGE_ONLY`]).
 //!
 //! Each view is what a pane or a piece shows from the packet alone, with
 //! no hidden model: the vitals, the affects one row per name, the fight
@@ -24,6 +25,10 @@ use vosh_prompt::values::gmcp::Snapshot;
 use vosh_prompt::{ClientValues, FieldRef, Resolved, Value, Values, Vars};
 
 const VIEWS: &str = include_str!("../../../fixtures/gmcp/aabahran/views.json");
+
+/// Packets the engine does not read and a page store does, whose records
+/// are the page's alone (`view` in `src/test/aabahranViews.test.ts`).
+const PAGE_ONLY: [&str; 1] = ["char-stats.gmcp"];
 
 /// What a resolved field reads as in the record.
 fn field_json(resolved: Resolved) -> Json {
@@ -199,6 +204,9 @@ fn the_engine_reads_every_packet_as_the_record_says() {
     }
     // Every view names a fixture.
     for file in views.keys() {
+        if PAGE_ONLY.contains(&file.as_str()) {
+            continue;
+        }
         assert!(seen.contains(&file.as_str()), "{file} is no fixture");
     }
 }

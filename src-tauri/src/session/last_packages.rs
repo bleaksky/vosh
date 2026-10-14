@@ -1,6 +1,7 @@
 //! The last payload of each GMCP package a window reads as it opens.
 //! Aabahran resends `Char.Affects` every tick, on each change, and at
-//! login, and `Char.Vitals` and `Char.Combat` as they change, and the
+//! login, `Char.Vitals` and `Char.Combat` as they change, and
+//! `Char.Stats` at login and on a prompt after a number moves, and the
 //! session loop emits each one as `session://gmcp/<package>`. A window
 //! that opens between those, Settings among them, reads these payloads
 //! so it shows your affects and vitals at once instead of after the next
@@ -20,9 +21,16 @@ use crate::affects::AFFECTS_PACKAGE;
 pub(crate) const VITALS_PACKAGE: &str = "Char.Vitals";
 /// The package of the fight you are in.
 pub(crate) const COMBAT_PACKAGE: &str = "Char.Combat";
+/// The package of the numbers on your score sheet.
+pub(crate) const STATS_PACKAGE: &str = "Char.Stats";
 
 /// The packages whose last payload the session keeps.
-const KEPT: [&str; 3] = [AFFECTS_PACKAGE, VITALS_PACKAGE, COMBAT_PACKAGE];
+const KEPT: [&str; 4] = [
+    AFFECTS_PACKAGE,
+    VITALS_PACKAGE,
+    COMBAT_PACKAGE,
+    STATS_PACKAGE,
+];
 
 /// How many `Char.Vitals` the history keeps, a minute or two of play.
 pub(crate) const HISTORY: usize = 60;
@@ -133,6 +141,17 @@ mod tests {
 
         snapshot.clear();
         assert_eq!(snapshot.get(AFFECTS_PACKAGE), None);
+    }
+
+    #[test]
+    fn keeps_the_last_stats_until_cleared() {
+        let snapshot = LastPackages::default();
+        assert_eq!(snapshot.get(STATS_PACKAGE), None);
+        let stats = json!({ "str": { "cur": 22, "perm": 20, "max": 23, "over": 1 } });
+        snapshot.observe(STATS_PACKAGE, &stats);
+        assert_eq!(snapshot.get(STATS_PACKAGE), Some(stats));
+        snapshot.clear();
+        assert_eq!(snapshot.get(STATS_PACKAGE), None);
     }
 
     #[test]
