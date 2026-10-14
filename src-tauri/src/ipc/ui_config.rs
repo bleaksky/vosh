@@ -1577,13 +1577,13 @@ mod tests {
     #[test]
     fn status_style_round_trips() {
         let mut ui = UiConfig::default();
-        assert_eq!(ui.status_style, "meters");
-        for style in ["meters", "compact", "strip", "dashboard"] {
+        assert_eq!(ui.status_style, "compact");
+        for style in ["compact", "meters", "strip", "dashboard"] {
             ui.status_style = style.into();
             assert_eq!(through_payload(&ui).status_style, style);
         }
         ui.status_style = "loud".into();
-        assert_eq!(through_payload(&ui).status_style, "meters");
+        assert_eq!(through_payload(&ui).status_style, "compact");
     }
 
     #[test]

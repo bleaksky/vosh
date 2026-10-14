@@ -374,18 +374,19 @@ export function normalizeChipStyle(raw: unknown): ChipStyle {
   return raw === 'caption_value' || raw === 'icon_value' ? raw : 'value_only';
 }
 
-/** The ways the status bar draws. `meters`, the default, fills the
- *  bar with a zone for each vital and the tick. `compact` is the quiet
- *  line, with the tick and the time labeled by chip_style. `strip`
- *  adds gauges on a raised ground, and `dashboard` puts a caption over
- *  each value on a taller bar. */
-export const STATUS_STYLES = ['meters', 'compact', 'strip', 'dashboard'] as const;
+/** The ways the status bar draws. `compact`, the default, is the
+ *  quiet line, with the tick and the time labeled by chip_style. A
+ *  profile that never picked a style keeps it. `meters` fills the bar
+ *  with a zone for each vital and the tick. `strip` adds gauges on a
+ *  raised ground, and `dashboard` puts a caption over each value on a
+ *  taller bar. */
+export const STATUS_STYLES = ['compact', 'meters', 'strip', 'dashboard'] as const;
 export type StatusStyle = (typeof STATUS_STYLES)[number];
 
 /** Read a stored or broadcast status bar style. Anything unknown is
- *  Meters, the default. */
+ *  Compact, the default. */
 export function normalizeStatusStyle(raw: unknown): StatusStyle {
-  return STATUS_STYLES.find((style) => style === raw) ?? 'meters';
+  return STATUS_STYLES.find((style) => style === raw) ?? 'compact';
 }
 
 /** The sides the panel sits on. `right`, the default, or `left`. The

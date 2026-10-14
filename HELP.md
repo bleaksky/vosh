@@ -956,8 +956,8 @@ Each default draws the panel you already know, so nothing changes until you choo
 
 When you turn off `Show the panel` under Layout, your vitals move to the status line. The style of the status line sets how they look there. To choose a style, go to Settings under Layout, then Status line, and pick one in `Style`.
 
-- `Meters` is the default. Your vitals, your opponent, and the tick each fill a part of the line, as wide as the value. Low health gets a stronger fill.
-- `Compact` is a quiet line in small text. Each vital shows its label and its value, with no meter.
+- `Compact` is the default. It is a quiet line in small text. Each vital shows its label and its value, with no meter.
+- `Meters` gives your vitals, your opponent, and the tick each a part of the line that fills as wide as the value. Low health gets a stronger fill.
 - `Strip` puts a small gauge beside each vital and a bar beside the tick, on a raised background.
 - `Dashboard` makes the line taller. It puts a small caption over each value and a thin bar under each vital.
 

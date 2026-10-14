@@ -564,12 +564,13 @@ pub(crate) struct UiConfig {
     /// values coerce back to `"value_only"` server-side.
     #[serde(default = "default_chip_style")]
     pub chip_style: String,
-    /// How the status bar draws. `meters` (the default) fills the bar
-    /// with a zone for each vital and the tick, `compact` is the quiet
-    /// line that `chip_style` labels, `strip` adds gauges on a raised
+    /// How the status bar draws. `compact` (the default) is the quiet
+    /// line that `chip_style` labels, `meters` fills the bar with a zone
+    /// for each vital and the tick, `strip` adds gauges on a raised
     /// ground, and `dashboard` puts a caption over each value on a
-    /// taller bar. Written only once it differs from the default, and
-    /// unknown values coerce back to `meters` on save.
+    /// taller bar. A profile that never picked one keeps the line it
+    /// had before the styles came. Written only once it differs from
+    /// the default, and unknown values coerce back to `compact` on save.
     #[serde(
         default = "default_status_style",
         skip_serializing_if = "is_default_status_style"
@@ -1041,18 +1042,18 @@ pub(crate) fn coerce_tick_count(value: String) -> String {
 }
 
 /// The ways the status bar draws. Anything else saves as the default,
-/// Meters.
-pub(crate) const STATUS_STYLES: [&str; 4] = ["meters", "compact", "strip", "dashboard"];
+/// Compact.
+pub(crate) const STATUS_STYLES: [&str; 4] = ["compact", "meters", "strip", "dashboard"];
 
 fn default_status_style() -> String {
-    "meters".to_string()
+    "compact".to_string()
 }
 
 fn is_default_status_style(value: &str) -> bool {
-    value == "meters"
+    value == "compact"
 }
 
-/// Keep a known status bar style and turn anything else into `meters`.
+/// Keep a known status bar style and turn anything else into `compact`.
 pub(crate) fn coerce_status_style(value: String) -> String {
     if STATUS_STYLES.contains(&value.as_str()) {
         value
@@ -3417,9 +3418,9 @@ name = "haste"
     }
 
     #[test]
-    fn the_status_style_round_trips_and_stays_out_of_the_file_at_meters() {
+    fn the_status_style_round_trips_and_stays_out_of_the_file_at_compact() {
         let mut ui = UiConfig::default();
-        assert_eq!(ui.status_style, "meters");
+        assert_eq!(ui.status_style, "compact");
         for style in super::STATUS_STYLES {
             ui.status_style = style.into();
             assert_eq!(through_toml(&ui).status_style, style);
@@ -3436,9 +3437,14 @@ name = "haste"
             .unwrap()
         };
         assert!(file("strip").contains("status_style = \"strip\""));
-        assert_eq!(file("meters"), ProfileConfig::default().to_toml().unwrap());
+        assert!(file("meters").contains("status_style = \"meters\""));
+        assert_eq!(file("compact"), ProfileConfig::default().to_toml().unwrap());
         assert_eq!(super::coerce_status_style("dashboard".into()), "dashboard");
-        assert_eq!(super::coerce_status_style("loud".into()), "meters");
+        assert_eq!(super::coerce_status_style("loud".into()), "compact");
+        // A profile from before the styles, or one that never picked a
+        // style, keeps the quiet line it had.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
+        assert_eq!(old.ui.status_style, "compact");
     }
 
     #[test]
