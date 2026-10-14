@@ -25,6 +25,7 @@ export const PANE_LABELS: Record<PaneType, string> = {
   map: 'Map',
   affects: 'Affects',
   group: 'Group',
+  stats: 'Stats',
   chat: 'Chat',
   imm: 'Staff queues',
   writing: 'Writing',

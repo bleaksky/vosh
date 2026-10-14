@@ -427,6 +427,400 @@
   color: var(--danger-text);
 }
 
+/* ── Stats ───────────────────────────────────────────────────────── */
+
+/* Your score sheet's numbers in three styles. Every length that sits
+   with the text scales with the panel size, and the insets are the
+   panel's, text at 18 and the right edge at 12. The meters are the
+   Group pane's 48 by 3 and the figures the Ledger vitals'. The tones
+   follow the score sheet (statsView.ts). */
+.pane-stats-body {
+  padding-bottom: round(10px * var(--mud-scale), 1px);
+}
+
+/* A caption over a group of numbers, in the pane label's type. */
+.pane-stats-caption {
+  margin: 0;
+  padding: round(10px * var(--mud-scale), 1px) 12px round(4px * var(--mud-scale), 1px) 18px;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+}
+
+/* The luck bar's six steps on the meter's 3 px, lit ones secondary. */
+.pane-stats-luck {
+  display: flex;
+  gap: 2px;
+}
+
+.pane-stats-luck > i {
+  width: 6px;
+  height: 3px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--tertiary) 38%, transparent);
+}
+
+.pane-stats-luck > i.is-lit {
+  background: var(--secondary);
+}
+
+/* A 48 by 3 meter, with a 1 px tick where you trained a stat. */
+.pane-stats-meter {
+  position: relative;
+  display: block;
+  width: 48px;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--divider);
+}
+
+.pane-stats-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--secondary);
+}
+
+.pane-stats-mark {
+  position: absolute;
+  top: -2px;
+  width: 1px;
+  height: 7px;
+  margin-left: -0.5px;
+  background: var(--text);
+}
+
+/* Rows. One column: the name, the meter, the value and a short note,
+   aligned down the pane. A row with no meter gives its room to the
+   name. Bare drops the meters, and the stats read in three letters. */
+.pane-stats-rows {
+  --stats-value-w: round(34px * var(--mud-scale), 1px);
+  --stats-aux-w: round(30px * var(--mud-scale), 1px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pane-stats-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px var(--stats-value-w) var(--stats-aux-w);
+  align-items: center;
+  column-gap: 8px;
+  height: var(--mud-row);
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.pane-stats-row.is-span > .pane-stats-row-name {
+  grid-column: span 2;
+}
+
+.pane-stats-rows.is-bare > .pane-stats-row {
+  grid-template-columns: minmax(0, 1fr) var(--stats-value-w) var(--stats-aux-w);
+}
+
+.pane-stats-rows.is-bare > .pane-stats-row.is-span > .pane-stats-row-name {
+  grid-column: auto;
+}
+
+.pane-stats-rows.is-bare .pane-stats-meter {
+  display: none;
+}
+
+/* Tight drops the max and the percents after the values too. */
+.pane-stats-rows.is-tight > .pane-stats-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pane-stats-rows.is-tight .pane-stats-row-aux {
+  display: none;
+}
+
+.pane-stats-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.pane-stats-row-note {
+  margin-left: 6px;
+  font-size: round(11px * var(--mud-scale), 1px);
+}
+
+.pane-stats-row-value {
+  text-align: right;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.pane-stats-row-aux {
+  text-align: right;
+  font-size: round(11px * var(--mud-scale), 1px);
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+/* The luck bar takes the meter's place, or the values' in a bare row. */
+.pane-stats-row-luck {
+  display: flex;
+}
+
+.pane-stats-rows.is-bare .pane-stats-row-luck {
+  grid-column: span 2;
+  justify-content: flex-end;
+}
+
+.pane-stats-rows.is-tight .pane-stats-row-luck {
+  grid-column: auto;
+}
+
+/* Ledger. Each number a 10 px caption over a 16 px figure, the Ledger
+   vitals' type, a stat's line under it. The five stats sit across the
+   pane, then take three columns, then lose their max, then take two,
+   then one. The rest fill as many columns as fit. */
+.pane-stats-ledger {
+  display: grid;
+  column-gap: 12px;
+  row-gap: round(10px * var(--mud-scale), 1px);
+  padding: 2px 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.pane-stats-ledger.is-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.pane-stats-ledger.is-stats.is-wrap,
+.pane-stats-ledger.is-stats.is-bare {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pane-stats-ledger.is-stats.is-pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pane-stats-ledger.is-stats.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pane-stats-ledger.is-bare .pane-stats-cell-small.is-max,
+.pane-stats-ledger.is-pair .pane-stats-cell-small.is-max {
+  display: none;
+}
+
+.pane-stats-ledger.is-combat {
+  --cell-min: round(56px * var(--mud-scale), 1px);
+  grid-template-columns: repeat(auto-fit, minmax(max(var(--cell-min), (100% - 24px) / 3), 1fr));
+  margin-top: round(14px * var(--mud-scale), 1px);
+}
+
+/* Armor in two columns or one, so no kind sits alone in a row. */
+.pane-stats-ledger.is-armor {
+  --cell-min: round(72px * var(--mud-scale), 1px);
+  grid-template-columns: repeat(auto-fit, minmax(max(var(--cell-min), (100% - 12px) / 2), 1fr));
+}
+
+.pane-stats-ledger.is-saves {
+  --cell-min: round(72px * var(--mud-scale), 1px);
+  grid-template-columns: repeat(auto-fit, minmax(max(var(--cell-min), (100% - 24px) / 3), 1fr));
+}
+
+.pane-stats-cell {
+  min-width: 0;
+}
+
+.pane-stats-cell-label {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.pane-stats-cell-label > [data-fit] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-stats-cell-over {
+  flex: none;
+  font-weight: 500;
+  color: var(--warn);
+}
+
+.pane-stats-cell-figure {
+  display: flex;
+  align-items: baseline;
+  height: round(20px * var(--mud-scale), 1px);
+  margin-top: round(3px * var(--mud-scale), 1px);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pane-stats-cell-current {
+  font-size: round(16px * var(--mud-scale), 1px);
+  line-height: round(20px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.pane-stats-cell-small {
+  margin-left: 3px;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--tertiary);
+}
+
+.pane-stats-cell-figure > .pane-stats-luck {
+  align-self: center;
+  width: 100%;
+  max-width: 58px;
+}
+
+.pane-stats-cell-figure > .pane-stats-luck > i {
+  flex: 1 1 0;
+  width: auto;
+  height: 4px;
+}
+
+.pane-stats-line {
+  position: relative;
+  display: block;
+  height: 2px;
+  margin-top: round(4px * var(--mud-scale), 1px);
+  border-radius: 1px;
+  background: var(--divider);
+}
+
+.pane-stats-line > .pane-stats-mark {
+  height: 6px;
+}
+
+/* Score sheet. Two columns as `score` lays them out, which stack into
+   one where two do not fit. A stat reads trained, then current in
+   brackets, or current alone once the pane runs short. */
+.pane-stats-sheet {
+  --sheet-col: round(118px * var(--mud-scale), 1px);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--sheet-col), 100%), 1fr));
+  column-gap: 20px;
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.pane-stats-sheet-list {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pane-stats-sheet-list .pane-stats-caption {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.pane-stats-sheet-row {
+  display: flex;
+  align-items: center;
+  height: var(--mud-row);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.pane-stats-sheet-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--secondary);
+}
+
+.pane-stats-sheet-value {
+  flex: none;
+  margin-left: 8px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.pane-stats-sheet-paren {
+  font-weight: 400;
+  color: var(--tertiary);
+}
+
+.pane-stats-sheet-cur {
+  font-weight: 500;
+}
+
+.pane-stats-sheet-pct {
+  flex: none;
+  width: round(28px * var(--mud-scale), 1px);
+  text-align: right;
+  font-size: round(11px * var(--mud-scale), 1px);
+  color: var(--tertiary);
+}
+
+/* Bare shows each stat's current value alone and drops the percents. */
+.pane-stats-body.is-bare .pane-stats-sheet-pct {
+  display: none;
+}
+
+.pane-stats-sheet-over {
+  flex: none;
+  min-width: round(14px * var(--mud-scale), 1px);
+  margin-left: 3px;
+  font-size: round(10px * var(--mud-scale), 1px);
+}
+
+/* The tones come last, so they win over each part's own color. */
+.pane-stats .is-up {
+  color: var(--success);
+}
+
+.pane-stats .is-down,
+.pane-stats .is-warn {
+  color: var(--warn);
+}
+
+.pane-stats .is-danger {
+  color: var(--danger-text);
+}
+
+.pane-stats .is-quiet {
+  color: var(--tertiary);
+}
+
+.pane-stats .pane-stats-fill.is-up {
+  background: var(--success);
+}
+
+.pane-stats .pane-stats-fill.is-down,
+.pane-stats .pane-stats-fill.is-warn {
+  background: var(--warn);
+}
+
+.pane-stats .pane-stats-fill.is-danger {
+  background: var(--danger);
+}
+
 /* ── Lua panes ───────────────────────────────────────────────────── */
 
 /* A line a plugin draws, in the game face like chat, its colors on the

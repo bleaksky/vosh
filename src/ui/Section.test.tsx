@@ -63,6 +63,7 @@ describe('the Settings sections that link to help', () => {
       'play.scroll-back',
       'shape.group-affects',
       'shape.prompt-show',
+      'shape.stats',
       'tick.tick-timer',
     ]);
     for (const link of links) {

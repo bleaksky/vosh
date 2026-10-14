@@ -862,7 +862,7 @@ Triggers work differently. Two groups can each have a trigger with the same name
 The panel holds your panes. At first it is on the right side of the window. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
 
 - To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the command palette. While the panel is hidden, your vitals move to the status line.
-- To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues. Staff queues joins the list when the game sends it.
+- To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Stats, Chat, and Staff queues. Staff queues joins the list when the game sends it.
 - To open the menu of a pane, click the more button in its header. `Split right` and `Split down` put the first pane that the panel doesn't show beside it or under it. When the panel shows all the panes, they put in another Chat pane. On a Chat pane they put in another Chat pane.
 - In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
 - To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
@@ -1054,6 +1054,25 @@ Each session keeps its own snoops. Its row in the sessions sidebar shows an eye 
 The session log keeps each line of a snoop. The line starts with the name of the player, such as `Tolliver|`. To read it again after the tab is gone, search your logs for `^Tolliver\|`.
 
 While a snoop is open, type `snoop` in the command palette. You then get `Go to snoop`, `Next snoop`, `Stop snooping Tolliver`, `Stop every snoop`, `Open snoop in a window`, and `Close ended snoops`. Snoop has no row in Settings.
+
+### 4.9 Read your stats
+
+<!-- id: shape.stats -->
+
+The Stats pane shows the numbers on your score sheet. These are your five stats, your luck, your hitroll and damroll, your armor class, and your saves. To add the pane, use `Add a pane` in the title band.
+
+- To choose how the pane draws, go to Settings under Layout, then Stats. Or use `Style` in the menu of the pane. Each character keeps its own choice.
+- `Score sheet` is the default. It puts the numbers in two columns, as `score` does. Each stat shows the value that you trained, and then the value now in brackets.
+- `Rows` gives each number its own row. A small meter beside each stat fills from 3 to the highest value that your race and class can have. A short line across the meter shows the value that you trained.
+- `Ledger` shows large numbers under small captions, like the `Ledger` vitals. The line under each stat works like the meter in `Rows`.
+- A stat above the value that you trained is green. A stat below it is yellow. The score sheet uses the same colors.
+- `^1` after a stat means that your gear or your spells put 1 point past the highest value. That point does nothing.
+- Each armor class shows the percent of it that counts. The percent is yellow below 80%, and red below 50%, as on the score sheet. A lower armor class is better.
+- A lower save is better. A save above zero is red, because it works against you. A save of 0 is dim.
+- Luck shows as six steps, like the bar on the score sheet. The game does not send the number.
+- When the pane is narrow, each style moves its numbers closer together. `Rows` removes the meters, and then the highest values and the percents. `Ledger` puts the stats in fewer columns. `Score sheet` puts its columns one under the other, and then shows only the value now. Put the pointer on a row to read all of its numbers.
+
+The numbers come from `Char.Stats`. The game sends it when you log in. Each time the game shows you a prompt, it also sends the numbers again if one of them changed. So the pane is never older than your last prompt. Before the first numbers come, the pane says that your stats show when you log in. When you disconnect, the pane empties again.
 
 ## Tick and target
 

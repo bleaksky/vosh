@@ -21,6 +21,7 @@ import { panelVitals } from './vitalsView';
 import { AffectsPane } from './affects/AffectsPane';
 import { ChatPane } from './chat/ChatPane';
 import { GroupPane } from './group/GroupPane';
+import { StatsPane } from './stats/StatsPane';
 import { ImmPane } from './imm/ImmPane';
 import { LuaPane } from './lua/LuaPane';
 import { MapPane } from './map/MapPane';
@@ -79,6 +80,7 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
   map: () => <MapPane />,
   affects: () => <AffectsPane />,
   group: () => <GroupPane />,
+  stats: () => <StatsPane />,
   chat: () => <ChatPane />,
   imm: () => <ImmPane />,
   writing: () => <WritingPane />,
@@ -180,7 +182,7 @@ export function PanelHost({
           ))}
           {root && root.children.length === 0 && (
             <p className="pane-empty panel-empty">
-              Add a pane to show the map, your affects, your group, or chat.
+              Add a pane to show the map, your affects, your group, your stats, or chat.
             </p>
           )}
         </div>

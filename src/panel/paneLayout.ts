@@ -22,7 +22,7 @@ import { pendingWrites } from '../lib/pendingWrites';
  *  CHAT_PANES_MAX Chat panes and one of each other type. `writing` is
  *  the writing card pinned to the panel, which only the card's pin adds
  *  (WRITING_PANE). Mirrors PANE_TYPES in src-tauri/src/profile/panes.rs. */
-export const PANE_TYPES = ['map', 'affects', 'group', 'chat', 'imm', 'writing'] as const;
+export const PANE_TYPES = ['map', 'affects', 'group', 'stats', 'chat', 'imm', 'writing'] as const;
 export type PaneType = (typeof PANE_TYPES)[number];
 
 /** The pane the writing card lives in while you pin it. Add a pane,
@@ -98,6 +98,7 @@ export const PANE_MIN_H: Record<PaneKind, number> = {
   map: 180,
   affects: PANE_HEADER_PX + 6 * PANE_ROW_PX,
   group: PANE_HEADER_PX + 3 * PANE_ROW_PX,
+  stats: PANE_HEADER_PX + 6 * PANE_ROW_PX,
   chat: 120,
   imm: PANE_HEADER_PX + 3 * PANE_ROW_PX,
   writing: 240,

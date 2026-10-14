@@ -66,9 +66,9 @@ function lay(...panes: PaneType[]): void {
 
 describe('the Writing pane', () => {
   it('is never offered, since only the card pins it', () => {
-    lay('map', 'affects', 'group', 'chat');
+    lay('map', 'affects', 'group', 'stats', 'chat');
     expect(paneTypesToAdd(state.layout?.root ?? null)).not.toContain('writing');
-    expect(paneTypesToAdd(null)).toEqual(['map', 'affects', 'group', 'chat']);
+    expect(paneTypesToAdd(null)).toEqual(['map', 'affects', 'group', 'stats', 'chat']);
     const map = state.layout?.root.children[0];
     if (!map || !isLeaf(map)) throw new Error('no map');
     expect(panesToShowInstead(map, state.layout?.root ?? null).builtIns).not.toContain('writing');
@@ -83,7 +83,7 @@ describe('paneToSplitIn', () => {
 
   it('splits in a pane the panel does not show before another Chat', () => {
     state.on = true;
-    lay('map', 'affects', 'group', 'chat');
+    lay('map', 'affects', 'group', 'stats', 'chat');
     expect(paneToSplitIn('map')).toEqual({
       pane: 'lua',
       props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
@@ -97,9 +97,9 @@ describe('paneToSplitIn', () => {
 
   it('splits in another Chat once the panel shows every pane', () => {
     state.on = false;
-    lay('map', 'affects', 'group', 'chat');
+    lay('map', 'affects', 'group', 'stats', 'chat');
     expect(paneToSplitIn('map')).toEqual({ pane: 'chat', props: {} });
-    lay('map', 'affects', 'group', 'chat', 'chat', 'chat', 'chat');
+    lay('map', 'affects', 'group', 'stats', 'chat', 'chat', 'chat', 'chat');
     expect(paneToSplitIn('map')).toBeNull();
     expect(paneToSplitIn('chat')).toBeNull();
     state.on = true;

@@ -62,6 +62,7 @@
     "layout:affects#affects-tint",
     "layout:affects#affects-running-out",
     "layout:affects#affects-almost-gone",
+    "layout:stats#stats-style",
     "input:sent#mark-commands",
     "input:sent#mark-color",
     "input:sent#sent-color",
@@ -210,6 +211,7 @@
     "play.scroll-back",
     "shape.group-affects",
     "shape.prompt-show",
+    "shape.stats",
     "tick.tick-timer"
   ],
   "anchors": {
@@ -282,6 +284,8 @@
       "panes",
       "show-panel",
       "split",
+      "stats",
+      "stats-style",
       "status",
       "status-style",
       "tick-counts",
