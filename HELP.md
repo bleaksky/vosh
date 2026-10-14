@@ -490,6 +490,8 @@ An alias expands a short name into one or more commands. Aliases are in Settings
 
 When Vosh can't save the list, it tells you why beside `Save`. It puts a red ring on each item to fix and selects the first one. The message goes away when you fix the items.
 
+To make an item like one you have, select it and click `Duplicate alias`, `Duplicate trigger`, or `Duplicate macro` under its card. The copy goes below the original, and Vosh selects it. The copy of an alias gets `-copy` at the end of its name, and the copy of a trigger gets ` copy`. So the copy saves without a clash, also when you change nothing. The copy of a macro has no key, because one key runs one macro. Press a key for it before you save. The copy of an item from a preset is yours, and you can change all of it.
+
 Captures take words from the line you typed. `%1` through `%9` take the first through ninth word after the alias name. `%0` takes all the words after the name. `%1-` takes word one through the end, with the spaces kept. A missing word expands to nothing. `%%` gives a literal percent.
 
 To turn related aliases on and off together, give them the same name in `Group`. Two groups can each have an alias with the same name, as 3.11 tells you. Then use the switch on the heading of their group, or `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion. The words you typed are in its captures table.
