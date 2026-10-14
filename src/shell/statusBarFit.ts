@@ -8,7 +8,12 @@ import type { StatusStyle, TickCount } from '../ipc/uiConfig';
 // Each style lists the parts it lets go, first to last. The bar draws
 // with none gone, and while its items run past its edge it lets one
 // more go, before the frame paints, so you never see it overflow. A new
-// width or a new set of items starts it over from none.
+// width or a new set of items starts it over from none. A part goes
+// whole: nothing ends in an ellipsis while a part is left to go. Then
+// the bar squeezes, and the room, your opponent's name and your vitals
+// text end in an ellipsis to fit, each keeping room for a few words. A
+// bar still short of room after that lets your opponent's name go, so
+// the name reads or goes whole and never shrinks to a letter.
 
 /** What a bar can let go. */
 export type BarPart =
@@ -21,6 +26,8 @@ export type BarPart =
   /** The gauges narrow from 44 to 28 px. */
   | 'narrow'
   | 'moons'
+  /** Your target, name and all. */
+  | 'target'
   /** The labels before your vitals and the tick. */
   | 'labels'
   /** The gauges and the tick bar go, and the values stay. */
@@ -28,7 +35,16 @@ export type BarPart =
   /** A round trip under 300 ms. A slow one stays. */
   | 'roundTrip'
   | 'time'
-  /** Your opponent's name. Its health stays. */
+  /** A slow round trip's reading. Its dot or bars stay, in their tone. */
+  | 'rttText'
+  /** Each vital reads its current value without its max. */
+  | 'maxes'
+  /** The items draw closer together. */
+  | 'tight'
+  /** The room, your opponent's name and your vitals text may end in an
+   *  ellipsis. */
+  | 'squeeze'
+  /** Your opponent's name. Its health stays, in the warn tone. */
   | 'foeName';
 
 export type BarStyle = Exclude<StatusStyle, 'compact'>;
@@ -39,16 +55,44 @@ export const BAR_GIVE_WAY: Readonly<Record<BarStyle, readonly BarPart[]>> = {
     'name',
     'area',
     'dayWord',
-    'narrow',
     'moons',
-    'foeName',
-    'labels',
+    'target',
+    'narrow',
     'roundTrip',
-    'gauges',
+    'labels',
     'time',
+    'gauges',
+    'maxes',
+    'tight',
+    'rttText',
+    'squeeze',
+    'foeName',
   ],
-  dashboard: ['name', 'moons', 'area', 'roundTrip', 'time', 'foeName'],
-  meters: ['moons', 'roundTrip', 'labels', 'time', 'foeName'],
+  dashboard: [
+    'name',
+    'moons',
+    'area',
+    'target',
+    'roundTrip',
+    'time',
+    'tight',
+    'maxes',
+    'rttText',
+    'squeeze',
+    'foeName',
+  ],
+  meters: [
+    'moons',
+    'roundTrip',
+    'target',
+    'labels',
+    'time',
+    'maxes',
+    'tight',
+    'rttText',
+    'squeeze',
+    'foeName',
+  ],
 };
 
 /** The parts gone at `level` in `style`. */
@@ -83,7 +127,7 @@ export function useGiveWay(ref: RefObject<HTMLElement | null>, steps: number, ke
         return;
       }
     }
-    if (level < steps && node.scrollWidth > node.clientWidth + 1) setLevel(level + 1);
+    if (level < steps && node.scrollWidth > node.clientWidth) setLevel(level + 1);
   }, [ref, width, key, level, steps]);
   return Math.min(level, steps);
 }

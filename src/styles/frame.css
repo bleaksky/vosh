@@ -883,13 +883,30 @@
   border-radius: var(--r-key);
 }
 
+/* The room, your target, your opponent and your vitals text keep their
+   width while the bar has a part left to let go, so the bar lets parts
+   go in its order before any name is cut. Once it squeezes they give
+   way, each to 72 px, ending in an ellipsis. */
 .shell-bar-room,
 .shell-bar-target,
 .shell-bar-item.shell-bar-foe,
 .is-strip > .shell-status-text {
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.shell-bar[data-squeeze] .shell-bar-room,
+.shell-bar.is-strip[data-squeeze] > .shell-status-text {
   flex: 0 1 auto;
   min-width: 72px;
-  overflow: hidden;
+}
+
+/* Your opponent keeps room for a few words of its name and its health.
+   Short of that, the bar lets the name go. */
+.shell-bar[data-squeeze] .shell-bar-item.shell-bar-foe {
+  flex: 0 1 auto;
+  min-width: 120px;
 }
 
 .shell-bar-room > .shell-bar-value {
@@ -907,6 +924,13 @@
   width: 1px;
   height: 14px;
   background: var(--sep);
+}
+
+/* A hairline divides two items, so none leads the bar once your name
+   has gone. */
+.shell-bar.is-strip > .shell-bar-seam:first-child,
+.shell-bar.is-strip > .shell-bar-group:first-child > .shell-bar-seam {
+  display: none;
 }
 
 .shell-bar-gauge {
@@ -942,7 +966,14 @@
    13 px value. Your vitals and your opponent draw a 2 px bar under
    their value in their color. */
 .shell-bar.is-dashboard {
+  --seg-pad: 14px;
   background: var(--inputband);
+}
+
+/* Tight, the last step but one before the bar squeezes, draws the
+   segments closer. */
+.shell-bar.is-dashboard.is-tight {
+  --seg-pad: 9px;
 }
 
 .shell-bar-seg {
@@ -952,8 +983,13 @@
   justify-content: center;
   gap: 1px;
   flex: none;
-  padding: 0 14px;
+  padding: 0 var(--seg-pad);
   border-right: 1px solid var(--sep);
+}
+
+/* A slow round trip out of room keeps its dot alone. */
+.shell-bar-seg.is-mark {
+  justify-content: center;
 }
 
 .shell-bar-seg.is-right {
@@ -962,13 +998,38 @@
 }
 
 .shell-bar-seg.is-shrink {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.shell-bar[data-squeeze] .shell-bar-seg.is-shrink {
   flex: 0 1 auto;
   min-width: 72px;
-  overflow: hidden;
 }
 
 .shell-bar-seg.is-metered {
   min-width: 76px;
+}
+
+/* Tight, a vital's segment is as wide as its value, its bar under it. */
+.shell-bar.is-tight .shell-bar-seg.is-metered {
+  min-width: 0;
+}
+
+.shell-bar.is-tight[data-squeeze] .shell-bar-seg.is-shrink {
+  min-width: 56px;
+}
+
+.shell-bar[data-squeeze] .shell-bar-seg.shell-bar-foe {
+  min-width: 96px;
+}
+
+/* Once your opponent's name has gone, its health keeps its own width. */
+.shell-bar[data-squeeze] .shell-bar-item.shell-bar-foe.is-bare,
+.shell-bar[data-squeeze] .shell-bar-seg.shell-bar-foe.is-bare,
+.shell-bar[data-squeeze] .shell-bar-zone.shell-bar-foe.is-bare {
+  flex: none;
+  min-width: 0;
 }
 
 .shell-bar-cap {
@@ -979,24 +1040,23 @@
   color: var(--secondary);
 }
 
+/* Every value keeps the 4 px a metered value's bar stands in, so the
+   captions line up across the bar. */
 .shell-bar-val {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  margin-bottom: 4px;
   font-size: var(--bar-value-px);
   line-height: round(17px * var(--panel-text-px, 12) / 12, 1px);
   color: var(--text);
 }
 
-.shell-bar-seg.is-metered > .shell-bar-val {
-  margin-bottom: 4px;
-}
-
 .shell-bar-under {
   position: absolute;
-  left: 14px;
-  right: 14px;
+  left: var(--seg-pad);
+  right: var(--seg-pad);
   bottom: 5px;
   height: 2px;
   border-radius: 1px;
@@ -1044,15 +1104,31 @@
 }
 
 .shell-bar-zone.is-wide {
-  flex: 3 1 0;
-  min-width: 120px;
+  flex: 3 0 auto;
   overflow: hidden;
 }
 
 .shell-bar-zone.is-shrink {
-  flex: 1 1 0;
-  min-width: 96px;
+  flex: 1 0 auto;
   overflow: hidden;
+}
+
+/* Squeezed, the room and your vitals text take three shares and your
+   opponent and your target one, each ending in an ellipsis. */
+.shell-bar[data-squeeze] .shell-bar-zone.is-wide {
+  flex: 3 1 0;
+  min-width: 96px;
+}
+
+.shell-bar[data-squeeze] .shell-bar-zone.is-shrink,
+.shell-bar[data-squeeze] .shell-bar-zone.shell-bar-foe {
+  flex: 1 1 0;
+  min-width: 72px;
+  overflow: hidden;
+}
+
+.shell-bar[data-squeeze] .shell-bar-zone.shell-bar-foe {
+  min-width: 128px;
 }
 
 .shell-bar-zone.is-note,
@@ -1063,6 +1139,23 @@
 .shell-bar-zone.is-cluster {
   gap: 12px;
   padding: 0 12px;
+}
+
+/* Tight, the last step but one before the bar squeezes, draws the zones
+   and the items closer. */
+.shell-bar.is-meters.is-tight .shell-bar-zone {
+  gap: 8px;
+  padding: 0 8px;
+}
+
+.shell-bar.is-strip.is-tight {
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.shell-bar.is-strip.is-tight .shell-bar-item {
+  gap: 6px;
+  padding: 0 5px;
 }
 
 .shell-bar-fill {

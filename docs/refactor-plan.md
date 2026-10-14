@@ -2040,6 +2040,15 @@ You asked for a choice to put the panel on the left, with the sessions sidebar m
 
 Help 4.1 says how to move the panel and what moves with it, and the sessions section says the sidebar sits across from the panel.
 
+#### October 14. Status bar fixes
+
+You found the status bar back on Meters after an update and asked for the styles to work as they should, on October 14. Drawn at 320 to 1280 px and at 12 and 14 px panel text with a check for anything cut or past the edge, the three new styles shipped broken. The tick and the round trip ran off the bar at 440 px and below, names shrank to a letter while the moons still showed, your opponent's health could show without its name, and the Dashboard captions sat out of line.
+
+- Give way. Each part goes whole. The room, your target, your opponent and your vitals text keep their width until the bar squeezes, so the bar lets parts go in its order before any name is cut. Your target goes whole before the labels. Near the end each vital drops its max, the items draw closer, and a slow round trip keeps its dot alone. Then the bar squeezes, and a long room or opponent name ends in an ellipsis with room for a few words. Your opponent's name goes last of all. `src/shell/statusBarFit.ts` lists each style's order.
+- Dashboard. Every value keeps the 4 px a vital's bar stands in, so the captions line up. The room's caption reads Room once the area goes.
+- Strip. No hairline leads the bar.
+- The default. Each profile keeps its own style, and the save lands on the profile Settings shows. A profile that never picked one shows Meters, the default since 0.95.3.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
