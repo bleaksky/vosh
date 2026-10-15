@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { StatusStyle, TickCount } from '../ipc/uiConfig';
 
 // How the Strip, Dashboard and Meters bars give way as they run short,
@@ -98,38 +97,6 @@ export const BAR_GIVE_WAY: Readonly<Record<BarStyle, readonly BarPart[]>> = {
 /** The parts gone at `level` in `style`. */
 export function partsGone(style: BarStyle, level: number): ReadonlySet<BarPart> {
   return new Set(BAR_GIVE_WAY[style].slice(0, level));
-}
-
-/** How many of its parts a bar lets go: none while its items fit, and
- *  one more for each render they run past its edge. `key` names the
- *  items it draws, so a fight, a font or a style change starts over. */
-export function useGiveWay(ref: RefObject<HTMLElement | null>, steps: number, key: string): number {
-  const [level, setLevel] = useState(0);
-  const [width, setWidth] = useState<number | null>(null);
-  const seen = useRef<string | null>(null);
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const measure = () => setWidth(node.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [ref]);
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node || width === null) return;
-    const now = `${key}|${width}`;
-    if (seen.current !== now) {
-      seen.current = now;
-      if (level !== 0) {
-        setLevel(0);
-        return;
-      }
-    }
-    if (level < steps && node.scrollWidth > node.clientWidth) setLevel(level + 1);
-  }, [ref, width, key, level, steps]);
-  return Math.min(level, steps);
 }
 
 /** The share of the interval gone since the last tick, 0 to 1, for a

@@ -47,6 +47,7 @@ vi.mock('../stores/config/affectsDisplayStore', async () => {
   };
 });
 vi.mock('../stores/config/chatColorsStore', () => ({ useChatColors: () => new Map() }));
+vi.mock('../stores/config/statsStyleStore', () => ({ useStatsStyle: () => 'sheet' }));
 vi.mock('../lib/settingsLink', () => ({ openSettingsTab: vi.fn() }));
 // The layout the menu splits, none unless a test lays one out.
 const laid = vi.hoisted(() => ({ layout: null as PaneLayout | null }));
@@ -181,6 +182,16 @@ describe('PaneMenu', () => {
     expect(rows[at + 2]).toBe('Edit tracked affects…');
     for (const pane of ['map', 'chat', 'group'] as const) {
       expect(menu(pane), pane).not.toContain('Change when affects warn');
+    }
+  });
+
+  it('offers Style alone in the Stats menu, and Style nowhere but there and Affects', () => {
+    const rows = menuRows(menu('stats'));
+    expect(rows).toContain('Style');
+    expect(rows).not.toContain('Marker');
+    expect(rows).not.toContain('Change when affects warn…');
+    for (const pane of ['map', 'chat', 'group'] as const) {
+      expect(menuRows(menu(pane)), pane).not.toContain('Style');
     }
   });
 
@@ -363,6 +374,7 @@ describe('Show here instead', () => {
       'Map',
       'Affects',
       'Group',
+      'Stats',
       '---',
       'Weather | weather_pane',
       'Worth | worth_pane',
@@ -375,12 +387,13 @@ describe('Show here instead', () => {
       'Map',
       'Affects',
       'Group',
+      'Stats',
       'Chat',
       '---',
       'Worth | worth_pane',
     ]);
     lua.on = false;
-    expect(listed(weather).text).toEqual(['Map', 'Affects', 'Group', 'Chat']);
+    expect(listed(weather).text).toEqual(['Map', 'Affects', 'Group', 'Stats', 'Chat']);
   });
 
   it('offers Chat in place of another pane while fewer than four show', () => {
@@ -400,9 +413,19 @@ describe('Show here instead', () => {
         ...Array.from({ length: n }, (_, i) => leaf(i === 0 ? 'chat' : `chat-${i + 1}`, 'chat')),
       ],
     });
-    expect(listed(leaf('map', 'map'), chats(3)).text).toEqual(['Affects', 'Group', 'Chat']);
-    expect(listed(leaf('map', 'map'), chats(4)).text).toEqual(['Affects', 'Group']);
-    expect(listed(leaf('chat', 'chat'), chats(1)).text).toEqual(['Map', 'Affects', 'Group']);
+    expect(listed(leaf('map', 'map'), chats(3)).text).toEqual([
+      'Affects',
+      'Group',
+      'Stats',
+      'Chat',
+    ]);
+    expect(listed(leaf('map', 'map'), chats(4)).text).toEqual(['Affects', 'Group', 'Stats']);
+    expect(listed(leaf('chat', 'chat'), chats(1)).text).toEqual([
+      'Map',
+      'Affects',
+      'Group',
+      'Stats',
+    ]);
   });
 
   it('shows the Lua pane picked in place of the pane', () => {

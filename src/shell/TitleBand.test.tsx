@@ -472,6 +472,7 @@ const allShown = (): PaneSplit =>
   tree(
     { id: 'map', pane: 'map', weight: 1, props: {} },
     { id: 'group', pane: 'group', weight: 1, props: {} },
+    { id: 'stats', pane: 'stats', weight: 1, props: {} },
     { id: 'chat-2', pane: 'chat', weight: 1, props: {} },
     { id: 'chat-3', pane: 'chat', weight: 1, props: {} },
     { id: 'chat-4', pane: 'chat', weight: 1, props: {} },
@@ -555,6 +556,7 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Weather | weather_pane',
@@ -567,6 +569,7 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Worth | worth_pane',
@@ -575,12 +578,13 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Worth | worth_pane',
     ]);
     lua.rows = null;
-    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Chat | starts on Tell']);
+    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Stats', 'Chat | starts on Tell']);
   });
 
   it('drops a Lua pane once the panel shows it', async () => {
@@ -594,6 +598,7 @@ describe('Add a pane', () => {
     expect((await open(tree(weather))).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Worth | worth_pane',

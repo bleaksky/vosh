@@ -428,6 +428,7 @@ describe('buildMenuState', () => {
       ['map', true],
       ['affects', true],
       ['group', false],
+      ['stats', false],
       ['chat', false],
       ['imm', false],
     ]);

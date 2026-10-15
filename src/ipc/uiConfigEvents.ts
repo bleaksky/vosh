@@ -17,18 +17,19 @@ import {
   INPUT_ECHO_COLOR_CHANGED,
   INPUT_LINE_MARK_CHANGED,
   KEEP_LAST_CHANGED,
+  PANEL_SIDE_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
   SCROLLBACK_LINES_CHANGED,
   SPELLCHECK_PROMPT_CHANGED,
-  WRITING_OFFER_CHANGED,
-  WRITING_ASK_POST_CHANGED,
   SPLIT_DIVIDER_CHANGED,
+  STATS_STYLE_CHANGED,
   STATUS_STYLE_CHANGED,
-  PANEL_SIDE_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
   THEME_TERMINAL_COLORS_CHANGED,
   TICK_COUNT_CHANGED,
+  WRITING_ASK_POST_CHANGED,
+  WRITING_OFFER_CHANGED,
 } from './events';
 import {
   normalizeChipStyle,
@@ -36,12 +37,14 @@ import {
   normalizeScrollbackLines,
   normalizeStatusStyle,
   normalizePanelSide,
+  normalizeStatsStyle,
   normalizeTerminalLineHeight,
   normalizeTickCount,
   type ChipStyle,
   type GameTime,
   type StatusStyle,
   type PanelSide,
+  type StatsStyle,
   type TerminalLineHeight,
   type TickCount,
 } from './uiConfig';
@@ -104,6 +107,16 @@ export async function subscribePanelSideChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>(PANEL_SIDE_CHANGED, (event) => {
     cb(normalizePanelSide(event.payload));
+  });
+}
+
+/** Hear a new Stats pane style picked in its menu or saved from
+ *  Settings, or the one a profile switch brings. */
+export async function subscribeStatsStyleChanged(
+  cb: (value: StatsStyle) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(STATS_STYLE_CHANGED, (event) => {
+    cb(normalizeStatsStyle(event.payload));
   });
 }
 

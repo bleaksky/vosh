@@ -8,6 +8,7 @@ const PACKAGES: Record<string, string> = {
   'char-combat': 'Char.Combat',
   'char-prompt': 'Char.Prompt',
   'char-state': 'Char.State',
+  'char-stats': 'Char.Stats',
   'room-weather': 'Room.Weather',
   'room-info': 'Room.Info',
   'group-info': 'Group.Info',

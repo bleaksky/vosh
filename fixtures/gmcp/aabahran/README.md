@@ -26,6 +26,7 @@ Three server builds send different packets under lamented tears. The new build (
 | `char-prompt-off.gmcp` | Your prompt settings after `prompt off`. |
 | `char-prompt-fight.gmcp` | Your prompt settings with a fight prompt and a colour code, kept raw. |
 | `char-state.gmcp` | Your position and spoken language at a prompt. |
+| `char-stats.gmcp` | The numbers on your score sheet, at login and after one moves. Wisdom is drained below what you trained, two stats are raised, and the breath save is above zero. It follows `gmcp_send_stats` as of 2026-10-14. |
 | `room-info.gmcp` | The room you look at, the Bank of Aabahran with one exit south. |
 | `room-info-rhapsody.gmcp` | The made up room the game sends while rhapsody of delusion is on you, with all six exits. |
 | `room-weather.gmcp` | The weather outdoors at a prompt. |

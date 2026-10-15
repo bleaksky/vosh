@@ -117,10 +117,11 @@ fn shows_disconnect(state: &MenuState) -> bool {
 
 /// Pane rows in View, in the panel's order.
 #[cfg(target_os = "macos")]
-const PANE_ROWS: [(&str, &str); 5] = [
+const PANE_ROWS: [(&str, &str); 6] = [
     ("map", "Show map"),
     ("affects", "Show affects"),
     ("group", "Show group"),
+    ("stats", "Show stats"),
     ("chat", "Show chat"),
     ("imm", "Show staff queues"),
 ];

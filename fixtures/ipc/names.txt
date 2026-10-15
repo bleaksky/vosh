@@ -149,6 +149,7 @@ command snoop_close(session?, name?)
 command snoop_get(session?)
 command snoop_stop(session?, name?)
 command snoop_window_open(session?)
+command stats_snapshot_get(session?)
 command target_get(session?)
 command terminal_cursor(session?)
 command terminal_local_write(text, after?, session?)
@@ -169,6 +170,7 @@ command ui_reset_chat_colors(profile?)
 command ui_set_affects_display(style?, marker?, tint?, runningOut?, almostGone?, profile?)
 command ui_set_chat_color(channel, color?, profile?)
 command ui_set_fields(fields, profile?)
+command ui_set_stats_style(style, profile?)
 command ui_set_theme(theme, lightTheme?, darkTheme?, dayTheme?, nightTheme?, profile?)
 command updater_check()
 command updater_install_and_relaunch()
@@ -269,6 +271,7 @@ event vosh://settings-goto-tab page heard
 event vosh://snoop-find app heard
 event vosh://spellcheck-prompt-changed page heard
 event vosh://split-divider-changed page heard
+event vosh://stats-style-changed app page heard
 event vosh://status-style-changed app page heard
 event vosh://terminal-clicked app heard
 event vosh://terminal-cursor app heard

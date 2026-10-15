@@ -1,6 +1,7 @@
 import { startCharStatusStore } from './gmcp/charStatusStore';
 import { startChatStore } from './gmcp/chatStore';
 import { startGroupStore } from './gmcp/groupStore';
+import { startStatsStore } from './gmcp/statsStore';
 import { startImmStore } from './gmcp/immStore';
 import { startAffectFullStore } from './gmcp/affectFullStore';
 import { startAffectsDisplayStore } from './config/affectsDisplayStore';
@@ -10,6 +11,7 @@ import { startChatColorsStore } from './config/chatColorsStore';
 import { startChipStyleStore } from './config/chipStyleStore';
 import { startStatusStyleStore } from './config/statusStyleStore';
 import { startPanelSideStore } from './config/panelSideStore';
+import { startStatsStyleStore } from './config/statsStyleStore';
 import { startCombatStore } from './gmcp/combatStore';
 import { startEchoMarkStore } from './config/echoMarkStore';
 import { startLineLookStore } from './config/lineLookStore';
@@ -64,6 +66,7 @@ export function startStores(): void {
   startChatStore();
   startChatColorsStore();
   startGroupStore();
+  startStatsStore();
   startImmStore();
   startVitalsStore();
   startVitalsOptionsStore();
@@ -84,6 +87,7 @@ export function startStores(): void {
   startChipStyleStore();
   startStatusStyleStore();
   startPanelSideStore();
+  startStatsStyleStore();
   startEchoMarkStore();
   startLineMarkStore();
   startLineLookStore();

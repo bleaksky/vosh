@@ -2049,6 +2049,17 @@ You found the status bar back on Meters after an update and asked for the styles
 - Strip. No hairline leads the bar.
 - The default. Each profile keeps its own style, and the save lands on the profile Settings shows. A profile that never picked one showed Meters, the default since 0.95.3, and you asked on October 14 for it to go back to Compact. Compact is the default again, so a profile from before the styles, a new one, and one whose file has no style all show the quiet line. A profile that picked Meters in 0.95.3 or 0.95.4 has no style in its file either, since the file left out the default then, so it shows Compact until you pick Meters again.
 
+#### October 14. Stats pane
+
+Aabahran sends `Char.Stats` since its commit c12955f9, the numbers on the score sheet, at login and with any prompt after one of them moved. You asked for a pane to show them and, after the mockups (https://claude.ai/artifact/9TjtEqfudYPyjz2buNC1wf), for all three as styles, on October 14. The build is on feat/stats-pane from one-window 884c5d44.
+
+- Data. `src/stores/gmcp/statsStore.ts` reads each packet into the five stats with their current, trained, max and over, the luck bar's lit steps, hitroll with its share, damroll, armor with its share and the five saves, a part the packet leaves out as null. The backend keeps the last one in `last_packages.rs` for a window that opens later, `stats_snapshot_get` reads it, and a disconnect empties the pane. `fixtures/gmcp/aabahran/char-stats.gmcp` follows `gmcp_send_stats`, and its record in views.json is the stores' alone, since the prompt engine does not read it (`PAGE_ONLY` in `crates/prompt/tests/views.rs`).
+- Pane. `stats` joins the pane types after Group, in Add a pane, Show here instead, the View menu as Show stats and the palette. Its minimum is the header and six rows. `src/panel/stats/StatsPane.tsx` draws Score sheet, Rows and Ledger, and `statsView.ts` holds the words, the tones and the numbers they share. The tones follow the score sheet. A stat above what you trained reads green and one below it yellow, armor that counts under 80% yellow and under 50% red, and a save above zero red. `^1` marks points past the max, and each row's title reads every number.
+- Fit. Each style gives way through `useGiveWay`, now in `src/lib/useGiveWay.ts` beside the status bars, until no name or figure is cut. Rows drops its meters and writes the stats in three letters, then drops the max and the percents. Ledger takes three columns, then drops the max, then two columns, then one. Score sheet stacks its columns, then shows the current value alone. Drawn at 120 to 300 px, at 12 and 14 px text and with four digit armor, nothing runs past the pane's insets, and only at 120 px do the longest save names end in an ellipsis.
+- Setting. `stats_style` in the profile's `[ui]` table is `sheet`, `rows` or `ledger`. The file writes it only off Score sheet, the default, and an unknown value saves as Score sheet. The pane menu's Style saves it through `ui_set_stats_style`, and Settings, Layout, Stats through the autosave, each sending `vosh://stats-style-changed`, which `src/stores/config/statsStyleStore.ts` keeps in every window.
+
+Help 4.9 Read your stats says what each style draws, what the colors and marks mean, how each gives way and when the game sends the numbers.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

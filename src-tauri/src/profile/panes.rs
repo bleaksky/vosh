@@ -27,7 +27,8 @@ pub(crate) struct DockEntryPersist {
 /// `PANE_TYPES` in src/panel/paneLayout.ts. `writing` is the writing
 /// card pinned to the panel, which only the card's pin adds. A build
 /// from before it drops the leaf as an unknown type and loads the rest.
-pub(crate) const PANE_TYPES: [&str; 6] = ["map", "affects", "group", "chat", "imm", "writing"];
+pub(crate) const PANE_TYPES: [&str; 7] =
+    ["map", "affects", "group", "stats", "chat", "imm", "writing"];
 
 /// How many Chat panes the panel holds. Mirrored by `CHAT_PANES_MAX`
 /// in src/panel/paneLayout.ts.

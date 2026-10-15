@@ -189,6 +189,72 @@
     "position": "sitting",
     "language": "common"
   },
+  "char-stats.gmcp": {
+    "stats": {
+      "str": {
+        "cur": 22,
+        "perm": 20,
+        "max": 23,
+        "over": 1
+      },
+      "int": {
+        "cur": 18,
+        "perm": 18,
+        "max": 20,
+        "over": 0
+      },
+      "wis": {
+        "cur": 15,
+        "perm": 17,
+        "max": 19,
+        "over": 0
+      },
+      "dex": {
+        "cur": 21,
+        "perm": 20,
+        "max": 22,
+        "over": 0
+      },
+      "con": {
+        "cur": 23,
+        "perm": 21,
+        "max": 23,
+        "over": 2
+      }
+    },
+    "luck": {
+      "bar": 4,
+      "of": 6
+    },
+    "hitroll": 31,
+    "hitrollPct": 90,
+    "damroll": 27,
+    "armor": {
+      "slash": {
+        "ac": -310,
+        "pct": 71
+      },
+      "pierce": {
+        "ac": -295,
+        "pct": 72
+      },
+      "blunt": {
+        "ac": -280,
+        "pct": 74
+      },
+      "magic": {
+        "ac": -150,
+        "pct": 94
+      }
+    },
+    "saves": {
+      "spell": -12,
+      "afflictive": -3,
+      "maledictive": 0,
+      "mental": -5,
+      "breath": 2
+    }
+  },
   "room-info.gmcp": {
     "name": "The Bank of Aabahran",
     "num": 5279,

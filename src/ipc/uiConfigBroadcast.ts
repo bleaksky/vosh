@@ -22,6 +22,7 @@ import {
   GAME_TIME_CHANGED,
   STATUS_STYLE_CHANGED,
   PANEL_SIDE_CHANGED,
+  STATS_STYLE_CHANGED,
   INPUT_CURSOR_STYLE_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
   INPUT_ECHO_MARK_CHANGED,
@@ -212,6 +213,7 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   await emitChanged(CHIP_STYLE_CHANGED, config.chip_style, before?.chip_style);
   await emitChanged(STATUS_STYLE_CHANGED, config.status_style, before?.status_style);
   await emitChanged(PANEL_SIDE_CHANGED, config.panel_side, before?.panel_side);
+  await emitChanged(STATS_STYLE_CHANGED, config.stats_style, before?.stats_style);
   await emitChanged(TICK_COUNT_CHANGED, config.tick_count, before?.tick_count);
   await emitChanged(GAME_TIME_CHANGED, config.game_time, before?.game_time);
   const display = affectsDisplayOf(config);

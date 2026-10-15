@@ -585,6 +585,16 @@ pub(crate) struct UiConfig {
         skip_serializing_if = "is_default_panel_side"
     )]
     pub panel_side: String,
+    /// How the Stats pane draws. `sheet` (the default) lays the numbers
+    /// out in two columns as `score` does, `rows` gives each one a row
+    /// with a small meter, and `ledger` draws big figures with a line
+    /// under each stat. Written only once it differs from the default,
+    /// and unknown values coerce back to `sheet` on save.
+    #[serde(
+        default = "default_stats_style",
+        skip_serializing_if = "is_default_stats_style"
+    )]
+    pub stats_style: String,
     /// Which way the status line tick counts. `up` (the default) shows
     /// the seconds since the last tick, `down` the seconds left until
     /// the next and waits at 0 while the game runs late, and
@@ -1080,6 +1090,27 @@ pub(crate) fn coerce_panel_side(value: String) -> String {
         value
     } else {
         default_panel_side()
+    }
+}
+
+/// The ways the Stats pane draws. Anything else saves as the default,
+/// the score sheet.
+pub(crate) const STATS_STYLES: [&str; 3] = ["sheet", "rows", "ledger"];
+
+fn default_stats_style() -> String {
+    "sheet".to_string()
+}
+
+fn is_default_stats_style(value: &str) -> bool {
+    value == "sheet"
+}
+
+/// Keep a known Stats pane style and turn anything else into `sheet`.
+pub(crate) fn coerce_stats_style(value: String) -> String {
+    if STATS_STYLES.contains(&value.as_str()) {
+        value
+    } else {
+        default_stats_style()
     }
 }
 
@@ -1607,6 +1638,7 @@ impl Default for UiConfig {
             chip_style: default_chip_style(),
             status_style: default_status_style(),
             panel_side: default_panel_side(),
+            stats_style: default_stats_style(),
             tick_count: default_tick_count(),
             game_time: default_game_time(),
             affects_style: default_affects_style(),
@@ -3469,6 +3501,30 @@ name = "haste"
         assert!(file("left").contains("panel_side = \"left\""));
         assert_eq!(file("right"), ProfileConfig::default().to_toml().unwrap());
         assert_eq!(super::coerce_panel_side("up".into()), "right");
+    }
+
+    #[test]
+    fn the_stats_style_round_trips_and_stays_out_of_the_file_at_sheet() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.stats_style, "sheet");
+        for style in super::STATS_STYLES {
+            ui.stats_style = style.into();
+            assert_eq!(through_toml(&ui).stats_style, style);
+        }
+        let file = |stats_style: &str| {
+            ProfileConfig {
+                ui: UiConfig {
+                    stats_style: stats_style.into(),
+                    ..UiConfig::default()
+                },
+                ..ProfileConfig::default()
+            }
+            .to_toml()
+            .unwrap()
+        };
+        assert!(file("ledger").contains("stats_style = \"ledger\""));
+        assert_eq!(file("sheet"), ProfileConfig::default().to_toml().unwrap());
+        assert_eq!(super::coerce_stats_style("tall".into()), "sheet");
     }
 
     #[test]

@@ -189,6 +189,7 @@ const PANE_TITLES: Record<OfferedPaneType, string> = {
   map: 'Show map',
   affects: 'Show affects',
   group: 'Show group',
+  stats: 'Show stats',
   chat: 'Show chat',
   imm: 'Show staff queues',
 };

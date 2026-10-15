@@ -68,6 +68,7 @@ describe('PANE_MIN_H', () => {
       map: 180,
       affects: 160,
       group: 94,
+      stats: 160,
       chat: 120,
       imm: 94,
       writing: 240,

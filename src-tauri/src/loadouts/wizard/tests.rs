@@ -859,6 +859,7 @@ fn character(name: &str, n: u32, presets: &[&str]) -> ProfileConfig {
     ui.chip_style = pick(&["value_only", "caption", "icon"]);
     ui.status_style = pick(&["meters", "compact", "strip", "dashboard"]);
     ui.panel_side = pick(&["right", "left"]);
+    ui.stats_style = pick(&["sheet", "rows", "ledger"]);
     ui.moons_position = pick(&["right-edge", "left-edge"]);
     ui.paste_line_delay_ms = 10 * n;
     config.set_prompt(vosh_prompt::PromptConfig::from_legacy(
