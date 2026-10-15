@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLayout, sanitize, type PaneSplit, type PaneType } from '../../panel/paneLayout';
 import { paneLabel as labelFor } from '../../panel/paneTypes';
-import { paneSchematic, schematicSentence } from './paneSchematic';
+import { paneSchematic, schematicSentence, sidebarSchematic } from './paneSchematic';
 
 // A tree in the wire shape, repaired the way the backend's is.
 function tree(raw: unknown): PaneSplit {
@@ -22,8 +22,8 @@ describe('paneSchematic', () => {
       ['affects', { x: 0, y: 48, width: 180, height: 41 }],
     ]);
     expect(s.labels).toEqual([
-      { x: 10, y: 16, text: 'Map' },
-      { x: 10, y: 64, text: 'Affects' },
+      { x: 10, y: 16, text: 'Map', leaf: 'map' },
+      { x: 10, y: 64, text: 'Affects', leaf: 'affects' },
       { x: 10, y: 103.5, text: 'Vitals' },
     ]);
     expect(s.ariaLabel).toBe(
@@ -58,8 +58,8 @@ describe('paneSchematic', () => {
       { x: 91, y: 0, width: 89, height: 89 },
     ]);
     expect(s.labels.slice(0, 2)).toEqual([
-      { x: 10, y: 16, text: 'Group' },
-      { x: 101, y: 16, text: 'Chat' },
+      { x: 10, y: 16, text: 'Group', leaf: 'group' },
+      { x: 101, y: 16, text: 'Chat', leaf: 'chat' },
     ]);
     expect(s.ariaLabel).toBe(
       "Healer's panel. Group on the left, Chat on the right, Vitals along the bottom.",
@@ -123,9 +123,10 @@ describe('paneSchematic', () => {
       x: 10,
       y: (chat?.y ?? 0) + (chat?.height ?? 0) / 2 + 3.5,
       text: 'Chat',
+      leaf: 'chat',
     });
     // A tall row keeps its label 16 down from its top.
-    expect(s.labels[0]).toEqual({ x: 10, y: 16, text: 'Affects' });
+    expect(s.labels[0]).toEqual({ x: 10, y: 16, text: 'Affects', leaf: 'affects' });
   });
 
   it('leaves out a label the region is too narrow for', () => {
@@ -178,5 +179,45 @@ describe('paneSchematic', () => {
     expect(schematicSentence(mixed, labelFor, 'Ilsabet')).toBe(
       "Ilsabet's panel. Map over Affects on the left, Chat on the right, Vitals along the bottom.",
     );
+  });
+});
+
+describe('sidebarSchematic', () => {
+  it('fills a 112 by 110 box with the sidebar panes and no Vitals', () => {
+    const s = sidebarSchematic(
+      tree({ split: 'column', children: [leaf('stats'), leaf('group')] }),
+      labelFor,
+      'Orla',
+    );
+    expect([s.width, s.height]).toEqual([112, 110]);
+    expect(s.lines).toBe('M1 55.5H111');
+    expect(s.regions.map((r) => [r.id, r.rect])).toEqual([
+      ['stats', { x: 0, y: 0, width: 112, height: 55 }],
+      ['group', { x: 0, y: 56, width: 112, height: 54 }],
+    ]);
+    expect(s.labels.map((l) => l.text)).toEqual(['Stats', 'Group']);
+    expect(s.ariaLabel).toBe("Orla's sidebar. Stats on top, Group below it.");
+  });
+
+  it('runs a line between panes side by side to the foot of the box', () => {
+    // A lone row under the root becomes the root, so the sentence reads
+    // across.
+    const s = sidebarSchematic(
+      tree({
+        split: 'column',
+        children: [{ split: 'row', children: [leaf('map'), leaf('chat')] }],
+      }),
+      labelFor,
+      'Orla',
+    );
+    expect(s.lines).toBe('M56.5 1V109');
+    expect(s.ariaLabel).toBe("Orla's sidebar. Map on the left, Chat on the right.");
+  });
+
+  it('says an empty sidebar holds no panes', () => {
+    const s = sidebarSchematic(tree({ split: 'column', children: [] }), labelFor, 'Orla');
+    expect(s.regions).toEqual([]);
+    expect(s.labels).toEqual([]);
+    expect(s.ariaLabel).toBe("Orla's sidebar holds no panes.");
   });
 });

@@ -12,7 +12,7 @@ use crate::app::events::{pane_layout_envelope, PaneLayoutEnvelope, PANE_LAYOUT_C
 use crate::app::state::SharedState;
 use crate::disk::save::{save_by, save_then_broadcast, SavePolicy};
 use crate::profile::inactive::{
-    broadcast_profile_changed, reset_inactive_panes, reset_open_panes, Stored,
+    broadcast_profile_changed, edit_inactive_panes, edit_open_panes, Stored,
 };
 use crate::profile::panes::PaneLayoutPersist;
 use crate::script::panes::LuaPane;
@@ -97,11 +97,45 @@ pub(crate) async fn pane_layout_reset(
     state: State<'_, SharedState>,
     profile: Option<String>,
 ) -> Result<PaneLayoutEnvelope, String> {
-    let shared: SharedState = state.inner().clone();
+    edit_panes(
+        &app,
+        state.inner(),
+        profile,
+        PaneLayoutPersist::with_default_tree,
+    )
+    .await
+}
+
+/// Give the profile `profile` names the panel and sidebar trees of
+/// `layout`, keeping whether its panel shows and how wide it is. A move in
+/// Settings > Characters lands here, for a profile a session plays or
+/// not, and saves and broadcasts as [`pane_layout_reset`] does.
+#[tauri::command]
+pub(crate) async fn pane_trees_set(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    profile: String,
+    layout: PaneLayoutPersist,
+) -> Result<PaneLayoutEnvelope, String> {
+    edit_panes(&app, state.inner(), Some(profile), |current| {
+        current.with_trees(&layout)
+    })
+    .await
+}
+
+/// Edit the panes of the profile `profile` names, or of the selected
+/// session's, with `edit`, then save and tell the windows, see
+/// [`pane_layout_reset`].
+async fn edit_panes(
+    app: &AppHandle,
+    shared: &SharedState,
+    profile: Option<String>,
+    edit: impl Fn(&PaneLayoutPersist) -> PaneLayoutPersist + Send + Sync,
+) -> Result<PaneLayoutEnvelope, String> {
     let named = match profile.as_deref() {
-        Some(name) => match reset_inactive_panes(&shared, name).await? {
+        Some(name) => match edit_inactive_panes(shared, name, |l| edit(l)).await? {
             Stored::File(layout) => {
-                broadcast_profile_changed(&app, name);
+                broadcast_profile_changed(app, name);
                 return Ok(PaneLayoutEnvelope {
                     layout,
                     generation: None,
@@ -118,13 +152,13 @@ pub(crate) async fn pane_layout_reset(
             None => selected.lock_profile().await,
         };
         let shown = Arc::ptr_eq(p.open(), &selected.profile());
-        let envelope = reset_open_panes(&shared, &mut p, shown);
+        let envelope = edit_open_panes(shared, &mut p, shown, &edit);
         (p.open().clone(), shown, envelope)
     };
     if shown {
         save_then_broadcast(
-            &app,
-            &shared,
+            app,
+            shared,
             &open,
             SavePolicy::NowUnlessHeld,
             PANE_LAYOUT_CHANGED,
@@ -132,10 +166,10 @@ pub(crate) async fn pane_layout_reset(
         )
         .await;
     } else {
-        save_by(&app, &shared, &open, SavePolicy::NowUnlessHeld).await;
+        save_by(app, shared, &open, SavePolicy::NowUnlessHeld).await;
     }
     if let Some(name) = open.name() {
-        broadcast_profile_changed(&app, &name);
+        broadcast_profile_changed(app, &name);
     }
     Ok(envelope)
 }

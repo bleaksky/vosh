@@ -230,6 +230,21 @@ impl PaneLayoutPersist {
         }
     }
 
+    /// This layout with the panel and sidebar trees of `trees`, cleaned
+    /// as one, keeping whether the panel shows and how wide it is. What
+    /// a move in Settings > Characters saves.
+    pub(crate) fn with_trees(&self, trees: &Self) -> Self {
+        let mut out = Self {
+            version: PANE_LAYOUT_VERSION,
+            panel_open: self.panel_open,
+            panel_width: self.panel_width,
+            root: trees.root.clone(),
+            sidebar: trees.sidebar.clone(),
+        };
+        out.sanitize();
+        out
+    }
+
     /// Seed a profile's tree from the old zone layout the first time
     /// the profile opens with panes. Mirrors how the old
     /// frontend read a dock layout: unknown ids and bad zones are
@@ -683,6 +698,23 @@ pub(crate) mod tests {
         assert_eq!(reset.root, PaneLayoutPersist::default_layout().root);
         assert_eq!(reset.panel_open, custom_layout().panel_open);
         assert_eq!(reset.panel_width, custom_layout().panel_width);
+    }
+
+    #[test]
+    fn with_trees_keeps_the_panel_and_cleans_the_trees() {
+        let mut trees = PaneLayoutPersist::default_layout();
+        // Map in the sidebar as well as the panel leaves the sidebar,
+        // since the panel is cleaned first.
+        trees.sidebar = PaneNode::split(
+            "sidebar",
+            "column",
+            vec![PaneNode::leaf("map", 1.0), PaneNode::leaf("group", 1.0)],
+        );
+        let moved = custom_layout().with_trees(&trees);
+        assert_eq!(moved.panel_open, custom_layout().panel_open);
+        assert_eq!(moved.panel_width, custom_layout().panel_width);
+        assert_eq!(leaf_panes(&moved.root), ["map", "affects"]);
+        assert_eq!(leaf_panes(&moved.sidebar), ["group"]);
     }
 
     #[test]

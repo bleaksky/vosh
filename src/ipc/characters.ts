@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { sanitizeLayout, type PaneLayout } from '../panel/paneLayout';
 import { normalizeTrackedAffects, type TrackedAffect } from './affects';
+import { normalizePanelSide, type PanelSide } from './uiConfig';
 import { PROFILE_CHANGED, SESSION_IDENTITY_CHANGED } from './events';
 import type { ProfileAutoMatch, ProfileEntry } from './profiles';
 
@@ -31,6 +32,8 @@ export interface ProfileDetail {
   tracked_affects: TrackedAffect[];
   /** The pane tree the panel shows once this profile is live. */
   panes: PaneLayout;
+  /** The side its panel takes. The sidebar takes the other. */
+  panel_side: PanelSide;
   /** The live pane generation for the active profile, null for an
    *  inactive one. */
   generation: number | null;
@@ -48,6 +51,7 @@ export async function profileDetailGet(name: string): Promise<ProfileDetail> {
       Array.isArray(raw.tracked_affects) ? raw.tracked_affects : [],
     ),
     panes: sanitizeLayout(raw.panes),
+    panel_side: normalizePanelSide(raw.panel_side),
   };
 }
 

@@ -2,6 +2,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import {
   paneLayoutGet,
   paneLayoutReset,
+  paneTreesSet,
   paneLayoutSet,
   subscribePaneLayoutChanged,
 } from '../ipc/panes';
@@ -892,6 +893,12 @@ export async function getPaneLayout(): Promise<PaneLayout> {
  *  when you name none, and return the new layout (paneLayoutReset). */
 export async function resetPaneLayout(profile?: string | null): Promise<PaneLayout> {
   return sanitizeLayout(await paneLayoutReset(profile));
+}
+
+/** Give the profile `profile` the trees of `layout`, as a move in
+ *  Settings > Characters does, and return its layout as saved. */
+export async function setProfileTrees(profile: string, layout: PaneLayout): Promise<PaneLayout> {
+  return sanitizeLayout(await paneTreesSet(profile, layout));
 }
 
 /** Save the active profile's pane layout. Calls within 250 ms coalesce
