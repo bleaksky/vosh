@@ -61,11 +61,14 @@ pub(crate) async fn pane_layout_set(
         if generation.is_some_and(|g| g != current) {
             return Ok(false);
         }
-        // The page sends only the keys it knows, so the stored layout's
-        // others stay.
-        if let Some(stored) = &p.ui.panes {
-            layout.extra = stored.extra.clone();
-        }
+        // The keys this build does not know are the stored layout's, never
+        // the page's, whose own such as `generation` must not reach the
+        // file.
+        layout.extra =
+            p.ui.panes
+                .as_ref()
+                .map(|stored| stored.extra.clone())
+                .unwrap_or_default();
         if let (Some(app_data), Some(name)) = (state.app_data.get(), p.open().name()) {
             let before = p.ui.pane_layout();
             let now = layout_history::now_ms();

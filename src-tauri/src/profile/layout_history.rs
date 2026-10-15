@@ -74,7 +74,7 @@ struct HistoryFile {
     extra: BTreeMap<String, toml::Value>,
 }
 
-/// The version stamp `layouts/seen.toml` keeps.
+/// The version stamp `layouts/.seen.toml` keeps.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Seen {
     #[serde(default)]
@@ -192,7 +192,7 @@ fn push(file: &mut HistoryFile, entry: Earlier) {
 /// On the first launch of `version`, keep each profile's layout as its
 /// file holds it, marked with the version. Runs at launch before any
 /// profile opens, so nothing this version does has touched the files.
-/// `layouts/seen.toml` names the last version that did this.
+/// `layouts/.seen.toml` names the last version that did this.
 pub(crate) fn note_update(set: &ProfileSet, app_data: &Path, version: &str, now: i64) {
     let seen_path = paths::layouts_seen_path(app_data);
     let seen: Seen = std::fs::read_to_string(&seen_path)

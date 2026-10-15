@@ -1120,7 +1120,7 @@ async fn a_fresh_install_writes_these_files_on_its_first_save() {
         written_files(root),
         [
             "global.toml",
-            "layouts/seen.toml",
+            "layouts/.seen.toml",
             "profiles.toml",
             "profiles/default.toml"
         ],

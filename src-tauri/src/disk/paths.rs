@@ -94,8 +94,10 @@ pub(crate) fn layout_history_path(app_data: &Path, name: &str) -> PathBuf {
 }
 
 /// The last version that kept every profile's layout at its first launch.
+/// Its name starts with a dot, which no profile name can, so it never
+/// shares a file with a profile's layouts.
 pub(crate) fn layouts_seen_path(app_data: &Path) -> PathBuf {
-    layouts_dir(app_data).join("seen.toml")
+    layouts_dir(app_data).join(".seen.toml")
 }
 
 /// The folder `#script load` reads Lua files from.
