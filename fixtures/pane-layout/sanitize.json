@@ -10,8 +10,16 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.525 },
-            { "id": "affects", "pane": "affects", "weight": 0.475 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
           ]
         }
       },
@@ -23,8 +31,16 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.525 },
-            { "id": "affects", "pane": "affects", "weight": 0.475 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
           ]
         }
       }
@@ -40,8 +56,16 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.525 },
-            { "id": "affects", "pane": "affects", "weight": 0.475 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
           ]
         }
       }
@@ -53,14 +77,27 @@
           "id": "root",
           "split": "column",
           "children": [
-            { "id": "a", "pane": "map", "weight": 2 },
-            { "id": "b", "pane": "bogus" },
+            {
+              "id": "a",
+              "pane": "map",
+              "weight": 2
+            },
+            {
+              "id": "b",
+              "pane": "bogus"
+            },
             {
               "id": "c",
               "split": "row",
               "children": [
-                { "id": "d", "pane": "MAP" },
-                { "id": "e", "pane": "group" }
+                {
+                  "id": "d",
+                  "pane": "MAP"
+                },
+                {
+                  "id": "e",
+                  "pane": "group"
+                }
               ]
             }
           ]
@@ -74,8 +111,16 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "a", "pane": "map", "weight": 0.6667 },
-            { "id": "e", "pane": "group", "weight": 0.3333 }
+            {
+              "id": "a",
+              "pane": "map",
+              "weight": 0.6667
+            },
+            {
+              "id": "e",
+              "pane": "group",
+              "weight": 0.3333
+            }
           ]
         }
       }
@@ -92,11 +137,23 @@
               "split": "column",
               "weight": 0.5,
               "children": [
-                { "id": "map", "pane": "map", "weight": 1 },
-                { "id": "chat", "pane": "chat", "weight": 3 }
+                {
+                  "id": "map",
+                  "pane": "map",
+                  "weight": 1
+                },
+                {
+                  "id": "chat",
+                  "pane": "chat",
+                  "weight": 3
+                }
               ]
             },
-            { "id": "imm", "pane": "imm", "weight": 0.5 }
+            {
+              "id": "imm",
+              "pane": "imm",
+              "weight": 0.5
+            }
           ]
         }
       },
@@ -108,9 +165,21 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.125 },
-            { "id": "chat", "pane": "chat", "weight": 0.375 },
-            { "id": "imm", "pane": "imm", "weight": 0.5 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.125
+            },
+            {
+              "id": "chat",
+              "pane": "chat",
+              "weight": 0.375
+            },
+            {
+              "id": "imm",
+              "pane": "imm",
+              "weight": 0.5
+            }
           ]
         }
       }
@@ -123,10 +192,26 @@
           "split": "COLUMN",
           "weight": 5,
           "children": [
-            { "id": "", "pane": "map", "weight": 0 },
-            { "id": "dup", "pane": "affects", "weight": -3 },
-            { "id": "dup", "pane": "group", "weight": 1 },
-            { "id": "  ", "pane": " Chat ", "weight": 1 }
+            {
+              "id": "",
+              "pane": "map",
+              "weight": 0
+            },
+            {
+              "id": "dup",
+              "pane": "affects",
+              "weight": -3
+            },
+            {
+              "id": "dup",
+              "pane": "group",
+              "weight": 1
+            },
+            {
+              "id": "  ",
+              "pane": " Chat ",
+              "weight": 1
+            }
           ]
         }
       },
@@ -138,10 +223,26 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.25 },
-            { "id": "dup", "pane": "affects", "weight": 0.25 },
-            { "id": "group", "pane": "group", "weight": 0.25 },
-            { "id": "chat", "pane": "chat", "weight": 0.25 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.25
+            },
+            {
+              "id": "dup",
+              "pane": "affects",
+              "weight": 0.25
+            },
+            {
+              "id": "group",
+              "pane": "group",
+              "weight": 0.25
+            },
+            {
+              "id": "chat",
+              "pane": "chat",
+              "weight": 0.25
+            }
           ]
         }
       }
@@ -153,8 +254,14 @@
           "id": "root",
           "split": "column",
           "children": [
-            { "id": "", "pane": "map" },
-            { "id": "map", "pane": "affects" }
+            {
+              "id": "",
+              "pane": "map"
+            },
+            {
+              "id": "map",
+              "pane": "affects"
+            }
           ]
         }
       },
@@ -166,8 +273,16 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map-2", "pane": "map", "weight": 0.5 },
-            { "id": "map", "pane": "affects", "weight": 0.5 }
+            {
+              "id": "map-2",
+              "pane": "map",
+              "weight": 0.5
+            },
+            {
+              "id": "map",
+              "pane": "affects",
+              "weight": 0.5
+            }
           ]
         }
       }
@@ -184,8 +299,16 @@
               "split": "row",
               "weight": 0.3,
               "children": [
-                { "id": "map", "pane": "map", "weight": 1 },
-                { "id": "group", "pane": "group", "weight": 1 }
+                {
+                  "id": "map",
+                  "pane": "map",
+                  "weight": 1
+                },
+                {
+                  "id": "group",
+                  "pane": "group",
+                  "weight": 1
+                }
               ]
             }
           ]
@@ -199,8 +322,16 @@
           "split": "row",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.5 },
-            { "id": "group", "pane": "group", "weight": 0.5 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.5
+            },
+            {
+              "id": "group",
+              "pane": "group",
+              "weight": 0.5
+            }
           ]
         }
       }
@@ -208,7 +339,13 @@
     {
       "name": "a leaf at the root is wrapped in a column and keeps its props",
       "input": {
-        "root": { "id": "solo", "pane": "chat", "props": { "channel": "tell" } }
+        "root": {
+          "id": "solo",
+          "pane": "chat",
+          "props": {
+            "channel": "tell"
+          }
+        }
       },
       "expected": {
         "version": 1,
@@ -218,7 +355,14 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "solo", "pane": "chat", "weight": 1, "props": { "channel": "tell" } }
+            {
+              "id": "solo",
+              "pane": "chat",
+              "weight": 1,
+              "props": {
+                "channel": "tell"
+              }
+            }
           ]
         }
       }
@@ -234,23 +378,38 @@
               "id": "r1",
               "split": "row",
               "children": [
-                { "id": "map", "pane": "map" },
+                {
+                  "id": "map",
+                  "pane": "map"
+                },
                 {
                   "id": "c2",
                   "split": "column",
                   "children": [
-                    { "id": "affects", "pane": "affects" },
+                    {
+                      "id": "affects",
+                      "pane": "affects"
+                    },
                     {
                       "id": "r3",
                       "split": "row",
                       "children": [
-                        { "id": "group", "pane": "group" },
+                        {
+                          "id": "group",
+                          "pane": "group"
+                        },
                         {
                           "id": "c4",
                           "split": "column",
                           "children": [
-                            { "id": "chat", "pane": "chat" },
-                            { "id": "imm", "pane": "imm" }
+                            {
+                              "id": "chat",
+                              "pane": "chat"
+                            },
+                            {
+                              "id": "imm",
+                              "pane": "imm"
+                            }
                           ]
                         }
                       ]
@@ -270,21 +429,41 @@
           "split": "row",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.5 },
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.5
+            },
             {
               "id": "c2",
               "split": "column",
               "weight": 0.5,
               "children": [
-                { "id": "affects", "pane": "affects", "weight": 0.5 },
+                {
+                  "id": "affects",
+                  "pane": "affects",
+                  "weight": 0.5
+                },
                 {
                   "id": "r3",
                   "split": "row",
                   "weight": 0.5,
                   "children": [
-                    { "id": "group", "pane": "group", "weight": 0.5 },
-                    { "id": "chat", "pane": "chat", "weight": 0.25 },
-                    { "id": "imm", "pane": "imm", "weight": 0.25 }
+                    {
+                      "id": "group",
+                      "pane": "group",
+                      "weight": 0.5
+                    },
+                    {
+                      "id": "chat",
+                      "pane": "chat",
+                      "weight": 0.25
+                    },
+                    {
+                      "id": "imm",
+                      "pane": "imm",
+                      "weight": 0.25
+                    }
                   ]
                 }
               ]
@@ -302,14 +481,23 @@
         "root": {
           "id": "root",
           "split": "column",
-          "children": [{ "id": "x", "pane": "nope" }]
+          "children": [
+            {
+              "id": "x",
+              "pane": "nope"
+            }
+          ]
         }
       },
       "expected": {
         "version": 1,
         "panel_open": false,
         "panel_width": 800,
-        "root": { "id": "root", "split": "column", "weight": 1 }
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1
+        }
       }
     },
     {
@@ -318,7 +506,15 @@
         "panel_width": 10,
         "root": {
           "split": "row",
-          "children": [{ "pane": "group" }, { "pane": "chat", "weight": 3 }]
+          "children": [
+            {
+              "pane": "group"
+            },
+            {
+              "pane": "chat",
+              "weight": 3
+            }
+          ]
         }
       },
       "expected": {
@@ -330,8 +526,16 @@
           "split": "row",
           "weight": 1,
           "children": [
-            { "id": "group", "pane": "group", "weight": 0.25 },
-            { "id": "chat", "pane": "chat", "weight": 0.75 }
+            {
+              "id": "group",
+              "pane": "group",
+              "weight": 0.25
+            },
+            {
+              "id": "chat",
+              "pane": "chat",
+              "weight": 0.75
+            }
           ]
         }
       }
@@ -343,9 +547,18 @@
           "id": "root",
           "split": "column",
           "children": [
-            { "id": "map", "pane": "map" },
-            { "id": "affects", "pane": "affects" },
-            { "id": "group", "pane": "group" }
+            {
+              "id": "map",
+              "pane": "map"
+            },
+            {
+              "id": "affects",
+              "pane": "affects"
+            },
+            {
+              "id": "group",
+              "pane": "group"
+            }
           ]
         }
       },
@@ -357,9 +570,21 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.3333 },
-            { "id": "affects", "pane": "affects", "weight": 0.3333 },
-            { "id": "group", "pane": "group", "weight": 0.3333 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.3333
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.3333
+            },
+            {
+              "id": "group",
+              "pane": "group",
+              "weight": 0.3333
+            }
           ]
         }
       }
@@ -371,23 +596,50 @@
           "id": "root",
           "split": "column",
           "children": [
-            { "id": "map", "pane": "map", "weight": 2 },
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 2
+            },
             {
               "id": "",
               "pane": "lua",
-              "props": { "id": "weather", "plugin": "weather_pane", "title": "Weather" }
+              "props": {
+                "id": "weather",
+                "plugin": "weather_pane",
+                "title": "Weather"
+              }
             },
             {
               "pane": "lua",
-              "props": { "id": "tides", "plugin": "weather_pane", "title": "Tides" }
+              "props": {
+                "id": "tides",
+                "plugin": "weather_pane",
+                "title": "Tides"
+              }
             },
             {
               "id": "again",
               "pane": "lua",
-              "props": { "id": "weather", "plugin": "weather_pane" }
+              "props": {
+                "id": "weather",
+                "plugin": "weather_pane"
+              }
             },
-            { "id": "no-id", "pane": "lua", "props": { "plugin": "weather_pane" } },
-            { "pane": "lua", "props": { "id": "weather", "plugin": " " } }
+            {
+              "id": "no-id",
+              "pane": "lua",
+              "props": {
+                "plugin": "weather_pane"
+              }
+            },
+            {
+              "pane": "lua",
+              "props": {
+                "id": "weather",
+                "plugin": " "
+              }
+            }
           ]
         }
       },
@@ -399,18 +651,30 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.5 },
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.5
+            },
             {
               "id": "lua",
               "pane": "lua",
               "weight": 0.25,
-              "props": { "id": "weather", "plugin": "weather_pane", "title": "Weather" }
+              "props": {
+                "id": "weather",
+                "plugin": "weather_pane",
+                "title": "Weather"
+              }
             },
             {
               "id": "lua-2",
               "pane": "lua",
               "weight": 0.25,
-              "props": { "id": "tides", "plugin": "weather_pane", "title": "Tides" }
+              "props": {
+                "id": "tides",
+                "plugin": "weather_pane",
+                "title": "Tides"
+              }
             }
           ]
         }
@@ -423,13 +687,41 @@
           "id": "root",
           "split": "column",
           "children": [
-            { "id": "map", "pane": "map" },
-            { "id": "", "pane": "chat", "props": { "channel": "tell" } },
-            { "pane": "chat", "props": { "rest": "1" } },
-            { "id": "again", "pane": "map" },
-            { "id": "c3", "pane": "chat" },
-            { "pane": "chat" },
-            { "id": "c5", "pane": "chat", "props": { "channel": "say" } }
+            {
+              "id": "map",
+              "pane": "map"
+            },
+            {
+              "id": "",
+              "pane": "chat",
+              "props": {
+                "channel": "tell"
+              }
+            },
+            {
+              "pane": "chat",
+              "props": {
+                "rest": "1"
+              }
+            },
+            {
+              "id": "again",
+              "pane": "map"
+            },
+            {
+              "id": "c3",
+              "pane": "chat"
+            },
+            {
+              "pane": "chat"
+            },
+            {
+              "id": "c5",
+              "pane": "chat",
+              "props": {
+                "channel": "say"
+              }
+            }
           ]
         }
       },
@@ -441,11 +733,37 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.2 },
-            { "id": "chat", "pane": "chat", "weight": 0.2, "props": { "channel": "tell" } },
-            { "id": "chat-2", "pane": "chat", "weight": 0.2, "props": { "rest": "1" } },
-            { "id": "c3", "pane": "chat", "weight": 0.2 },
-            { "id": "chat-3", "pane": "chat", "weight": 0.2 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.2
+            },
+            {
+              "id": "chat",
+              "pane": "chat",
+              "weight": 0.2,
+              "props": {
+                "channel": "tell"
+              }
+            },
+            {
+              "id": "chat-2",
+              "pane": "chat",
+              "weight": 0.2,
+              "props": {
+                "rest": "1"
+              }
+            },
+            {
+              "id": "c3",
+              "pane": "chat",
+              "weight": 0.2
+            },
+            {
+              "id": "chat-3",
+              "pane": "chat",
+              "weight": 0.2
+            }
           ]
         }
       }
@@ -457,10 +775,26 @@
           "id": "root",
           "split": "column",
           "children": [
-            { "id": "map", "pane": "map", "weight": 2 },
-            { "id": "writing", "pane": "writing", "weight": 1 },
-            { "id": "w2", "pane": "Writing", "weight": 5 },
-            { "id": "affects", "pane": "affects", "weight": 1 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 2
+            },
+            {
+              "id": "writing",
+              "pane": "writing",
+              "weight": 1
+            },
+            {
+              "id": "w2",
+              "pane": "Writing",
+              "weight": 5
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 1
+            }
           ]
         }
       },
@@ -472,9 +806,355 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.5 },
-            { "id": "writing", "pane": "writing", "weight": 0.25 },
-            { "id": "affects", "pane": "affects", "weight": 0.25 }
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.5
+            },
+            {
+              "id": "writing",
+              "pane": "writing",
+              "weight": 0.25
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.25
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a pane the panel shows drops out of the sidebar",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "children": [
+            {
+              "id": "affects-2",
+              "pane": "affects"
+            },
+            {
+              "id": "stats",
+              "pane": "stats"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "stats",
+              "pane": "stats",
+              "weight": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "the writing card never sits in the sidebar",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "children": [
+            {
+              "id": "writing",
+              "pane": "writing"
+            },
+            {
+              "id": "group",
+              "pane": "group"
+            },
+            {
+              "id": "stats",
+              "pane": "stats"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "group",
+              "pane": "group",
+              "weight": 0.5
+            },
+            {
+              "id": "stats",
+              "pane": "stats",
+              "weight": 0.5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an id the panel holds gets a fresh one in the sidebar",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            {
+              "id": "x",
+              "pane": "map"
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "children": [
+            {
+              "id": "x",
+              "pane": "stats"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "x",
+              "pane": "map",
+              "weight": 1
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "stats",
+              "pane": "stats",
+              "weight": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "chat counts four across the panel and the sidebar",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            {
+              "id": "chat",
+              "pane": "chat"
+            },
+            {
+              "id": "chat-2",
+              "pane": "chat"
+            },
+            {
+              "id": "chat-3",
+              "pane": "chat"
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "children": [
+            {
+              "id": "chat-4",
+              "pane": "chat"
+            },
+            {
+              "id": "chat-5",
+              "pane": "chat"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "chat",
+              "pane": "chat",
+              "weight": 0.3333
+            },
+            {
+              "id": "chat-2",
+              "pane": "chat",
+              "weight": 0.3333
+            },
+            {
+              "id": "chat-3",
+              "pane": "chat",
+              "weight": 0.3333
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "chat-4",
+              "pane": "chat",
+              "weight": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a bare leaf for the sidebar becomes a split, and an empty one leaves no trace",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "group",
+          "pane": "group"
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.525
+            },
+            {
+              "id": "affects",
+              "pane": "affects",
+              "weight": 0.475
+            }
+          ]
+        },
+        "sidebar": {
+          "id": "sidebar",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "group",
+              "pane": "group",
+              "weight": 1
+            }
           ]
         }
       }

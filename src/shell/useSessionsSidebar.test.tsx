@@ -80,16 +80,16 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-/** The hook in a window `width` wide, with `count` sessions and the
- *  panel open or hidden. */
-async function mount(width: number, count = 2, panelOpen = true) {
+/** The hook in a window `width` wide, with `count` sessions, the
+ *  panel open or hidden, and panes in the sidebar or none. */
+async function mount(width: number, count = 2, panelOpen = true, holdsPanes = false) {
   win.innerWidth = width;
   const { useSessionsSidebar } = await import('./useSessionsSidebar');
   const seen: { now: SessionsSidebar | null } = { now: null };
   const focusInput = vi.fn();
-  const sessions = { count };
+  const sessions = { count, holdsPanes };
   function Probe() {
-    seen.now = useSessionsSidebar(sessions.count, panelOpen, focusInput);
+    seen.now = useSessionsSidebar(sessions.count, panelOpen, focusInput, sessions.holdsPanes);
     return null;
   }
   const container = doc.createElement('div');
@@ -99,6 +99,12 @@ async function mount(width: number, count = 2, panelOpen = true) {
   return {
     get: () => seen.now!,
     focusInput,
+    /** Give the sidebar panes, or take them all away. */
+    holdTo: (holds: boolean) =>
+      act(async () => {
+        sessions.holdsPanes = holds;
+        root.render(createElement(Probe));
+      }),
     /** Open or close sessions until `n` are open. */
     sessionsTo: (n: number) =>
       act(async () => {
@@ -176,6 +182,51 @@ describe('the sessions sidebar in the main window', () => {
       toggleable: false,
       folded: false,
     });
+  });
+});
+
+describe('the sidebar with panes in it', () => {
+  it('shows with one session, and the toggle hides it and brings it back', async () => {
+    const m = await mount(1280, 1, true, true);
+    expect(m.get()).toMatchObject({
+      shown: true,
+      pressed: true,
+      toggleable: true,
+      holdsPanes: true,
+      fits: true,
+      // One session, so the popover still lists nothing.
+      folded: false,
+    });
+    await m.run(() => m.get().toggle());
+    expect(m.get()).toMatchObject({
+      shown: false,
+      pressed: false,
+      toggleable: true,
+      folded: false,
+    });
+    await m.run(() => m.get().toggle());
+    expect(m.get().shown).toBe(true);
+  });
+
+  it('goes with its last pane while one session is open', async () => {
+    const m = await mount(1280, 1, true, true);
+    await m.holdTo(false);
+    expect(m.get()).toMatchObject({ shown: false, toggleable: false, holdsPanes: false });
+  });
+
+  it('waits for room in a narrow window with one session, with no toggle', async () => {
+    const m = await mount(720, 1, true, true);
+    expect(m.get()).toMatchObject({ shown: false, toggleable: false, fits: false });
+    await m.run(() => m.get().toggle());
+    expect(m.get()).toMatchObject({ shown: false, overlay: false });
+    await m.resizeTo(1280);
+    expect(m.get()).toMatchObject({ shown: true, toggleable: true, fits: true });
+  });
+
+  it('slides only the sessions over the terminal in a narrow window', async () => {
+    const m = await mount(720, 2, true, true);
+    await m.run(() => m.get().toggle());
+    expect(m.get()).toMatchObject({ shown: false, overlay: true, pressed: true });
   });
 });
 

@@ -93,6 +93,11 @@ export interface PaletteSessions {
   /** Hide the sidebar in this window, or show it again, as the sessions
    *  toggle does. */
   toggleShown: () => void;
+  /** The sidebar holds a pane, so the row names the sidebar. */
+  sidebar?: boolean;
+  /** The sidebar toggle shows, as it does for a sidebar that holds a
+   *  pane while one session is open. */
+  toggleable?: boolean;
 }
 
 /** The selected session's snoops, for the rows that reach them. */
@@ -471,8 +476,9 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   }
 
   // The rows that move between sessions wait for a second session, as
-  // the sidebar does.
+  // the sidebar does. The row that hides it waits for its toggle.
   const sessions = deps.sessions && deps.sessions.rows.length >= 2 ? deps.sessions : null;
+  const sidebar = sessions ?? (deps.sessions?.toggleable ? deps.sessions : null);
   if (deps.newSession) {
     entries.push({
       id: 'session-new',
@@ -527,16 +533,18 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       run: deps.closeSession,
     });
   }
-  if (sessions) {
+  if (sidebar) {
     entries.push({
       id: 'sessions-sidebar',
       section: 'session',
-      title: sessions.shown ? 'Hide sessions' : 'Show sessions',
-      keywords: 'sidebar list tabs',
+      title: `${sidebar.shown ? 'Hide' : 'Show'} ${sidebar.sidebar ? 'sidebar' : 'sessions'}`,
+      keywords: 'sidebar list tabs panes',
       keys: appShortcut('sessions-sidebar'),
       searchOnly: true,
-      run: sessions.toggleShown,
+      run: sidebar.toggleShown,
     });
+  }
+  if (sessions) {
     // Each session to go to, by its label as its row reads, the world
     // beside a session named for its character or its name, and the key
     // that reaches the first nine.

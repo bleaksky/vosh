@@ -723,7 +723,9 @@
 /* Panel side Left puts the sidebar in the last column. Its line and
    its handle move to its left side, and New session ends 17 in from
    the line there. */
-.shell[data-panel-side='left'] .shell-sessions {
+.shell[data-panel-side='left'] .shell-sessions,
+.shell[data-panel-side='left'] .shell-sidebar-top,
+.shell[data-panel-side='left'] .sidebar-panes {
   box-shadow: inset 1px 0 0 var(--sep);
 }
 
@@ -735,4 +737,53 @@
 .shell[data-panel-side='left'] .shell-sessions-edge {
   grid-column: 3;
   justify-self: start;
+}
+
+/* ── Sidebar panes ─────────────────────────────────────────────────── */
+
+/* The sidebar holds the session list and panes of its own under it. The
+   list is only as tall as its rows, and scrolls once it would take more
+   than three fifths of a column that holds panes. The panes fill the
+   rest under the panel's 1 px line, drawn at your panel size. With one
+   session the panes start under the column's 32 px top row. */
+.shell-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--panel);
+}
+
+.shell-sidebar > .shell-sessions {
+  flex: 0 1 auto;
+}
+
+.shell-sidebar > .shell-sessions .shell-sessions-list {
+  flex: 0 1 auto;
+  padding-bottom: 6px;
+}
+
+.shell-sidebar.has-panes > .shell-sessions {
+  max-height: 60%;
+}
+
+.shell-sidebar-top {
+  box-shadow: inset -1px 0 0 var(--sep);
+}
+
+.panel-host.sidebar-panes {
+  flex: 1 1 auto;
+  height: auto;
+  box-shadow: inset -1px 0 0 var(--sep);
+}
+
+.shell-sidebar > .shell-sessions + .sidebar-panes {
+  border-top: 1px solid var(--sep);
+}
+
+/* While the sidebar holds no pane, one quiet line under the sessions
+   says how to put one there. */
+.sidebar-hint {
+  padding-top: 12px;
+  padding-right: 16px;
 }

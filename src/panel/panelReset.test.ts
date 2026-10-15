@@ -29,6 +29,7 @@ const ARRANGED: PaneLayout = {
   version: 1,
   panel_open: false,
   panel_width: 360,
+  sidebar: { id: 'sidebar', split: 'column', weight: 1, children: [] },
   root: {
     id: 'root',
     split: 'column',
