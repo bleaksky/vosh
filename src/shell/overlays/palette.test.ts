@@ -337,6 +337,21 @@ describe('paletteSections', () => {
     }
   });
 
+  it('lists Hide sidebar with one session while the sidebar holds a pane', () => {
+    const one = { ...sessions(), rows: [sessionRow(1, 'Tolliver', 1848)] };
+    const aside = { ...one, sidebar: true, toggleable: true };
+    const entries = buildPaletteEntries(deps({ sessions: aside }));
+    const ids = entries.map((e) => e.id);
+    expect(entries.find((e) => e.id === 'sessions-sidebar')?.title).toBe('Hide sidebar');
+    for (const id of ['session-next', 'session-previous', 'session-goto-1']) {
+      expect(ids).not.toContain(id);
+    }
+    const two = buildPaletteEntries(
+      deps({ sessions: { ...sessions(), sidebar: true, shown: false } }),
+    );
+    expect(two.find((e) => e.id === 'sessions-sidebar')?.title).toBe('Show sidebar');
+  });
+
   it('keys the first nine sessions and names one before its login by its world', () => {
     const rows = [
       sessionRow(1, 'Tolliver', 1848),

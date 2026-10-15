@@ -5,6 +5,7 @@ import { asNumber, asText } from '../stores/store';
 import { parseAffectsPacket } from '../stores/gmcp/affectsStore';
 import { parseCombat } from '../stores/gmcp/combatStore';
 import { parseGamePrompt } from '../stores/gmcp/gamePromptStore';
+import { parseStats } from '../stores/gmcp/statsStore';
 import { parseVitalsPacket } from '../stores/gmcp/vitalsStore';
 import { parseRoomInfo } from '../stores/gmcp/roomStore';
 import { aabahranFixtureNames, aabahranPacket } from './aabahranGmcp';
@@ -14,7 +15,9 @@ import { aabahranFixtureNames, aabahranPacket } from './aabahranGmcp';
 // crates/prompt/tests/views.rs read too. The engine keeps its own
 // copy of the packages to draw your prompt, and the panes read these
 // stores, so both readings are held to one record. A package no store
-// reads keeps its record for the engine alone (ENGINE_ONLY).
+// reads keeps its record for the engine alone (ENGINE_ONLY), and one
+// the engine does not read, Char.Stats, keeps its record for the stores
+// alone (PAGE_ONLY in crates/prompt/tests/views.rs).
 //
 // A view's `map` holds what the Map pane's room strip reads where it
 // differs from the prompt engine on purpose. Under rhapsody of delusion
@@ -76,6 +79,8 @@ function view(name: string): unknown {
     }
     case 'Char.Prompt':
       return parseGamePrompt(data);
+    case 'Char.Stats':
+      return parseStats(data);
     case 'Room.Info': {
       const info = parseRoomInfo(data);
       if (info === null) return null;

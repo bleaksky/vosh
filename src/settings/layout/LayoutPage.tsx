@@ -33,6 +33,7 @@ import { GameTimeRow } from './GameTimeRow';
 import { TickCountRow } from './TickCountRow';
 import { StatusStyleRow } from './StatusStyleRow';
 import { PanelSideRow } from './PanelSideRow';
+import { StatsStyleRow } from './StatsStyleRow';
 import { TickTimeStyleRow } from './TickTimeStyleRow';
 import { VitalsGallery } from './VitalsGallery';
 import {
@@ -145,6 +146,10 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
       </Section>
 
       {config && <AffectsSection config={config} update={update} />}
+
+      <Section id="stats" title="Stats" help={{ topic: 'shape.stats', subject: 'the stats pane' }}>
+        <StatsStyleRow config={config} setConfig={setConfig} onError={onError} />
+      </Section>
 
       {config && (
         <Section id="split" title="Split terminal">

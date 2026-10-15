@@ -544,6 +544,7 @@ fn generate(seed: u64) -> Set {
             .pick(&["meters", "compact", "strip", "dashboard"])
             .into();
         config.ui.panel_side = rng.pick(&["right", "left"]).into();
+        config.ui.stats_style = rng.pick(&["sheet", "rows", "ledger"]).into();
         if rng.chance(50) {
             config.ui.tracked_affects = vec![TrackedAffect {
                 name: format!("Sanctuary {i}"),

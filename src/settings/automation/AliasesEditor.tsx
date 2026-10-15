@@ -17,6 +17,7 @@ import { withGroup } from '../../automation/automationTriggers';
 import { subscribeAliasesChanged } from '../../ipc/automation';
 import { Card, CardNote, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { CodeRow, GroupField } from './fields';
+import { duplicateAlias } from '../../automation/duplicate';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';
 
@@ -27,6 +28,8 @@ const ALIASES_SPEC: KindSpec<AliasRecord> = {
   filterLabel: 'Filter aliases',
   newLabel: 'New alias',
   deleteLabel: 'Delete alias',
+  duplicateLabel: 'Duplicate alias',
+  duplicate: duplicateAlias,
   emptyDetail: 'Choose an alias to edit it.',
   emptyList: 'You have no aliases yet.',
   load: (profile) => loadAliases(aliasStore(profile)),

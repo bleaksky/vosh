@@ -314,6 +314,11 @@ export interface MenuState {
   /** You keep the sessions sidebar showing, checked in View, though a
    *  narrow window can fold it. */
   sessionsShown: boolean;
+  /** The sidebar holds a pane, so View names it Show sidebar. */
+  sidebarHoldsPanes: boolean;
+  /** The sidebar toggle shows though one session is open, as it does
+   *  for a sidebar that holds a pane, so Show sidebar takes a click. */
+  sidebarToggleable: boolean;
   /** How many snoop tabs the selected session has, live or ended. View
    *  lists Go to snoop while there is one. */
   snoops: number;
@@ -331,6 +336,9 @@ export interface MenuStateInput {
   /** The paneKey of every pane the panel tree holds. The menu lists
    *  the built-in panes alone, whose key is their type. */
   shownPanes: readonly string[];
+  /** The paneKey of every pane the sidebar shows now, empty while it
+   *  hides. Such a pane reads checked whether the panel shows or not. */
+  sidebarPanes?: readonly string[];
   /** The MUD sent Imm.Queues this session. */
   staffOffered: boolean;
   /** Every theme in gallery order. */
@@ -338,6 +346,8 @@ export interface MenuStateInput {
   theme: string;
   sessions: number;
   sessionsShown: boolean;
+  sidebarHoldsPanes?: boolean;
+  sidebarToggleable?: boolean;
   snoops: number;
 }
 
@@ -352,17 +362,20 @@ export function buildMenuState(input: MenuStateInput): MenuState {
     splitOpen: input.splitOpen,
     panes: PANE_TYPES.filter(isOfferedPaneType).map((pane) => {
       const shown = input.shownPanes.includes(pane);
+      const aside = input.sidebarPanes?.includes(pane) ?? false;
       return {
         pane,
-        visible: input.panelOpen && shown,
+        visible: (input.panelOpen && shown) || aside,
         // A pane the tree already shows stays listed, so you can hide it.
-        offered: pane !== 'imm' || input.staffOffered || shown,
+        offered: pane !== 'imm' || input.staffOffered || shown || aside,
       };
     }),
     themes: input.themes.map(({ id, label, custom }) => ({ id, label, custom })),
     theme: input.theme,
     sessions: input.sessions,
     sessionsShown: input.sessionsShown,
+    sidebarHoldsPanes: input.sidebarHoldsPanes ?? false,
+    sidebarToggleable: input.sidebarToggleable ?? false,
     snoops: input.snoops,
   };
 }

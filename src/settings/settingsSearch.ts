@@ -405,6 +405,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'affects almost gone red threshold hours danger critical last',
     target: at('layout', 'affects', 'affects-almost-gone'),
   },
+  {
+    label: 'Stats style',
+    description: 'Score sheet, Rows or Ledger, the way the Stats pane lays out your score sheet.',
+    keywords: 'stats pane score sheet rows ledger strength luck hitroll damroll armor saves',
+    target: at('layout', 'stats', 'stats-style'),
+  },
 
   // Input.
   {

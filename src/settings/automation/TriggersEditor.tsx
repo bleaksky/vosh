@@ -71,6 +71,7 @@ import { usePromptGags } from '../../stores/session/promptGagStore';
 import { AlertPartsOn, AlertRow } from './AlertRows';
 import { useBannerPermission } from './useBannerPermission';
 import { FixChoice, GroupField } from './fields';
+import { duplicateTrigger } from '../../automation/duplicate';
 import { DraftEditor } from './DraftEditor';
 import {
   colorKeys,
@@ -132,6 +133,8 @@ function triggersSpec(): KindSpec<TriggerCard> {
     filterLabel: 'Filter triggers',
     newLabel: 'New trigger',
     deleteLabel: 'Delete trigger',
+    duplicateLabel: 'Duplicate trigger',
+    duplicate: duplicateTrigger,
     // Presets put their triggers back at launch. Turn the preset off.
     canDelete: (t) => !t.preset,
     emptyDetail: 'Choose a trigger to edit it.',

@@ -37,6 +37,15 @@ export function paneLayoutReset(profile?: string | null): Promise<unknown> {
   return invoke<unknown>('pane_layout_reset', { profile: profile ?? null });
 }
 
+/** Give the profile `profile` the panel and sidebar trees of `layout`,
+ *  keeping whether its panel shows and how wide it is, as a move in
+ *  Settings > Characters does. Saves and tells the windows as
+ *  paneLayoutReset does. Pages move through setProfileTrees in
+ *  panel/paneLayout.ts, which cleans the tree. */
+export function paneTreesSet(profile: string, layout: PaneLayout): Promise<unknown> {
+  return invoke<unknown>('pane_trees_set', { profile, layout });
+}
+
 /** Hear a pane layout saved outside this window. Pages hear it through
  *  subscribePaneLayout in panel/paneLayout.ts, which cleans it and holds
  *  it back while a save of their own is out. */

@@ -134,6 +134,20 @@ describe('the give way order', () => {
     expect(partsGone('dashboard', 0).size).toBe(0);
   });
 
+  it('cuts no name while a part is left to go, and lets your opponent name go last', () => {
+    for (const style of ['meters', 'strip', 'dashboard'] as const) {
+      const order = BAR_GIVE_WAY[style];
+      expect(order.slice(-2), style).toEqual(['squeeze', 'foeName']);
+      expect(order.indexOf('target'), style).toBeGreaterThan(-1);
+      expect(order.indexOf('rttText'), style).toBeLessThan(order.indexOf('squeeze'));
+      expect(order.indexOf('maxes'), style).toBeLessThan(order.indexOf('squeeze'));
+    }
+    // Your target goes whole before the labels that would say what it is.
+    expect(BAR_GIVE_WAY.meters.indexOf('target')).toBeLessThan(
+      BAR_GIVE_WAY.meters.indexOf('labels'),
+    );
+  });
+
   it('fills the tick share up or down against the interval', () => {
     expect(tickShare(15, 30, 'up')).toBe(0.5);
     expect(tickShare(10, 30, 'down')).toBeCloseTo(2 / 3);
@@ -143,6 +157,23 @@ describe('the give way order', () => {
 });
 
 describe('the status bar in frame.css', () => {
+  it('keeps names whole until the bar squeezes', () => {
+    const rule = (selector: string) => {
+      const at = frameCss.indexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThanOrEqual(0);
+      return frameCss.slice(at, frameCss.indexOf('}', at));
+    };
+    expect(rule('.shell-bar-zone.is-wide')).toContain('flex: 3 0 auto');
+    expect(rule('.shell-bar-zone.is-shrink')).toContain('flex: 1 0 auto');
+    expect(rule('.shell-bar[data-squeeze] .shell-bar-zone.is-wide')).toContain('flex: 3 1 0');
+    expect(rule('.shell-bar-seg.is-shrink')).not.toContain('flex: 0 1 auto');
+  });
+
+  it('lines the Dashboard captions up, every value keeping its bar room', () => {
+    const at = frameCss.indexOf('.shell-bar-val {');
+    expect(frameCss.slice(at, frameCss.indexOf('}', at))).toContain('margin-bottom: 4px');
+  });
+
   it('sets each style its height, scaled by your panel size', () => {
     expect(frameCss).toMatch(
       /\[data-status-style='meters'\] \{\n {2}--status-line: round\(32px \* var\(--panel-text-px, 12\) \/ 12, 1px\);/,

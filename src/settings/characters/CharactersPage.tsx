@@ -10,7 +10,12 @@ import {
   worldOptions,
   worldSources,
 } from '../../lib/characterProfiles';
-import { resetPaneLayout, subscribePaneLayout } from '../../panel/paneLayout';
+import {
+  resetPaneLayout,
+  setProfileTrees,
+  subscribePaneLayout,
+  type PaneLayout,
+} from '../../panel/paneLayout';
 import {
   subscribeTrackedAffectsChanged,
   trackedAffectsSet,
@@ -83,6 +88,7 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
   // Answers that arrive after a newer request are dropped.
   const detailSeq = useRef(0);
   const trackedSeq = useRef(0);
+  const panesSeq = useRef(0);
   const trackedRef = useRef<TrackedAffect[]>([]);
   trackedRef.current = detail?.tracked_affects ?? [];
 
@@ -242,6 +248,26 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
       .finally(reloadAll);
   };
 
+  // A move on Panel layout saves to the selected profile at once. The
+  // drawing changes first. An answer from an older move is dropped, and
+  // a failed save reads the profile back.
+  const movePanes = (next: PaneLayout) => {
+    if (!detail) return;
+    const name = detail.name;
+    setDetail((d) => (d && d.name === name ? { ...d, panes: next } : d));
+    const seq = ++panesSeq.current;
+    setProfileTrees(name, next)
+      .then((saved) => {
+        onError(null);
+        if (seq !== panesSeq.current) return;
+        setDetail((d) => (d && d.name === name ? { ...d, panes: saved } : d));
+      })
+      .catch((e: unknown) => {
+        onError(String(e));
+        reloadDetail();
+      });
+  };
+
   const resetPanes = () => {
     if (!detail) return;
     const name = detail.name;
@@ -330,6 +356,8 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
             <PanelLayout
               owner={detail.display_name || profileDisplayName(detail.name)}
               panes={detail.panes}
+              panelSide={detail.panel_side}
+              onMove={movePanes}
               onReset={resetPanes}
               resetting={resetting}
             />

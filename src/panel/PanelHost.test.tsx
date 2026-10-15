@@ -118,9 +118,9 @@ describe('PanelHost', () => {
     });
     const html = renderToStaticMarkup(<PanelHost promptShow={null} />);
     layout = null;
-    const labels = [...html.matchAll(/class="pane pane-lua" aria-label="([^"]*)"/g)].map(
-      (m) => m[1],
-    );
+    const labels = [
+      ...html.matchAll(/class="pane pane-lua" data-leaf="[^"]*" aria-label="([^"]*)"/g),
+    ].map((m) => m[1]);
     expect(labels).toEqual(['Tides', 'Weather']);
   });
 
@@ -148,7 +148,9 @@ describe('PanelHost', () => {
       });
       const html = renderToStaticMarkup(<PanelHost promptShow={null} />);
       layout = null;
-      return [...html.matchAll(/class="pane pane-chat" aria-label="([^"]*)"/g)].map((m) => m[1]);
+      return [
+        ...html.matchAll(/class="pane pane-chat" data-leaf="[^"]*" aria-label="([^"]*)"/g),
+      ].map((m) => m[1]);
     };
     expect(chatLabels({ channel: 'tell' }, { rest: '1' })).toEqual([
       'Chat, Tell',

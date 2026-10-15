@@ -32,6 +32,7 @@ const FIXTURES: &[(&str, &str, &str)] = &[
     fixture!("char-prompt-off.gmcp", "Char.Prompt"),
     fixture!("char-prompt-fight.gmcp", "Char.Prompt"),
     fixture!("char-state.gmcp", "Char.State"),
+    fixture!("char-stats.gmcp", "Char.Stats"),
     fixture!("room-weather.gmcp", "Room.Weather"),
     fixture!("room-weather-indoors.gmcp", "Room.Weather"),
     fixture!("group-info.gmcp", "Group.Info"),
@@ -195,6 +196,17 @@ fn the_older_build_sends_true_values_and_names_the_song() {
     assert!(combat.get("hidden").is_none());
     assert_eq!(combat["hp_pct"], 41);
     assert_eq!(combat["condition"], "big nasty wounds");
+}
+
+#[test]
+fn char_stats_carries_the_score_sheet() {
+    let stats = data("char-stats.gmcp");
+    assert_eq!(stats["str"], json!({"cur":22,"perm":20,"max":23,"over":1}));
+    assert_eq!(stats["luck"], json!({"bar":4,"of":6}));
+    assert_eq!(stats["hitroll_pct"], 90);
+    assert_eq!(stats["ac"]["blunt"], -280);
+    assert_eq!(stats["ac_pct"]["magic"], 94);
+    assert_eq!(stats["saves"]["breath"], 2);
 }
 
 #[test]

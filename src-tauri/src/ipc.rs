@@ -17,6 +17,7 @@ pub(crate) mod prompt;
 pub(crate) mod scripts;
 pub(crate) mod session;
 pub(crate) mod snoop;
+pub(crate) mod stats;
 pub(crate) mod terminal;
 pub(crate) mod tick;
 pub(crate) mod ui_config;
@@ -155,6 +156,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         affects::tracked_affects_set,
         characters::profile_detail_get,
         panes::pane_layout_reset,
+        panes::pane_trees_set,
         panes::lua_panes_get,
         snoop::snoop_get,
         snoop::snoop_stop,
@@ -165,6 +167,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         affects::affects_snapshot_get,
         affects::affect_full_get,
         vitals::vitals_snapshot_get,
+        stats::stats_snapshot_get,
         vitals::vitals_text_watch,
         prompt::hidden_get,
         prompt::prompt_show_get,
@@ -193,6 +196,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         characters::profile_import_apply,
         ui_config::ui_set_theme,
         affects::ui_set_affects_display,
+        stats::ui_set_stats_style,
         ui_config::ui_get_chat_colors,
         ui_config::ui_set_chat_color,
         ui_config::ui_reset_chat_colors,

@@ -9,8 +9,8 @@ use tracing::warn;
 
 use super::{
     accelerator, between_sessions, connect_label, is_check_id, quit_asks, route, shows_disconnect,
-    snoop_listed, staff_listed, theme_rows, MenuState, MenuTheme, Route, SessionRow, ThemeRow,
-    PANE_ROWS, QUIT_ACCELERATOR, SESSION_ROWS,
+    sidebar_label, sidebar_toggles, snoop_listed, staff_listed, theme_rows, MenuState, MenuTheme,
+    Route, SessionRow, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR, SESSION_ROWS,
 };
 use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND, SNOOP_FIND};
 use crate::app::state::SharedState;
@@ -43,6 +43,8 @@ struct Applied {
     /// The Session menu ends on Disconnect, see `shows_disconnect`.
     disconnect: bool,
     connect_label: String,
+    /// The View row that hides the sidebar, see `sidebar_label`.
+    sidebar_label: &'static str,
     staff_listed: bool,
     snoop_listed: bool,
     themes: Vec<MenuTheme>,
@@ -220,6 +222,7 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         applied: Mutex::new(Applied {
             disconnect: false,
             connect_label: connect_label(None),
+            sidebar_label: "Show sessions",
             staff_listed: false,
             snoop_listed: false,
             themes: Vec::new(),
@@ -352,7 +355,15 @@ pub(crate) fn apply_state(app: &AppHandle, state: &MenuState) {
     for row in &h.steps {
         log_err(row.set_enabled(between), "step row");
     }
-    log_err(h.sessions.set_enabled(between), "sessions row");
+    log_err(
+        h.sessions.set_enabled(sidebar_toggles(state)),
+        "sessions row",
+    );
+    let sidebar = sidebar_label(state);
+    if applied.sidebar_label != sidebar {
+        log_err(h.sessions.set_text(sidebar), "sessions label");
+        applied.sidebar_label = sidebar;
+    }
     log_err(
         h.sessions.set_checked(state.sessions_shown),
         "sessions check",

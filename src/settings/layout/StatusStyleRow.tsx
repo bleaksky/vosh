@@ -28,7 +28,7 @@ type StatusStyleRowProps = Pick<SettingsPageProps, 'config' | 'setConfig' | 'onE
 
 export function StatusStyleRow({ config, setConfig, onError }: StatusStyleRowProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
-  const style = config?.status_style ?? 'meters';
+  const style = config?.status_style ?? 'compact';
   return (
     <Row label="Style" description={DESCRIPTIONS[style]} anchor="status-style">
       <Select

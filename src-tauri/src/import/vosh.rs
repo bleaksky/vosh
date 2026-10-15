@@ -262,7 +262,12 @@ pub(crate) fn preview(
         timers: config.timers.len(),
         tick: config.tick != TickConfig::default(),
         variables: config.profile_vars.len(),
-        panes: leaf_panes(&config.ui.pane_layout().root),
+        panes: {
+            let layout = config.ui.pane_layout();
+            let mut panes = leaf_panes(&layout.root);
+            panes.extend(leaf_panes(&layout.sidebar));
+            panes
+        },
         runs_lua,
         plugins: config.plugins.enabled,
         world,
@@ -505,7 +510,7 @@ mod tests {
                 timers: 1,
                 tick: true,
                 variables: 2,
-                panes: vec!["map".into(), "chat".into(), "group".into()],
+                panes: vec!["map".into(), "chat".into(), "group".into(), "stats".into()],
                 runs_lua: vec![
                     lua(LuaItemKind::Trigger, "tells"),
                     lua(LuaItemKind::Alias, "heal")

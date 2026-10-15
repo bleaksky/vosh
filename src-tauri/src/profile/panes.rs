@@ -27,7 +27,8 @@ pub(crate) struct DockEntryPersist {
 /// `PANE_TYPES` in src/panel/paneLayout.ts. `writing` is the writing
 /// card pinned to the panel, which only the card's pin adds. A build
 /// from before it drops the leaf as an unknown type and loads the rest.
-pub(crate) const PANE_TYPES: [&str; 6] = ["map", "affects", "group", "chat", "imm", "writing"];
+pub(crate) const PANE_TYPES: [&str; 7] =
+    ["map", "affects", "group", "stats", "chat", "imm", "writing"];
 
 /// How many Chat panes the panel holds. Mirrored by `CHAT_PANES_MAX`
 /// in src/panel/paneLayout.ts.
@@ -57,8 +58,9 @@ const PANE_MAX_SPLIT_DEPTH: usize = 3;
 const PANE_MAX_WEIGHT: f64 = 1_000_000.0;
 
 /// The side panel for one profile: whether it shows, how wide
-/// it is, and the tree of panes inside it. The vitals footer is
-/// pinned below the tree and is not part of it.
+/// it is, and the tree of panes inside it, and the tree of panes in the
+/// sidebar across from it. The vitals footer is pinned below the
+/// panel's tree and is not part of it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) struct PaneLayoutPersist {
     #[serde(default = "default_pane_layout_version")]
@@ -72,6 +74,16 @@ pub(crate) struct PaneLayoutPersist {
     /// means the panel shows only the pinned vitals.
     #[serde(default = "default_pane_root")]
     pub root: PaneNode,
+    /// The panes in the sidebar across from the panel, under the
+    /// session list. Always a split after `sanitize`, empty while the
+    /// sidebar holds none, and written only once it holds one. A pane
+    /// shows in one tree at a time, and the writing card only in the
+    /// panel.
+    #[serde(
+        default = "empty_sidebar",
+        skip_serializing_if = "PaneNode::is_empty_split"
+    )]
+    pub sidebar: PaneNode,
 }
 
 /// One node of the pane tree. A leaf sets `pane`; a split sets
@@ -116,6 +128,11 @@ fn default_pane_weight() -> f64 {
 /// this gives the Map pane 348 px and the Affects pane 315 px.
 const DEFAULT_MAP_WEIGHT: f64 = 0.525;
 const DEFAULT_AFFECTS_WEIGHT: f64 = 0.475;
+
+/// The sidebar with no panes, the stock one.
+fn empty_sidebar() -> PaneNode {
+    PaneNode::split("sidebar", "column", Vec::new())
+}
 
 /// Map above affects, the stock layout.
 fn default_pane_root() -> PaneNode {
@@ -171,6 +188,11 @@ impl PaneNode {
         }
     }
 
+    /// A split with no children, as an empty sidebar is.
+    fn is_empty_split(&self) -> bool {
+        self.pane.is_none() && self.children.is_empty()
+    }
+
     fn split(id: &str, dir: &str, children: Vec<PaneNode>) -> Self {
         Self {
             id: id.to_string(),
@@ -191,19 +213,36 @@ impl PaneLayoutPersist {
             panel_open: true,
             panel_width: None,
             root: default_pane_root(),
+            sidebar: empty_sidebar(),
         }
     }
 
-    /// This panel with the stock map over affects tree, keeping whether
-    /// the panel shows and how wide it is. What Reset to default puts
-    /// back.
+    /// This panel with the stock map over affects tree and an empty
+    /// sidebar, keeping whether the panel shows and how wide it is. What
+    /// Reset to default puts back.
     pub(crate) fn with_default_tree(&self) -> Self {
         Self {
             version: PANE_LAYOUT_VERSION,
             panel_open: self.panel_open,
             panel_width: self.panel_width,
             root: default_pane_root(),
+            sidebar: empty_sidebar(),
         }
+    }
+
+    /// This layout with the panel and sidebar trees of `trees`, cleaned
+    /// as one, keeping whether the panel shows and how wide it is. What
+    /// a move in Settings > Characters saves.
+    pub(crate) fn with_trees(&self, trees: &Self) -> Self {
+        let mut out = Self {
+            version: PANE_LAYOUT_VERSION,
+            panel_open: self.panel_open,
+            panel_width: self.panel_width,
+            root: trees.root.clone(),
+            sidebar: trees.sidebar.clone(),
+        };
+        out.sanitize();
+        out
     }
 
     /// Seed a profile's tree from the old zone layout the first time
@@ -271,6 +310,7 @@ impl PaneLayoutPersist {
             panel_open: !children.is_empty() || vitals_shown,
             panel_width: None,
             root: PaneNode::split("root", "column", children),
+            sidebar: empty_sidebar(),
         };
         layout.sanitize();
         layout
@@ -283,9 +323,12 @@ impl PaneLayoutPersist {
     /// split inside a split of the same direction merges into it,
     /// splits nested deeper than [`PANE_MAX_SPLIT_DEPTH`] flatten,
     /// weights become positive shares that sum to 1 (rounded to four
-    /// places), and the root is always a split. The same rules run in
-    /// `sanitize` in src/panel/paneLayout.ts, and both are checked
-    /// against fixtures/pane-layout/sanitize.json.
+    /// places), and the root is always a split. The sidebar's tree
+    /// follows the same rules after the panel's, so a pane the panel
+    /// shows drops out of the sidebar, an id stays unique across both,
+    /// and the writing card never sits in the sidebar. The same rules
+    /// run in `sanitizeLayout` in src/panel/paneLayout.ts, and both are
+    /// checked against fixtures/pane-layout/sanitize.json.
     pub(crate) fn sanitize(&mut self) {
         self.version = PANE_LAYOUT_VERSION;
         self.panel_width = self
@@ -295,7 +338,11 @@ impl PaneLayoutPersist {
             &mut self.root,
             PaneNode::split("root", "column", Vec::new()),
         );
-        self.root = TreeSanitizer::new(&root).root(root);
+        let sidebar = std::mem::replace(&mut self.sidebar, empty_sidebar());
+        let mut sanitizer = TreeSanitizer::new(&[&root, &sidebar]);
+        self.root = sanitizer.root(root, "root");
+        sanitizer.writing = false;
+        self.sidebar = sanitizer.root(sidebar, "sidebar");
     }
 }
 
@@ -401,10 +448,13 @@ struct TreeSanitizer {
     used: HashSet<String>,
     /// How many leaves of each key are placed so far.
     panes: HashMap<PaneKey, usize>,
+    /// Whether the tree being read may hold the writing card, which
+    /// only the panel's does.
+    writing: bool,
 }
 
 impl TreeSanitizer {
-    fn new(root: &PaneNode) -> Self {
+    fn new(roots: &[&PaneNode]) -> Self {
         fn collect(node: &PaneNode, out: &mut HashSet<String>) {
             if !node.id.trim().is_empty() {
                 out.insert(node.id.clone());
@@ -414,11 +464,14 @@ impl TreeSanitizer {
             }
         }
         let mut reserved = HashSet::new();
-        collect(root, &mut reserved);
+        for root in roots {
+            collect(root, &mut reserved);
+        }
         Self {
             reserved,
             used: HashSet::new(),
             panes: HashMap::new(),
+            writing: true,
         }
     }
 
@@ -444,7 +497,7 @@ impl TreeSanitizer {
         }
     }
 
-    fn root(&mut self, raw: PaneNode) -> PaneNode {
+    fn root(&mut self, raw: PaneNode, base: &str) -> PaneNode {
         // A bare leaf at the root gets wrapped so the root stays a split.
         let raw = if raw.pane.is_some() {
             PaneNode::split("", "column", vec![raw])
@@ -452,7 +505,7 @@ impl TreeSanitizer {
             raw
         };
         let mut dir = split_dir(raw.split.as_deref());
-        let id = self.claim_id(&raw.id, "root");
+        let id = self.claim_id(&raw.id, base);
         let mut children = self.children(dir, raw.children, 0);
         // A lone split under the root takes its place, keeping the root id.
         if children.len() == 1 && children[0].pane.is_none() {
@@ -467,6 +520,9 @@ impl TreeSanitizer {
         let weight = clean_weight(raw.weight);
         if let Some(kind) = raw.pane.as_deref() {
             let kind = pane_type(kind)?;
+            if kind == "writing" && !self.writing {
+                return None;
+            }
             let key = pane_key(kind, &raw.props)?;
             let cap = pane_cap(&key);
             let placed = self.panes.entry(key).or_default();
@@ -613,6 +669,7 @@ pub(crate) mod tests {
             panel_open: false,
             panel_width: Some(360),
             root: PaneNode::split("root", "column", vec![PaneNode::leaf("map", 0.6), row]),
+            sidebar: PaneNode::split("sidebar", "column", vec![PaneNode::leaf("stats", 1.0)]),
         };
         layout.sanitize();
         layout
@@ -641,6 +698,23 @@ pub(crate) mod tests {
         assert_eq!(reset.root, PaneLayoutPersist::default_layout().root);
         assert_eq!(reset.panel_open, custom_layout().panel_open);
         assert_eq!(reset.panel_width, custom_layout().panel_width);
+    }
+
+    #[test]
+    fn with_trees_keeps_the_panel_and_cleans_the_trees() {
+        let mut trees = PaneLayoutPersist::default_layout();
+        // Map in the sidebar as well as the panel leaves the sidebar,
+        // since the panel is cleaned first.
+        trees.sidebar = PaneNode::split(
+            "sidebar",
+            "column",
+            vec![PaneNode::leaf("map", 1.0), PaneNode::leaf("group", 1.0)],
+        );
+        let moved = custom_layout().with_trees(&trees);
+        assert_eq!(moved.panel_open, custom_layout().panel_open);
+        assert_eq!(moved.panel_width, custom_layout().panel_width);
+        assert_eq!(leaf_panes(&moved.root), ["map", "affects"]);
+        assert_eq!(leaf_panes(&moved.sidebar), ["group"]);
     }
 
     #[test]

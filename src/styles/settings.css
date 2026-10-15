@@ -1757,6 +1757,7 @@
 .st-schematic {
   display: block;
   flex: none;
+  user-select: none;
 }
 
 .st-schematic-frame {
@@ -1776,6 +1777,61 @@
   font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 400;
+  pointer-events: none;
+}
+
+/* The name under each box, a step brighter than the labels in it. */
+.st-schematic-caption {
+  fill: var(--secondary);
+}
+
+/* A pane you can move lifts under the pointer and rings in the accent
+   when the keys reach it. The writing card has neither. */
+.st-schematic-hit {
+  fill: transparent;
+}
+
+.st-schematic-pane.is-movable {
+  outline: none;
+  cursor: grab;
+}
+
+.st-schematic-pane.is-movable:hover > .st-schematic-hit {
+  fill: var(--hover);
+}
+
+.st-schematic-ring {
+  fill: none;
+  stroke: none;
+}
+
+.st-schematic-pane.is-movable:focus-visible > .st-schematic-ring {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* A pane on its way fades where it was, and where it would land washes
+   in the accent with a 2 px line along that edge, as in the window. */
+.st-schematic.is-dragging,
+.st-schematic.is-dragging * {
+  cursor: grabbing;
+}
+
+.st-schematic-pane.is-dragged > .st-schematic-hit,
+.st-schematic-pane.is-dragged:hover > .st-schematic-hit {
+  fill: transparent;
+}
+
+.st-schematic-label.is-dragged {
+  opacity: 0.35;
+}
+
+.st-schematic-wash {
+  fill: var(--accent-soft);
+}
+
+.st-schematic-line {
+  fill: var(--accent);
 }
 
 .st-layout-side {
@@ -2201,6 +2257,7 @@
 
 .st-auto-detail-actions {
   display: flex;
+  gap: 8px;
   margin-top: 12px;
 }
 

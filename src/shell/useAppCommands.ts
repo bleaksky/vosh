@@ -67,10 +67,15 @@ interface CommandInputs
   panelOpen: boolean;
   /** The paneKey of every pane the panel tree holds. */
   shownPanes: readonly string[];
+  /** The panes the sidebar shows now. */
+  sidebarPanes: readonly string[];
   /** How many sessions are open, and whether you keep the sidebar
    *  showing them, though a narrow window can fold it. */
   sessionCount: number;
   sessionsShown: boolean;
+  /** The sidebar holds a pane, and its toggle shows. */
+  sidebarHoldsPanes: boolean;
+  sidebarToggleable: boolean;
   /** Hide the sessions sidebar in this window, or show it again. */
   toggleSessions: () => void;
   /** The live pane and the history pane, whose selection Copy takes. */
@@ -107,8 +112,11 @@ export function useAppCommands({
   focusInput,
   panelOpen,
   shownPanes,
+  sidebarPanes,
   sessionCount,
   sessionsShown,
+  sidebarHoldsPanes,
+  sidebarToggleable,
   toggleSessions,
   termRef,
   historyTermRef,
@@ -348,6 +356,7 @@ export function useAppCommands({
         panelOpen,
         splitOpen: splitOpen || nativeScrolled,
         shownPanes,
+        sidebarPanes,
         staffOffered,
         themes: themesInGalleryOrder().map(({ theme, custom }) => ({
           id: theme.id,
@@ -357,6 +366,8 @@ export function useAppCommands({
         theme: getCurrentThemeId(),
         sessions: sessionCount,
         sessionsShown,
+        sidebarHoldsPanes,
+        sidebarToggleable,
         snoops,
       }),
     );
@@ -368,10 +379,13 @@ export function useAppCommands({
     splitOpen,
     nativeScrolled,
     shownPanes,
+    sidebarPanes,
     staffOffered,
     themeTick,
     sessionCount,
     sessionsShown,
+    sidebarHoldsPanes,
+    sidebarToggleable,
     snoops,
   ]);
 

@@ -86,6 +86,21 @@ export function addDraftItem<T>(draft: Draft<T>, value: T, uid: string = nextDra
   return { ...draft, items: [...draft.items, { uid, value }] };
 }
 
+/** Add `value` right after the item `after`, or at the end when no
+ *  item has that uid. */
+export function insertDraftItemAfter<T>(
+  draft: Draft<T>,
+  after: string,
+  value: T,
+  uid: string = nextDraftUid(),
+): Draft<T> {
+  const at = draft.items.findIndex((item) => item.uid === after);
+  if (at < 0) return addDraftItem(draft, value, uid);
+  const items = [...draft.items];
+  items.splice(at + 1, 0, { uid, value });
+  return { ...draft, items };
+}
+
 export function removeDraftItem<T>(draft: Draft<T>, uid: string): Draft<T> {
   const items = draft.items.filter((item) => item.uid !== uid);
   return items.length === draft.items.length ? draft : { ...draft, items };

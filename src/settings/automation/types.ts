@@ -67,6 +67,11 @@ export interface KindSpec<T> {
   deleteLabel?: string;
   /** Whether this item can be deleted, when the kind allows it. */
   canDelete?: (value: T) => boolean;
+  /** `Duplicate trigger`. Leave out for kinds you cannot copy. */
+  duplicateLabel?: string;
+  /** A copy of `value` to add below it, given every value, named so it
+   *  saves beside the original as it is. */
+  duplicate?: (value: T, values: readonly T[]) => T;
   /** `Choose a trigger to edit it.` */
   emptyDetail: string;
   /** `You have no triggers yet.` */

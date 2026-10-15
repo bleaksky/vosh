@@ -6,13 +6,16 @@ import {
   getPaneLayout,
   setPaneLayout,
   subscribePaneLayout,
+  withTree,
   type PaneLayout,
   type PaneSplit,
+  type PaneTree,
 } from './paneLayout';
 
 // The one copy of the active profile's pane layout this window edits.
-// The panel changes the tree and the title band opens, closes, and
-// sizes the panel, and both write the same saved object. Each keeping
+// The panel and the sidebar change their trees and the title band
+// opens, closes, and sizes the panel, and all of them write the same
+// saved object. Each keeping
 // its own copy would let one write a stale half over the other, so
 // every edit goes through updatePanelLayout here.
 //
@@ -84,6 +87,11 @@ export function updatePanelLayout(fn: (current: PaneLayout) => PaneLayout): void
 /** Replace the pane tree, keeping the panel's open state and width. */
 export function setPaneTree(root: PaneSplit): void {
   updatePanelLayout((l) => (l.root === root ? l : { ...l, root }));
+}
+
+/** Replace the panel's tree or the sidebar's. */
+export function setTree(which: PaneTree, tree: PaneSplit): void {
+  updatePanelLayout((l) => withTree(l, which, tree));
 }
 
 export function setPanelOpen(open: boolean): void {

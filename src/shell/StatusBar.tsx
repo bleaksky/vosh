@@ -13,7 +13,8 @@ import { SunPathIcon } from './icons';
 import { MoonPhaseIcon } from './MoonPhaseIcon';
 import type { ClockMoons, ClockTick, ClockTime } from './StatusClock';
 import { roundTripText, roundTripTone, type RoundTripTone } from './roundTrip';
-import { partsGone, tickShare, useGiveWay, BAR_GIVE_WAY, type BarStyle } from './statusBarFit';
+import { useGiveWay } from '../lib/useGiveWay';
+import { partsGone, tickShare, BAR_GIVE_WAY, type BarStyle } from './statusBarFit';
 
 // The Strip, Dashboard and Meters styles of the status bar, drawn from
 // plain values so a test can render every case. StatusLine reads the
@@ -84,7 +85,11 @@ export function StatusBar(props: BarProps) {
   const gone = partsGone(props.style, level);
   const Style = STYLES[props.style];
   return (
-    <span ref={ref} className={`shell-bar is-${props.style}`}>
+    <span
+      ref={ref}
+      className={`shell-bar is-${props.style}${gone.has('tight') ? ' is-tight' : ''}`}
+      data-squeeze={gone.has('squeeze') ? '' : undefined}
+    >
       <Style {...props} gone={gone} />
     </span>
   );
@@ -129,6 +134,15 @@ function Shown({ shown, children }: { shown: boolean; children: ReactNode }) {
 /** A vital's value in its tone's class. */
 function toneClass(tone: VitalTone): string {
   return tone === 'quiet' ? '' : ` is-${tone === 'danger' ? 'low' : tone}`;
+}
+
+/** A vital's value as the bar shows it: as you set it, or its current
+ *  value alone once the bar let the maxes go. */
+function vitalValue(row: ShownVital, gone: ReadonlySet<string>): string {
+  const full = formatVital('current-max', row.current, row.max);
+  return gone.has('maxes') && row.tone !== 'hidden' && row.value === full
+    ? String(row.current)
+    : row.value;
 }
 
 /** The value of a vital or the `?` of a hidden one. */
@@ -212,12 +226,24 @@ function rttClass(tone: RoundTripTone): string {
 }
 
 /** The round trip as a dot, or as signal bars, three while fine, two
- *  from 300 ms and one from a second, then the reading. */
-function RoundTripRow({ ms, bars = false }: { ms: number; bars?: boolean }) {
+ *  from 300 ms and one from a second, then the reading. A bar out of
+ *  room keeps the dot or bars alone, and the title still reads it. */
+function RoundTripRow({
+  ms,
+  bars = false,
+  text = true,
+}: {
+  ms: number;
+  bars?: boolean;
+  text?: boolean;
+}) {
   const tone = roundTripTone(ms);
   const lit = tone === 'fine' ? 3 : tone === 'warn' ? 2 : 1;
   return (
-    <span className={`shell-bar-rtt${rttClass(tone)}`} title="Round trip to the game">
+    <span
+      className={`shell-bar-rtt${rttClass(tone)}`}
+      title={`Round trip to the game ${roundTripText(ms)}`}
+    >
       {bars ? (
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
           {[0, 1, 2].map((i) => (
@@ -237,7 +263,11 @@ function RoundTripRow({ ms, bars = false }: { ms: number; bars?: boolean }) {
           <circle cx="4" cy="4" r="3" />
         </svg>
       )}
-      <span>{roundTripText(ms)}</span>
+      {text ? (
+        <span>{roundTripText(ms)}</span>
+      ) : (
+        <VisuallyHidden>{roundTripText(ms)}</VisuallyHidden>
+      )}
     </span>
   );
 }
@@ -297,7 +327,7 @@ function Strip(p: StyleProps) {
                 <span style={{ width: `${row.pct ?? 0}%` }} />
               </span>
             )}
-            <span className={`shell-bar-value${toneClass(row.tone)}`}>{row.value}</span>
+            <span className={`shell-bar-value${toneClass(row.tone)}`}>{vitalValue(row, gone)}</span>
           </span>
         </span>
       ))}
@@ -307,7 +337,7 @@ function Strip(p: StyleProps) {
           <FoeInline foe={items.foe} name={!gone.has('foeName')} />
         </span>
       )}
-      {items.target && <TargetInline name={items.target} />}
+      {items.target && !gone.has('target') && <TargetInline name={items.target} />}
       <span className="shell-bar-spring" />
       {p.tick && tick && (
         <span className={`shell-bar-item shell-bar-tick${tickClass(p.tick)}`} title={tick.label}>
@@ -342,7 +372,7 @@ function Strip(p: StyleProps) {
         <>
           <Seam />
           <span className="shell-bar-item">
-            <RoundTripRow ms={p.roundTrip} bars />
+            <RoundTripRow ms={p.roundTrip} bars text={!gone.has('rttText')} />
           </span>
         </>
       )}
@@ -366,7 +396,7 @@ function keepsRoundTrip(ms: number, gone: ReadonlySet<string>): boolean {
 function FoeInline({ foe, name }: { foe: CombatOpponent; name: boolean }) {
   const health = foeHealth(foe);
   return (
-    <span className="shell-bar-item shell-bar-foe" title={foe.name}>
+    <span className={`shell-bar-item shell-bar-foe${name ? '' : ' is-bare'}`} title={foe.name}>
       <Shown shown={name}>
         <span className="shell-bar-name">{foe.name}</span>
       </Shown>
@@ -427,8 +457,7 @@ function Dashboard(p: StyleProps) {
       )}
       {p.room && (
         <Segment
-          caption={p.room.area ?? 'Room'}
-          captionShown={!gone.has('area')}
+          caption={p.room.area && !gone.has('area') ? p.room.area : 'Room'}
           className=" is-shrink"
           title={roomTitle(p.room)}
         >
@@ -444,14 +473,14 @@ function Dashboard(p: StyleProps) {
           title={vitalTitle(row)}
           style={inkStyle(p.inks[row.key])}
         >
-          <span className={`shell-bar-value${toneClass(row.tone)}`}>{row.value}</span>
+          <span className={`shell-bar-value${toneClass(row.tone)}`}>{vitalValue(row, gone)}</span>
           <span className="shell-bar-under" aria-hidden="true">
             <span style={{ width: `${row.pct ?? 0}%` }} />
           </span>
         </Segment>
       ))}
       {items.foe && <FoeSegment foe={items.foe} name={!gone.has('foeName')} />}
-      {items.target && (
+      {items.target && !gone.has('target') && (
         <Segment caption="Target" className=" is-shrink shell-bar-target" title={items.target}>
           <span className="shell-bar-name">{items.target}</span>
         </Segment>
@@ -484,15 +513,21 @@ function Dashboard(p: StyleProps) {
           <MoonsRow moons={p.moons} />
         </Segment>
       )}
-      {p.roundTrip !== null && keepsRoundTrip(p.roundTrip, gone) && (
-        <Segment
-          caption="Round trip"
-          className={` is-right shell-bar-rtt${rttClass(roundTripTone(p.roundTrip))}`}
-          title="Round trip to the game"
-        >
-          {roundTripText(p.roundTrip)}
-        </Segment>
-      )}
+      {p.roundTrip !== null &&
+        keepsRoundTrip(p.roundTrip, gone) &&
+        (gone.has('rttText') ? (
+          <span className="shell-bar-seg is-right is-mark">
+            <RoundTripRow ms={p.roundTrip} text={false} />
+          </span>
+        ) : (
+          <Segment
+            caption="Round trip"
+            className={` is-right shell-bar-rtt${rttClass(roundTripTone(p.roundTrip))}`}
+            title="Round trip to the game"
+          >
+            {roundTripText(p.roundTrip)}
+          </Segment>
+        ))}
     </>
   );
 }
@@ -500,10 +535,11 @@ function Dashboard(p: StyleProps) {
 function FoeSegment({ foe, name }: { foe: CombatOpponent; name: boolean }) {
   const health = foeHealth(foe);
   return (
-    <span className="shell-bar-seg shell-bar-foe is-metered is-shrink" title={foe.name}>
-      <span className="shell-bar-cap shell-bar-name">
-        <Shown shown={name}>{foe.name}</Shown>
-      </span>
+    <span
+      className={`shell-bar-seg shell-bar-foe is-metered is-shrink${name ? '' : ' is-bare'}`}
+      title={foe.name}
+    >
+      <span className="shell-bar-cap shell-bar-name">{name ? foe.name : 'Opponent'}</span>
       <span className="shell-bar-val">
         <span className={`shell-bar-value${health.hidden ? ' is-hidden' : ' is-warn'}`}>
           {health.value}
@@ -582,7 +618,7 @@ function Meters(p: StyleProps) {
     p.moons && p.moons.moons.length > 0 && !gone.has('moons') ? <MoonsRow moons={p.moons} /> : null;
   const roundTrip =
     p.roundTrip !== null && keepsRoundTrip(p.roundTrip, gone) ? (
-      <RoundTripRow ms={p.roundTrip} />
+      <RoundTripRow ms={p.roundTrip} text={!gone.has('rttText')} />
     ) : null;
   return (
     <>
@@ -604,7 +640,7 @@ function Meters(p: StyleProps) {
           className={`shell-bar-vital${row.tone === 'danger' ? ' is-low' : ''}`}
           label={VITAL_LABELS[row.key]}
           labelShown={labels}
-          value={row.value}
+          value={vitalValue(row, gone)}
           valueClass={toneClass(row.tone)}
           fill={row.pct ?? 0}
           ink={p.inks[row.key]}
@@ -612,7 +648,7 @@ function Meters(p: StyleProps) {
         />
       ))}
       {items.foe && <FoeZone foe={items.foe} name={!gone.has('foeName')} />}
-      {items.target && (
+      {items.target && !gone.has('target') && (
         <Zone
           className="shell-bar-target is-shrink"
           label="Target"
@@ -648,7 +684,7 @@ function FoeZone({ foe, name }: { foe: CombatOpponent; name: boolean }) {
   const health = foeHealth(foe);
   return (
     <Zone
-      className="shell-bar-foe"
+      className={`shell-bar-foe${name ? '' : ' is-bare'}`}
       label={<span className="shell-bar-name">{foe.name}</span>}
       labelShown={name}
       value={health.value}

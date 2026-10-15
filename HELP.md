@@ -71,7 +71,7 @@ Variables set with `#var` have session scope. They clear when the next connectio
 
 <!-- id: get-connected.sessions -->
 
-Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the side of the window across from the panel, with one row for each session. At first that is the left side. With one session, the sidebar hides on its own.
+Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the side of the window across from the panel, with one row for each session. At first that is the left side. With one session, the sidebar hides on its own, unless it holds a pane. Section 4.1 tells how to put panes in the sidebar.
 
 Each row has two lines. The first line starts with a mark that shows the state of the session. Then comes its name. At the end is a count when something waits for you there. The second line tells what the session is doing.
 
@@ -79,7 +79,7 @@ Each row has two lines. The first line starts with a mark that shows the state o
 - Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front. Press `Cmd+Shift+]` for the next row and `Cmd+Shift+[` for the row before. After the last row, they go round to the first. Hold `Cmd` for a moment and each row shows its key. On macOS the Session menu also has `Next session` and `Previous session`.
 - The sessions behind keep playing. Their triggers, timers, and Lua run as usual. Only the drawing waits until you look.
 - To hide the sidebar in this window, click the sidebar button at the top left of the window. On macOS it sits just after the window buttons. Click it again to show the sidebar. The button never moves, and it is brighter while the sidebar shows. The sidebar stays hidden when you open another session.
-- On macOS `Ctrl+Cmd+S` also hides and shows the sidebar. On Windows and Linux the key is `Ctrl+Shift+S`. `Hide sessions` and `Show sessions` in the command palette (`Cmd+K`) do the same. On macOS they are also in the View menu.
+- On macOS `Ctrl+Cmd+S` also hides and shows the sidebar. On Windows and Linux the key is `Ctrl+Shift+S`. `Hide sessions` and `Show sessions` in the command palette (`Cmd+K`) do the same. On macOS they are also in the View menu. While the sidebar holds a pane, they say `Hide sidebar` and `Show sidebar`.
 - Right click a row to open its menu. It has `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each item acts on the session of that row. `Rename session…` and `Edit connection…` first bring that session to the front.
 
 `Sessions` is the heading of the list. It shows how many sessions are open, such as `Sessions 3`. When there are more rows than fit, they scroll under the heading. A thin line shows under the heading when a row has scrolled under it.
@@ -490,6 +490,8 @@ An alias expands a short name into one or more commands. Aliases are in Settings
 
 When Vosh can't save the list, it tells you why beside `Save`. It puts a red ring on each item to fix and selects the first one. The message goes away when you fix the items.
 
+To make an item like one you have, select it and click `Duplicate alias`, `Duplicate trigger`, or `Duplicate macro` under its card. The copy goes below the original, and Vosh selects it. The copy of an alias gets `-copy` at the end of its name, and the copy of a trigger gets ` copy`. So the copy saves without a clash, also when you change nothing. The copy of a macro has no key, because one key runs one macro. Press a key for it before you save. The copy of an item from a preset is yours, and you can change all of it.
+
 Captures take words from the line you typed. `%1` through `%9` take the first through ninth word after the alias name. `%0` takes all the words after the name. `%1-` takes word one through the end, with the spaces kept. A missing word expands to nothing. `%%` gives a literal percent.
 
 To turn related aliases on and off together, give them the same name in `Group`. Two groups can each have an alias with the same name, as 3.11 tells you. Then use the switch on the heading of their group, or `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion. The words you typed are in its captures table.
@@ -860,17 +862,32 @@ Triggers work differently. Two groups can each have a trigger with the same name
 The panel holds your panes. At first it is on the right side of the window. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
 
 - To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the command palette. While the panel is hidden, your vitals move to the status line.
-- To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues. Staff queues joins the list when the game sends it.
+- To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Stats, Chat, and Staff queues. Staff queues joins the list when the game sends it.
 - To open the menu of a pane, click the more button in its header. `Split right` and `Split down` put the first pane that the panel doesn't show beside it or under it. When the panel shows all the panes, they put in another Chat pane. On a Chat pane they put in another Chat pane.
 - In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
 - To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
 - To change the width of the panel, drag its inner edge, the edge next to the terminal. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
-- To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`.
+- To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`. When that pane is in the sidebar and the sidebar is hidden, the sidebar shows again.
 - To put the panel on the left side, go to Settings under Layout, then Panel, and set `Side` to `Left`. The sessions sidebar moves to the right side. The panel buttons in the title band move to the left end with the panel, and the sessions button moves to the right end. On macOS the window buttons stay at the top left. On Windows and Linux, minimize, maximize, and close stay at the top right. Each profile keeps its own side.
 
-To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects. The panel keeps its width, and it stays shown or hidden.
+The sidebar on the other side of the window can hold panes too. With one session, the sidebar shows while it holds a pane. With two or more sessions, its panes go below the list of sessions.
 
-Settings under Characters draws the panel of each character under Panel layout. So you can see how each one is arranged.
+- To move a pane, drag its header onto a different pane, in the panel or in the sidebar. An accent shows the half of that pane where it goes, with a line along that edge. Release the pointer to put the pane there. Press `Escape` to stop.
+- In the menu of a pane in the panel, `Move to sidebar` puts the pane at the bottom of the sidebar. In the sidebar, `Move to panel` puts it at the bottom of the panel.
+- To add a pane to the sidebar, click `Add a pane` and point at `Add to the sidebar` at the bottom. Then choose the pane.
+- Each pane shows one time across the panel and the sidebar. Up to four Chat panes show in the two together. The writing card and your vitals stay in the panel.
+- The sidebar button at the top left hides and shows the full sidebar. While the sidebar holds a pane, the button, the View menu, and the command palette say `Hide sidebar` and `Show sidebar`.
+- When the window is too narrow for the sidebar, its panes hide until the window gets wider. With two or more sessions, the sidebar button then slides in the list of sessions alone.
+
+Vosh keeps the panes of the sidebar for each character. The width of the sidebar is the same for all characters.
+
+To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects, and the sidebar loses its panes. The panel keeps its width, and it stays shown or hidden.
+
+Settings under Characters draws the sidebar and the panel of each character under Panel layout, on the sides the window shows them. You can arrange a character there without playing it.
+
+- Drag a pane in the drawing onto a different pane, or into an empty box. The accent shows where it goes, as in the window.
+- Or press `Tab` to get to a pane. `Up` and `Down` move it past the pane before or after it. `Left` and `Right` move it to the sidebar or the panel.
+- Each move saves to that character at once. When you play the character now, the window changes too.
 
 To open Settings, click the gear at the right end of the title band, after the panel button. You can also press `Cmd+,` on macOS or `Ctrl+,` on Windows and Linux. `Open settings` in the command palette and the `Settings` list in the right click menu of the terminal also open it.
 
@@ -954,14 +971,14 @@ Each default draws the panel you already know, so nothing changes until you choo
 
 When you turn off `Show the panel` under Layout, your vitals move to the status line. The style of the status line sets how they look there. To choose a style, go to Settings under Layout, then Status line, and pick one in `Style`.
 
-- `Meters` is the default. Your vitals, your opponent, and the tick each fill a part of the line, as wide as the value. Low health gets a stronger fill.
-- `Compact` is a quiet line in small text. Each vital shows its label and its value, with no meter.
+- `Compact` is the default. It is a quiet line in small text. Each vital shows its label and its value, with no meter.
+- `Meters` gives your vitals, your opponent, and the tick each a part of the line that fills as wide as the value. Low health gets a stronger fill.
 - `Strip` puts a small gauge beside each vital and a bar beside the tick, on a raised background.
 - `Dashboard` makes the line taller. It puts a small caption over each value and a thin bar under each vital.
 
 Every style follows `Values` and `Warn before you run low`. Meters, Strip, and Dashboard draw each vital in the color you pick under `Customize vitals`. In a fight your opponent comes after your vitals, with its health in yellow. When the target you set is the mob you fight, the two share one item. A target on another mob keeps its own item after it. While the panel shows your vitals, Meters, Strip, and Dashboard show the room you are in. Strip and Dashboard also show your character.
 
-When the line is too short, things give way. In `Compact`, the name of your opponent goes first, then the labels. Then each value falls back to the current number. Then the moons, a round trip under 300 ms, and the game time go. The other styles first remove your character, the area, and the moons. Then they remove the labels, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
+When the line is too short, things give way. In `Compact`, the name of your opponent goes first, then the labels. Then each value falls back to the current number. Then the moons, a round trip under 300 ms, and the game time go. The other styles remove one thing at a time, and each thing goes fully. First they remove your character, the area, the moons, and your target. Then they remove the labels, a round trip under 300 ms, and the game time. Then each vital shows only its current number, and a slower round trip shows only its colored dot. Put the pointer on the dot to read the time. Only after all of this can a long room name or the name of your opponent end in `…`. If the line is still too short, the name of your opponent goes, and its health stays in yellow. The tick always stays.
 
 When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter. This is the same in the panel and on the status line. Nothing turns yellow or red while they are hidden. Your numbers come back with the next update that the game sends. In a fight, the opponent row reads `?` in the same way when the game hides its health or sends none. Its health on the status line does the same.
 
@@ -1052,6 +1069,25 @@ Each session keeps its own snoops. Its row in the sessions sidebar shows an eye 
 The session log keeps each line of a snoop. The line starts with the name of the player, such as `Tolliver|`. To read it again after the tab is gone, search your logs for `^Tolliver\|`.
 
 While a snoop is open, type `snoop` in the command palette. You then get `Go to snoop`, `Next snoop`, `Stop snooping Tolliver`, `Stop every snoop`, `Open snoop in a window`, and `Close ended snoops`. Snoop has no row in Settings.
+
+### 4.9 Read your stats
+
+<!-- id: shape.stats -->
+
+The Stats pane shows the numbers on your score sheet. These are your five stats, your luck, your hitroll and damroll, your armor class, and your saves. To add the pane, use `Add a pane` in the title band.
+
+- To choose how the pane draws, go to Settings under Layout, then Stats. Or use `Style` in the menu of the pane. Each character keeps its own choice.
+- `Score sheet` is the default. It puts the numbers in two columns, as `score` does. Each stat shows the value that you trained, and then the value now in brackets.
+- `Rows` gives each number its own row. A small meter beside each stat fills from 3 to the highest value that your race and class can have. A short line across the meter shows the value that you trained.
+- `Ledger` shows large numbers under small captions, like the `Ledger` vitals. The line under each stat works like the meter in `Rows`.
+- A stat above the value that you trained is green. A stat below it is yellow. The score sheet uses the same colors.
+- `^1` after a stat means that your gear or your spells put 1 point past the highest value. That point does nothing.
+- Each armor class shows the percent of it that counts. The percent is yellow below 80%, and red below 50%, as on the score sheet. A lower armor class is better.
+- A lower save is better. A save above zero is red, because it works against you. A save of 0 is dim.
+- Luck shows as six steps, like the bar on the score sheet. The game does not send the number.
+- When the pane is narrow, each style moves its numbers closer together. `Rows` removes the meters, and then the highest values and the percents. `Ledger` puts the stats in fewer columns. `Score sheet` puts its columns one under the other, and then shows only the value now. Put the pointer on a row to read all of its numbers.
+
+The numbers come from `Char.Stats`. The game sends it when you log in. Each time the game shows you a prompt, it also sends the numbers again if one of them changed. So the pane is never older than your last prompt. Before the first numbers come, the pane says that your stats show when you log in. When you disconnect, the pane empties again.
 
 ## Tick and target
 

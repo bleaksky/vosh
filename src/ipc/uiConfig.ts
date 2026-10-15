@@ -323,6 +323,8 @@ export interface UiConfig {
   status_style: StatusStyle;
   /** The side the panel sits on, one of PANEL_SIDES. */
   panel_side: PanelSide;
+  /** How the Stats pane draws, one of STATS_STYLES. */
+  stats_style: StatsStyle;
   /** Which way the status line tick counts, one of TICK_COUNTS. */
   tick_count: TickCount;
   /** The clock the status line reads the game time on, one of
@@ -374,18 +376,19 @@ export function normalizeChipStyle(raw: unknown): ChipStyle {
   return raw === 'caption_value' || raw === 'icon_value' ? raw : 'value_only';
 }
 
-/** The ways the status bar draws. `meters`, the default, fills the
- *  bar with a zone for each vital and the tick. `compact` is the quiet
- *  line, with the tick and the time labeled by chip_style. `strip`
- *  adds gauges on a raised ground, and `dashboard` puts a caption over
- *  each value on a taller bar. */
-export const STATUS_STYLES = ['meters', 'compact', 'strip', 'dashboard'] as const;
+/** The ways the status bar draws. `compact`, the default, is the
+ *  quiet line, with the tick and the time labeled by chip_style. A
+ *  profile that never picked a style keeps it. `meters` fills the bar
+ *  with a zone for each vital and the tick. `strip` adds gauges on a
+ *  raised ground, and `dashboard` puts a caption over each value on a
+ *  taller bar. */
+export const STATUS_STYLES = ['compact', 'meters', 'strip', 'dashboard'] as const;
 export type StatusStyle = (typeof STATUS_STYLES)[number];
 
 /** Read a stored or broadcast status bar style. Anything unknown is
- *  Meters, the default. */
+ *  Compact, the default. */
 export function normalizeStatusStyle(raw: unknown): StatusStyle {
-  return STATUS_STYLES.find((style) => style === raw) ?? 'meters';
+  return STATUS_STYLES.find((style) => style === raw) ?? 'compact';
 }
 
 /** The sides the panel sits on. `right`, the default, or `left`. The
@@ -397,6 +400,19 @@ export type PanelSide = (typeof PANEL_SIDES)[number];
  *  right, the default. */
 export function normalizePanelSide(raw: unknown): PanelSide {
   return raw === 'left' ? 'left' : 'right';
+}
+
+/** The ways the Stats pane draws. `sheet`, the default, lays the
+ *  numbers out in two columns as `score` does, `rows` gives each one a
+ *  row with a small meter, and `ledger` draws big figures with a line
+ *  under each stat. */
+export const STATS_STYLES = ['sheet', 'rows', 'ledger'] as const;
+export type StatsStyle = (typeof STATS_STYLES)[number];
+
+/** Read a stored or broadcast Stats pane style. Anything unknown is the
+ *  score sheet, the default. */
+export function normalizeStatsStyle(raw: unknown): StatsStyle {
+  return STATS_STYLES.find((style) => style === raw) ?? 'sheet';
 }
 
 /** The ways the status line tick counts. `up`, the default, shows the
@@ -516,6 +532,7 @@ export interface RawUiConfig {
   chip_style?: string;
   status_style?: string;
   panel_side?: string;
+  stats_style?: string;
   tick_count?: string;
   game_time?: string;
   affects_style?: string;
@@ -679,6 +696,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     chip_style: normalizeChipStyle(cfg.chip_style),
     status_style: normalizeStatusStyle(cfg.status_style),
     panel_side: normalizePanelSide(cfg.panel_side),
+    stats_style: normalizeStatsStyle(cfg.stats_style),
     tick_count: normalizeTickCount(cfg.tick_count),
     game_time: normalizeGameTime(cfg.game_time),
     affects_style: normalizeAffectsStyle(cfg.affects_style),

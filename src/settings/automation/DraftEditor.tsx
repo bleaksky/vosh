@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   addDraftItem,
+  insertDraftItemAfter,
   countPhrase,
   createDraft,
   discardDraft,
@@ -430,6 +431,24 @@ export function DraftEditor<T>({
     reveal(uid);
   };
 
+  // The copy lands right below the original, selected and open, to
+  // change before you save.
+  const onDuplicate = (uid: string) => {
+    const d = draftRef.current;
+    const item = d ? findDraftItem(d, uid) : undefined;
+    if (!d || !item || !spec.duplicate) return;
+    const copy = spec.duplicate(
+      item.value,
+      d.items.map((i) => i.value),
+    );
+    const next = nextDraftUid();
+    setDraft(insertDraftItemAfter(d, uid, copy, next));
+    setFilter('');
+    setSelected(next);
+    setFresh(next);
+    reveal(next);
+  };
+
   const onDelete = (uid: string) => {
     const d = draftRef.current;
     if (!d) return;
@@ -575,6 +594,7 @@ export function DraftEditor<T>({
     const uid = selectedItem.uid;
     const canDelete =
       spec.deleteLabel !== undefined && (spec.canDelete?.(selectedItem.value) ?? true);
+    const canDuplicate = spec.duplicateLabel !== undefined && spec.duplicate !== undefined;
     detail = (
       <div key={uid} className="st-auto-detail-inner">
         {spec.renderDetail({
@@ -585,11 +605,16 @@ export function DraftEditor<T>({
           revealInList: () => reveal(uid),
           note: rowNotes.get(uid),
         })}
-        {canDelete && (
+        {(canDelete || canDuplicate) && (
           <div className="st-auto-detail-actions">
-            <Button variant="danger" onClick={() => onDelete(uid)}>
-              {spec.deleteLabel}
-            </Button>
+            {canDuplicate && (
+              <Button onClick={() => onDuplicate(uid)}>{spec.duplicateLabel}</Button>
+            )}
+            {canDelete && (
+              <Button variant="danger" onClick={() => onDelete(uid)}>
+                {spec.deleteLabel}
+              </Button>
+            )}
           </div>
         )}
       </div>

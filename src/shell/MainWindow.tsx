@@ -18,7 +18,8 @@ import { SessionsToggle } from './SessionsToggle';
 import { SnoopSplit } from './SnoopSplit';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
-import { PanelHost } from '../panel/PanelHost';
+import { PaneDragLayer } from '../panel/PaneDragLayer';
+import { PanelHost, SidebarPanes } from '../panel/PanelHost';
 import {
   panelWidthOf,
   setPanelOpen,
@@ -26,7 +27,7 @@ import {
   togglePanelOpen,
   usePanelLayout,
 } from '../panel/panelLayoutStore';
-import { addPaneAtBottom } from '../panel/paneActions';
+import { addPaneAtBottom, addPaneToSidebar } from '../panel/paneActions';
 import { disconnectSession } from '../ipc/session';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
 import { listenForQuitFlush } from '../lib/pendingWrites';
@@ -35,7 +36,7 @@ import { CommandPalette } from './overlays/CommandPalette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CoachRing } from '../ui/CoachRing';
 import { requestSessionMenu } from '../lib/appMenu';
-import { allPanes } from '../panel/paneLayout';
+import { allPanes, bothTrees } from '../panel/paneLayout';
 import {
   getSelected,
   move,
@@ -113,11 +114,22 @@ function MainWindow() {
   const lineShowsVitals = !panelOpen || vitalsPlace === 'status';
   // Read your prompt shows in the palette while the reader is on.
   const readerOn = useScreenReader().screen_reader;
-  // The sidebar hands the caret back to the command line as it goes.
-  const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen, () =>
-    inputRef.current?.focus(),
+  // The sidebar hands the caret back to the command line as it goes. It
+  // shows for the panes it holds too, with one session.
+  const sidebarHolds = (panelLayout?.sidebar.children.length ?? 0) > 0;
+  const sessionsSidebar = useSessionsSidebar(
+    sessions.length,
+    panelOpen,
+    () => inputRef.current?.focus(),
+    sidebarHolds,
   );
   const sessionsShown = sessionsSidebar.shown;
+  // The panes the sidebar shows now, for the View menu's checks and the
+  // palette's Show and Hide rows.
+  const sidebarPanes = useMemo(
+    () => (sessionsShown && panelLayout ? allPanes(panelLayout.sidebar) : []),
+    [sessionsShown, panelLayout],
+  );
   // Rename session… names the selected session in its row while the
   // sidebar shows, and in the session popover's own form while it
   // does not, as with one session.
@@ -310,6 +322,7 @@ function MainWindow() {
       sessions,
       selected,
       sessionsSidebar,
+      sidebarPanes,
       inputRef,
       promptShow,
       openPromptCard,
@@ -350,8 +363,11 @@ function MainWindow() {
     focusInput,
     panelOpen,
     shownPanes,
+    sidebarPanes,
     sessionCount: sessions.length,
     sessionsShown: sessionsSidebar.pressed,
+    sidebarHoldsPanes: sessionsSidebar.holdsPanes,
+    sidebarToggleable: sessionsSidebar.toggleable,
     toggleSessions: sessionsSidebar.toggle,
     termRef,
     historyTermRef,
@@ -481,6 +497,20 @@ function MainWindow() {
     />
   );
 
+  // The sidebar's column: the session list with two or more sessions,
+  // only as tall as its rows, then the sidebar's panes. With one session
+  // the panes start under the column's top row, which drags the window.
+  const sidebarColumn = (
+    <div className={`shell-sidebar${sidebarHolds ? ' has-panes' : ''}`}>
+      {sessions.length >= 2 ? (
+        sessionSidebar(false)
+      ) : (
+        <div className="shell-sessions-top shell-sidebar-top" data-tauri-drag-region />
+      )}
+      <SidebarPanes textSize={panelTextPx} hint={sessions.length >= 2} />
+    </div>
+  );
+
   // The shell gives each slot a fixed grid cell under a fixed parent,
   // and showing, hiding, or resizing the panel only rewrites the column
   // template on the shell root. terminalAreaElement and inputElement
@@ -496,11 +526,15 @@ function MainWindow() {
       onMouseUp={handleAppMouseUp}
       sessionsWidth={sessionsSidebar.width}
       onSessionsWidth={sessionsSidebar.setWidth}
-      sessions={sessionsShown ? sessionSidebar(false) : null}
+      sessions={sessionsShown ? sidebarColumn : null}
       sessionsOverlay={sessionsSidebar.overlay ? sessionSidebar(true) : null}
       sessionsToggle={
         sessionsSidebar.toggleable ? (
-          <SessionsToggle pressed={sessionsSidebar.pressed} onToggle={sessionsSidebar.toggle} />
+          <SessionsToggle
+            pressed={sessionsSidebar.pressed}
+            onToggle={sessionsSidebar.toggle}
+            sidebar={sidebarHolds}
+          />
         ) : null
       }
       titleBand={
@@ -510,8 +544,9 @@ function MainWindow() {
           onTogglePanel={() => togglePanelKeepingCaret(focusInput)}
           onTogglePalette={() => (paletteOpen ? closePalette() : setPaletteOpen(true))}
           onOpenSettings={() => runCommand('settings')}
-          paneTree={panelLayout?.root ?? null}
+          paneTree={panelLayout ? bothTrees(panelLayout) : null}
           onAddPane={addPaneAtBottom}
+          onAddPaneToSidebar={addPaneToSidebar}
           onMenuClosed={focusInput}
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
@@ -544,6 +579,7 @@ function MainWindow() {
       }
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
+      <PaneDragLayer />
       <CornerNotices
         reconnect={
           <ReconnectNotice

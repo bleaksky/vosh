@@ -333,7 +333,8 @@ describe('searchSettingsRows', () => {
     expect(labels('vitals color')[0]).toBe('Vitals and their order');
     expect(labels('opponent')).toContain('Your opponent');
     expect(labels('vitals colors')).toEqual(['Vitals and their order']);
-    expect(labels('ledger')).toEqual(['Style']);
+    // Ledger names a vitals style and a Stats pane style.
+    expect(labels('ledger')).toEqual(['Style', 'Stats style']);
     expect(labels('vitals text')).toContain('Style');
     const order = SETTINGS_ROWS.find((r) => r.label === 'Vitals and their order');
     expect(order?.target).toEqual({
@@ -341,6 +342,13 @@ describe('searchSettingsRows', () => {
       section: 'customize-vitals',
       anchor: 'vitals-order',
     });
+  });
+
+  it('finds the Stats pane style under Layout', () => {
+    const [style] = searchSettingsRows('score sheet', mac);
+    expect(style.label).toBe('Stats style');
+    expect(settingsRowKey(style)).toBe('layout:stats#stats-style');
+    expect(labels('luck')).toEqual(['Stats style']);
   });
 
   it('finds the affects style and marker under Layout', () => {

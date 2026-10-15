@@ -428,11 +428,28 @@ describe('buildMenuState', () => {
       ['map', true],
       ['affects', true],
       ['group', false],
+      ['stats', false],
       ['chat', false],
       ['imm', false],
     ]);
     const hidden = buildMenuState(input({ panelOpen: false }));
     expect(hidden.panes.every((p) => !p.visible)).toBe(true);
+  });
+
+  it('checks a pane the sidebar shows, with the panel hidden too', () => {
+    const state = buildMenuState(input({ panelOpen: false, sidebarPanes: ['stats', 'imm'] }));
+    expect(state.panes.filter((p) => p.visible).map((p) => p.pane)).toEqual(['stats', 'imm']);
+    // Staff queues stays listed while the sidebar shows it.
+    expect(state.panes.find((p) => p.pane === 'imm')?.offered).toBe(true);
+  });
+
+  it('names the sidebar while it holds a pane, and says when its toggle shows', () => {
+    expect(buildMenuState(input())).toMatchObject({
+      sidebarHoldsPanes: false,
+      sidebarToggleable: false,
+    });
+    const aside = buildMenuState(input({ sidebarHoldsPanes: true, sidebarToggleable: true }));
+    expect(aside).toMatchObject({ sidebarHoldsPanes: true, sidebarToggleable: true });
   });
 
   it('lists the built-in panes alone while a Lua pane shows', () => {

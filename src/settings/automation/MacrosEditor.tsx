@@ -19,6 +19,7 @@ import { isMacPlatform } from '../../lib/shortcuts';
 import { useMacroList } from './macroListStore';
 import { Card, CardNote, Field, Row, Toggle } from '../../ui';
 import { GroupField, KeyCaptureField } from './fields';
+import { duplicateMacro } from '../../automation/duplicate';
 import { DraftEditor } from './DraftEditor';
 import { macroClashNote } from './macroClash';
 import type { DetailProps, EditorProps, KindSpec } from './types';
@@ -30,6 +31,8 @@ const MACROS_SPEC: KindSpec<MacroRecord> = {
   filterLabel: 'Filter macros',
   newLabel: 'New macro',
   deleteLabel: 'Delete macro',
+  duplicateLabel: 'Duplicate macro',
+  duplicate: duplicateMacro,
   // Presets put their macros back at launch. Turn the preset off.
   canDelete: (m) => !m.preset,
   emptyDetail: 'Choose a macro to edit it.',

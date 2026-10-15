@@ -293,6 +293,14 @@ fn full_panes() -> PaneLayoutPersist {
             ],
             props: BTreeMap::new(),
         },
+        sidebar: PaneNode {
+            id: "sidebar".into(),
+            pane: None,
+            split: Some("column".into()),
+            weight: 1.0,
+            children: vec![leaf("stats", 1.0, &[])],
+            props: BTreeMap::new(),
+        },
     }
 }
 
@@ -441,6 +449,7 @@ fn full_ui() -> UiConfig {
         chip_style: "icon_value".into(),
         status_style: "strip".into(),
         panel_side: "left".into(),
+        stats_style: "ledger".into(),
         tick_count: "down_past_zero".into(),
         game_time: "12h".into(),
         affects_style: "chips".into(),
@@ -1378,6 +1387,14 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
                 split: Some("column".into()),
                 weight: 1.0,
                 children: vec![leaf("map", 0.45), leaf("group", 0.25), leaf("affects", 0.3)],
+                props: BTreeMap::new(),
+            },
+            sidebar: PaneNode {
+                id: "sidebar".into(),
+                pane: None,
+                split: Some("column".into()),
+                weight: 1.0,
+                children: Vec::new(),
                 props: BTreeMap::new(),
             },
         }

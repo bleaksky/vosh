@@ -16,17 +16,23 @@ import {
   type ChatColors,
 } from './chat/chatColors';
 import { setAffectsDisplay } from '../ipc/affects';
+import { setStatsStyle } from '../ipc/stats';
 import { profilesList } from '../ipc/profiles';
 import { resetChatColors, setChatColor } from '../ipc/uiConfig';
 import { useAffectsDisplay } from '../stores/config/affectsDisplayStore';
 import { useChatColors } from '../stores/config/chatColorsStore';
+import { useStatsStyle } from '../stores/config/statsStyleStore';
 import { usePlayPalette } from '../theme/fitGameColors';
 import type { XtermPalette } from '../theme/themes';
 import {
   LUA_PANE,
+  WRITING_PANE,
+  bothTrees,
   paneKey,
   paneRef,
   splitPane,
+  treeIn,
+  treeOf,
   type PaneLeaf,
   type PaneRef,
   type SplitDir,
@@ -36,6 +42,7 @@ import { formatSettingsTarget } from '../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
 import {
   closeHere,
+  movePaneAcross,
   paneToSplitIn,
   returnToCommandLine,
   showHereInstead,
@@ -46,18 +53,22 @@ import { fitsPanel } from './paneGeometry';
 import { PaneTextSizeContext } from './paneTextSize';
 import { CheckIcon, ChevronRightIcon } from '../ui/icons';
 import { getPanelLayout } from './panelLayoutStore';
+import { statsStyleChoices } from './stats/statsView';
 import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } from './paneTypes';
 
 // The more menu on every pane header: Split right, Split
 // down, Show here instead with a submenu of pane types and then, after
-// a rule, the Lua panes on offer, and Close pane.
+// a rule, the Lua panes on offer, Move to sidebar in the panel or Move
+// to panel in the sidebar, and Close pane. The writing card stays in
+// the panel, so its menu has no Move.
 // The Affects pane adds Style and Marker, each a submenu with a check
 // on the current pick, Change when affects warn, which opens Settings
 // on the hours under Layout, Affects, and Edit tracked affects, which
 // opens Settings on that profile's Tracked affects in Characters.
 // Marker goes quiet while either chip style is chosen, since chips draw
 // no marker. The hours are numbers, typed in Settings and never picked
-// in a menu. The Chat pane adds Channel colors, a submenu of the eleven
+// in a menu. The Stats pane adds Style, its three styles with a check
+// on the current pick. The Chat pane adds Channel colors, a submenu of the eleven
 // channels the game sends, each opening Default and the theme's 16 ANSI
 // colors with a check on the current pick, then Reset all. A Lua pane
 // adds Edit with its plugin's name, which opens that plugin under
@@ -85,6 +96,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const rowRefs = useRef<Partial<Record<PaneSubmenu, HTMLButtonElement | null>>>({});
   const chanRefs = useRef<Partial<Record<string, HTMLButtonElement | null>>>({});
   const display = useAffectsDisplay();
+  const statsStyle = useStatsStyle();
   const chatColors = useChatColors();
   const palette = usePlayPalette();
   const textSize = useContext(PaneTextSizeContext);
@@ -129,10 +141,12 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   };
 
   const splitIn = paneToSplitIn(leaf.id);
-  const showHere = panesToShowInstead(leaf, getPanelLayout()?.root ?? null);
+  const layout = getPanelLayout();
+  const showHere = panesToShowInstead(leaf, layout ? bothTrees(layout) : null);
+  const where = layout ? treeOf(layout, leaf.id) : null;
   const area = anchor.closest('.panel-panes');
   const canSplit = (dir: SplitDir) => {
-    const root = getPanelLayout()?.root;
+    const root = layout && where ? treeIn(layout, where) : null;
     if (!root || splitIn === null) return false;
     if (!area) return true;
     return fitsPanel(
@@ -167,7 +181,12 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     },
     style: {
       label: 'Style',
-      items: () => choices(affectsStyleChoices(display), (style) => pickDisplay({ style })),
+      items: () =>
+        leaf.pane === 'stats'
+          ? choices(statsStyleChoices(statsStyle), (style) => {
+              void setStatsStyle(style).catch(() => undefined);
+            })
+          : choices(affectsStyleChoices(display), (style) => pickDisplay({ style })),
     },
     marker: {
       label: 'Marker',
@@ -315,6 +334,21 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         </MenuItem>
         <MenuSeparator />
         {submenuRow('show', showHere.builtIns.length === 0 && showHere.lua.length === 0)}
+        {where !== null && leaf.pane !== WRITING_PANE && (
+          <MenuItem
+            onHover={closeSub}
+            onFocus={closeSub}
+            onSelect={run(() => movePaneAcross(leaf.id))}
+          >
+            {where === 'panel' ? 'Move to sidebar' : 'Move to panel'}
+          </MenuItem>
+        )}
+        {leaf.pane === 'stats' && (
+          <>
+            <MenuSeparator />
+            {submenuRow('style', false)}
+          </>
+        )}
         {leaf.pane === 'affects' && (
           <>
             <MenuSeparator />

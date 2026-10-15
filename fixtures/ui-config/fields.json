@@ -97,6 +97,7 @@
     "chip_style": "icon_value",
     "status_style": "strip",
     "panel_side": "left",
+    "stats_style": "ledger",
     "tick_count": "down",
     "game_time": "12h",
     "affects_style": "chips",

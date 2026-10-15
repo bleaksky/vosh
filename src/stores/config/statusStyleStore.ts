@@ -7,7 +7,7 @@ import { createConfigStore } from './configStore';
 // its own.
 
 const store = createConfigStore<StatusStyle>({
-  initial: 'meters',
+  initial: 'compact',
   read: () => getUiConfig().then((cfg) => cfg.status_style),
   follow: subscribeStatusStyleChanged,
 });

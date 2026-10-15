@@ -472,6 +472,7 @@ const allShown = (): PaneSplit =>
   tree(
     { id: 'map', pane: 'map', weight: 1, props: {} },
     { id: 'group', pane: 'group', weight: 1, props: {} },
+    { id: 'stats', pane: 'stats', weight: 1, props: {} },
     { id: 'chat-2', pane: 'chat', weight: 1, props: {} },
     { id: 'chat-3', pane: 'chat', weight: 1, props: {} },
     { id: 'chat-4', pane: 'chat', weight: 1, props: {} },
@@ -500,13 +501,22 @@ describe('Add a pane', () => {
     lua.rows = [row('weather_pane', weather), row('worth_pane', worth)];
   }
 
-  async function open(paneTree: PaneSplit) {
+  async function open(paneTree: PaneSplit, sidebar = false) {
     const onAddPane = vi.fn();
+    const onAddPaneToSidebar = sidebar ? vi.fn() : undefined;
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     const root = createRoot(container as unknown as HTMLElement);
     await act(async () => {
-      root.render(createElement(TitleBand, { ...props, panelOpen: true, paneTree, onAddPane }));
+      root.render(
+        createElement(TitleBand, {
+          ...props,
+          panelOpen: true,
+          paneTree,
+          onAddPane,
+          onAddPaneToSidebar,
+        }),
+      );
     });
     cleanups.push(async () => {
       await act(async () => root.unmount());
@@ -539,8 +549,49 @@ describe('Add a pane', () => {
         )[0];
         on(item).onClick();
       });
-    return { lines, pick, onAddPane };
+    return { lines, pick, onAddPane, onAddPaneToSidebar, menu };
   }
+
+  it('ends on Add to the sidebar, which lists the same panes and adds there', async () => {
+    holdPanes();
+    const m = await open(tree(), true);
+    expect(m.lines.slice(-3)).toEqual(['Worth | worth_pane', '---', 'Add to the sidebar']);
+    const [row] = findAll(
+      m.menu,
+      (el) => el.getAttribute('role') === 'menuitem' && el.textContent === 'Add to the sidebar',
+    );
+    const box = { left: 0, top: 0, right: 200, bottom: 24, width: 200, height: 24 };
+    Object.assign(row, { getBoundingClientRect: () => box });
+    // The pointer on the row opens the list beside it, with no other
+    // submenu open for it to aim at.
+    Object.assign(doc, { querySelectorAll: () => [] });
+    cleanups.push(async () => void Reflect.deleteProperty(doc, 'querySelectorAll'));
+    await act(async () => on(row).onPointerEnter({ currentTarget: row }));
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    const [sub] = findAll(
+      doc.body,
+      (el) =>
+        el.getAttribute('role') === 'menu' &&
+        el.getAttribute('aria-label') === 'Add to the sidebar',
+    );
+    if (!sub) throw new Error('no Add to the sidebar menu');
+    const names = findAll(sub, (el) => el.getAttribute('role') === 'menuitem').map(
+      (el) => findAll(el, (k) => k.getAttribute('class') === 'menu-label')[0].textContent,
+    );
+    expect(names).toEqual(['Map', 'Group', 'Stats', 'Chat', 'Weather', 'Worth']);
+    const [stats] = findAll(
+      sub,
+      (el) => el.getAttribute('role') === 'menuitem' && el.textContent.startsWith('Stats'),
+    );
+    await act(async () => on(stats).onClick());
+    expect(m.onAddPaneToSidebar).toHaveBeenCalledWith({ pane: 'stats', props: {} });
+    expect(m.onAddPane).not.toHaveBeenCalled();
+  });
+
+  it('has no Add to the sidebar without somewhere to add, or with every pane showing', async () => {
+    expect((await open(tree())).lines).not.toContain('Add to the sidebar');
+    expect((await open(allShown(), true)).lines).toEqual(['Every pane is showing.']);
+  });
 
   it('reads the Lua panes only while the menu is open', async () => {
     holdPanes();
@@ -555,6 +606,7 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Weather | weather_pane',
@@ -567,6 +619,7 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Worth | worth_pane',
@@ -575,12 +628,13 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Worth | worth_pane',
     ]);
     lua.rows = null;
-    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Chat | starts on Tell']);
+    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Stats', 'Chat | starts on Tell']);
   });
 
   it('drops a Lua pane once the panel shows it', async () => {
@@ -594,6 +648,7 @@ describe('Add a pane', () => {
     expect((await open(tree(weather))).lines).toEqual([
       'Map',
       'Group',
+      'Stats',
       'Chat | starts on Tell',
       '---',
       'Worth | worth_pane',
