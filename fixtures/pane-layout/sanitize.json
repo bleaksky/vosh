@@ -1158,6 +1158,79 @@
           ]
         }
       }
+    },
+    {
+      "name": "a folded pane stays folded, and a split never folds",
+      "input": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.5,
+              "folded": true
+            },
+            {
+              "id": "pair",
+              "split": "row",
+              "weight": 0.5,
+              "folded": true,
+              "children": [
+                {
+                  "id": "affects",
+                  "pane": "affects",
+                  "weight": 0.5
+                },
+                {
+                  "id": "group",
+                  "pane": "group",
+                  "weight": 0.5,
+                  "folded": false
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            {
+              "id": "map",
+              "pane": "map",
+              "weight": 0.5,
+              "folded": true
+            },
+            {
+              "id": "pair",
+              "split": "row",
+              "weight": 0.5,
+              "children": [
+                {
+                  "id": "affects",
+                  "pane": "affects",
+                  "weight": 0.5
+                },
+                {
+                  "id": "group",
+                  "pane": "group",
+                  "weight": 0.5
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   ]
 }

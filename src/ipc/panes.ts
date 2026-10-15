@@ -40,10 +40,43 @@ export function paneLayoutReset(profile?: string | null): Promise<unknown> {
 /** Give the profile `profile` the panel and sidebar trees of `layout`,
  *  keeping whether its panel shows and how wide it is, as a move in
  *  Settings > Characters does. Saves and tells the windows as
- *  paneLayoutReset does. Pages move through setProfileTrees in
- *  panel/paneLayout.ts, which cleans the tree. */
-export function paneTreesSet(profile: string, layout: PaneLayout): Promise<unknown> {
-  return invoke<unknown>('pane_trees_set', { profile, layout });
+ *  paneLayoutReset does. Done in arrange mode sets `arranged`, so the
+ *  layout it replaces always joins the earlier ones. Pages move through
+ *  setProfileTrees in panel/paneLayout.ts, which cleans the tree. */
+export function paneTreesSet(
+  profile: string,
+  layout: PaneLayout,
+  arranged = false,
+): Promise<unknown> {
+  return invoke<unknown>('pane_trees_set', { profile, layout, arranged });
+}
+
+/** Why a layout gave way, `Why` in src-tauri/src/profile/layout_history.rs. */
+export type EarlierWhy = 'change' | 'arrange' | 'reset' | 'restore' | 'update';
+
+/** A layout a profile had before, `Earlier` in
+ *  src-tauri/src/profile/layout_history.rs. `until` is when it gave way,
+ *  in Unix milliseconds, and names it. `version` is the version that
+ *  started, for an update. */
+export interface EarlierLayout {
+  until: number;
+  why: EarlierWhy;
+  version?: string;
+  panes: unknown;
+}
+
+/** The layouts the profile `profile` had before, or the selected
+ *  session's, newest first. */
+export function paneHistoryGet(profile?: string | null): Promise<EarlierLayout[]> {
+  return invoke<EarlierLayout[]>('pane_history_get', { profile: profile ?? null });
+}
+
+/** Put back the earlier layout `until` names on the profile `profile`,
+ *  or the selected session's, keeping whether its panel shows and how
+ *  wide it is. Returns the new layout as the backend sends it, and the
+ *  windows hear it as they do a reset. */
+export function paneHistoryRestore(profile: string | null, until: number): Promise<unknown> {
+  return invoke<unknown>('pane_history_restore', { profile, until });
 }
 
 /** Hear a pane layout saved outside this window. Pages hear it through

@@ -8,10 +8,14 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
+import { paneHistoryGet, type EarlierLayout } from '../../ipc/panes';
 import type { PanelSide } from '../../ipc/uiConfig';
+import { EarlierLayoutsMenu } from '../../panel/EarlierLayoutsMenu';
 import { moveLeaf, type PaneLayout, type PaneTree } from '../../panel/paneLayout';
 import { paneLabel } from '../../panel/paneTypes';
 import { Button, Card, Section } from '../../ui';
+import type { MenuPlacement } from '../../ui/MenuSurface';
+import { menuBelow } from '../../ui/menuPlacement';
 import {
   SCHEMATIC_HEIGHT,
   SCHEMATIC_WIDTH,
@@ -32,7 +36,8 @@ import {
 
 // Panel layout on the Characters page: the selected profile's sidebar
 // and panel drawn from its real pane trees, side by side as the window
-// holds them, beside a line about what Vosh saves and Reset to default.
+// holds them, beside a line about what Vosh saves, Earlier layouts and
+// Reset to default.
 // You move a pane on the drawing as in the window. Drag it over another
 // pane or into an empty box, or focus it and press the arrow keys. Each
 // move saves to the profile at once.
@@ -47,6 +52,17 @@ interface Props {
   onMove: (next: PaneLayout) => void;
   onReset: () => void;
   resetting: boolean;
+  /** The profile, whose earlier layouts Earlier layouts lists. */
+  profile: string;
+  /** Put back the earlier layout `until` names. */
+  onRestore: (until: number) => void;
+}
+
+/** Earlier layouts while it is open, with the list read as it opened. */
+interface EarlierOpen {
+  earlier: EarlierLayout[];
+  at: MenuPlacement;
+  anchor: HTMLButtonElement;
 }
 
 /** Between the two boxes, where the terminal sits in the window. */
@@ -67,7 +83,27 @@ interface Press {
   dragging: boolean;
 }
 
-export function PanelLayout({ owner, panes, panelSide, onMove, onReset, resetting }: Props) {
+export function PanelLayout({
+  owner,
+  panes,
+  panelSide,
+  onMove,
+  onReset,
+  resetting,
+  profile,
+  onRestore,
+}: Props) {
+  const [earlier, setEarlier] = useState<EarlierOpen | null>(null);
+  const openEarlier = (button: HTMLButtonElement) => {
+    if (earlier) {
+      setEarlier(null);
+      return;
+    }
+    const at = menuBelow(button.getBoundingClientRect());
+    paneHistoryGet(profile)
+      .catch(() => [])
+      .then((list) => setEarlier({ earlier: list, at, anchor: button }));
+  };
   const panel = useMemo(() => paneSchematic(panes.root, paneLabel, owner), [panes.root, owner]);
   const sidebar = useMemo(
     () => sidebarSchematic(panes.sidebar, paneLabel, owner),
@@ -286,10 +322,35 @@ export function PanelLayout({ owner, panes, panelSide, onMove, onReset, resettin
             Press Up or Down to move a pane past the next one, and Left or Right to move it between
             the sidebar and the panel.
           </p>
-          <Button onClick={onReset} disabled={resetting}>
-            Reset to default
-          </Button>
+          <div className="st-layout-actions">
+            <Button
+              aria-haspopup="menu"
+              aria-expanded={earlier !== null}
+              onClick={(e) => openEarlier(e.currentTarget)}
+            >
+              Earlier layouts
+            </Button>
+            <Button onClick={onReset} disabled={resetting}>
+              Reset to default
+            </Button>
+          </div>
         </div>
+        {earlier && (
+          <EarlierLayoutsMenu
+            earlier={earlier.earlier}
+            at={earlier.at}
+            anchor={earlier.anchor}
+            onClose={(reason) => {
+              setEarlier(null);
+              if (reason === 'escape') earlier.anchor.focus();
+            }}
+            onPick={(until) => {
+              earlier.anchor.focus();
+              setEarlier(null);
+              onRestore(until);
+            }}
+          />
+        )}
       </Card>
     </Section>
   );

@@ -12,6 +12,7 @@ import {
 } from '../../lib/characterProfiles';
 import {
   resetPaneLayout,
+  restoreEarlierLayout,
   setProfileTrees,
   subscribePaneLayout,
   type PaneLayout,
@@ -281,6 +282,18 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
       .finally(() => setResetting(false));
   };
 
+  // Earlier layouts puts one back on the selected profile, as a reset does.
+  const restorePanes = (until: number) => {
+    if (!detail) return;
+    const name = detail.name;
+    restoreEarlierLayout(name, until)
+      .then((panes) => {
+        onError(null);
+        setDetail((d) => (d && d.name === name ? { ...d, panes } : d));
+      })
+      .catch((e: unknown) => onError(String(e)));
+  };
+
   const loginNote = !detail
     ? undefined
     : !character
@@ -360,6 +373,8 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
               onMove={movePanes}
               onReset={resetPanes}
               resetting={resetting}
+              profile={detail.name}
+              onRestore={restorePanes}
             />
             {detail.tracked_affects.length > 0 && (
               <ProfileAdvanced

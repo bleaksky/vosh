@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import {
+  paneHistoryRestore,
   paneLayoutGet,
   paneLayoutReset,
   paneTreesSet,
@@ -123,6 +124,9 @@ export interface PaneLeaf {
   /** Per-pane settings, such as the chat pane's channel filter, and
    *  the plugin, id and title of a Lua pane. */
   props: Record<string, string>;
+  /** Folded down to its header, keeping its place. Set only while it
+   *  is folded. */
+  folded?: true;
 }
 
 export interface PaneSplit {
@@ -228,6 +232,7 @@ interface RawNode {
   weight: number;
   children: RawNode[];
   props: Record<string, string>;
+  folded: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -249,6 +254,7 @@ function readNode(value: unknown): RawNode {
     weight: typeof o.weight === 'number' ? o.weight : 1,
     children: Array.isArray(o.children) ? o.children.map(readNode) : [],
     props,
+    folded: o.folded === true,
   };
 }
 
@@ -346,7 +352,13 @@ function sanitizeNode(ctx: SanitizeContext, raw: RawNode, depth: number): PaneNo
     const placed = ctx.panes.get(key) ?? 0;
     if (placed >= paneCap(ref)) return null;
     ctx.panes.set(key, placed + 1);
-    return { id: claimId(ctx, raw.id, kind), pane: kind, weight, props: sortedProps(raw.props) };
+    return {
+      id: claimId(ctx, raw.id, kind),
+      pane: kind,
+      weight,
+      props: sortedProps(raw.props),
+      ...(raw.folded ? { folded: true as const } : {}),
+    };
   }
   const dir = splitDir(raw.split);
   const id = claimId(ctx, raw.id, 'split');
@@ -404,7 +416,15 @@ function sanitizeRoot(ctx: SanitizeContext, rawRoot: RawNode, base: string): Pan
   // A bare leaf at the root gets wrapped so the root stays a split.
   const raw: RawNode =
     rawRoot.pane !== null
-      ? { id: '', pane: null, split: 'column', weight: 1, children: [rawRoot], props: {} }
+      ? {
+          id: '',
+          pane: null,
+          split: 'column',
+          weight: 1,
+          children: [rawRoot],
+          props: {},
+          folded: false,
+        }
       : rawRoot;
   let dir = splitDir(raw.split);
   const id = claimId(ctx, raw.id, base);
@@ -633,6 +653,20 @@ export function setWeights(tree: PaneSplit, parentId: string, weights: number[])
   );
 }
 
+/** Fold the leaf `id` down to its header, or open it again. Returns
+ *  the input tree when nothing changes. */
+export function setFolded(tree: PaneSplit, id: string, folded: boolean): PaneSplit {
+  const target = findNode(tree, id);
+  if (target === null || !isLeaf(target) || (target.folded === true) === folded) return tree;
+  return sanitize(
+    mapTree(tree, id, (n) => {
+      if (!isLeaf(n)) return n;
+      const { folded: _was, ...rest } = n;
+      return folded ? { ...rest, folded: true } : rest;
+    }),
+  );
+}
+
 /** Add `ref` at the bottom of the panel (Add a pane). Its share
  *  stands to the panes already there as its reading height stands to
  *  theirs, so a short list such as Group takes a short share and the
@@ -714,24 +748,33 @@ export function otherTree(which: PaneTree): PaneTree {
   return which === 'panel' ? 'sidebar' : 'panel';
 }
 
+/** The side of a pane another lands against: above it or below it,
+ *  or to its left or right. */
+export type DropEdge = 'before' | 'after' | 'left' | 'right';
+
 /** Where a dragged pane lands: next to the pane `at` in tree `tree`,
- *  above it or below it, or alone in an empty tree when `at` is null. */
+ *  on the side `edge` names, or alone in an empty tree when `at` is
+ *  null. */
 export interface PaneDrop {
   tree: PaneTree;
   at: string | null;
-  edge: 'before' | 'after';
+  edge: DropEdge;
 }
 
-/** Put `leaf` above or below the pane `id` in `tree`. In a column the
- *  two halve the old share. In a row the pane becomes a column of the
- *  two. With `id` null or not found, `leaf` goes at the foot. */
+/** Put `leaf` against the pane `id` in `tree` on the side `edge` names.
+ *  In a split of the edge's direction, a column for above and below and
+ *  a row for left and right, the two halve the old share. In the other
+ *  direction the pane becomes a split of the two. With `id` null or not
+ *  found, `leaf` goes at the foot. */
 export function insertBeside(
   tree: PaneSplit,
   id: string | null,
   leaf: PaneLeaf,
-  edge: 'before' | 'after',
+  edge: DropEdge,
 ): PaneSplit {
   if (id === null || id === tree.id || findNode(tree, id) === null) return appendLeaf(tree, leaf);
+  const dir: SplitDir = edge === 'left' || edge === 'right' ? 'row' : 'column';
+  const first = edge === 'before' || edge === 'left';
   const insert = (node: PaneSplit): PaneSplit => {
     const at = node.children.findIndex((c) => c.id === id);
     if (at < 0) {
@@ -739,34 +782,58 @@ export function insertBeside(
     }
     const hit = node.children[at];
     const children = node.children.slice();
-    if (node.split === 'column') {
+    if (node.split === dir) {
       const half = hit.weight / 2;
       const pair = [
         { ...hit, weight: half },
         { ...leaf, weight: half },
       ];
-      children.splice(at, 1, ...(edge === 'before' ? pair.reverse() : pair));
+      children.splice(at, 1, ...(first ? pair.reverse() : pair));
     } else {
-      const both =
-        edge === 'before'
-          ? [
-              { ...leaf, weight: 1 },
-              { ...hit, weight: 1 },
-            ]
-          : [
-              { ...hit, weight: 1 },
-              { ...leaf, weight: 1 },
-            ];
+      const pair = [
+        { ...hit, weight: 1 },
+        { ...leaf, weight: 1 },
+      ];
       children[at] = {
         id: freshId(tree, 'split'),
-        split: 'column',
+        split: dir,
         weight: hit.weight,
-        children: both,
+        children: first ? pair.reverse() : pair,
       };
     }
     return { ...node, children };
   };
   return sanitize(insert(tree));
+}
+
+/** A new leaf showing `ref`, with an id neither tree of `layout` uses
+ *  yet, such as chat-2 beside a chat. */
+export function newLeaf(layout: Pick<PaneLayout, 'root' | 'sidebar'>, ref: PaneRef): PaneLeaf {
+  return freshLeaf(bothTrees(layout), ref);
+}
+
+/** Take the pane `id` out of `layout`, wherever it shows, and hand back
+ *  the layout without it, the leaf with its id and props, and the tree
+ *  it left. Null when no tree holds it. */
+export function liftLeaf(
+  layout: PaneLayout,
+  id: string,
+): { layout: PaneLayout; leaf: PaneLeaf; from: PaneTree } | null {
+  const from = treeOf(layout, id);
+  if (from === null) return null;
+  const leaf = findNode(treeIn(layout, from), id);
+  if (leaf === null || !isLeaf(leaf)) return null;
+  return { layout: withTree(layout, from, closePane(treeIn(layout, from), id)), leaf, from };
+}
+
+/** Put `leaf`, which no tree of `layout` holds, where `drop` says. */
+export function placeLeaf(layout: PaneLayout, leaf: PaneLeaf, drop: PaneDrop): PaneLayout {
+  const placed = withTree(
+    layout,
+    drop.tree,
+    insertBeside(treeIn(layout, drop.tree), drop.at, leaf, drop.edge),
+  );
+  return { ...placed, ...sanitizeTrees(placed.root, placed.sidebar) };
 }
 
 /** Move the pane `id` to where `drop` says, from either tree to either
@@ -896,9 +963,25 @@ export async function resetPaneLayout(profile?: string | null): Promise<PaneLayo
 }
 
 /** Give the profile `profile` the trees of `layout`, as a move in
- *  Settings > Characters does, and return its layout as saved. */
-export async function setProfileTrees(profile: string, layout: PaneLayout): Promise<PaneLayout> {
-  return sanitizeLayout(await paneTreesSet(profile, layout));
+ *  Settings > Characters does, and return its layout as saved. Done in
+ *  arrange mode sets `arranged`, so the layout it replaces always joins
+ *  the earlier ones. */
+export async function setProfileTrees(
+  profile: string,
+  layout: PaneLayout,
+  arranged = false,
+): Promise<PaneLayout> {
+  return sanitizeLayout(await paneTreesSet(profile, layout, arranged));
+}
+
+/** Put back the earlier layout `until` names on the profile `profile`,
+ *  or the live profile when you name none, and return the layout as
+ *  saved (paneHistoryRestore). */
+export async function restoreEarlierLayout(
+  profile: string | null,
+  until: number,
+): Promise<PaneLayout> {
+  return sanitizeLayout(await paneHistoryRestore(profile, until));
 }
 
 /** Save the active profile's pane layout. Calls within 250 ms coalesce

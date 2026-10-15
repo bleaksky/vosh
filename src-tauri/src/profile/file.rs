@@ -106,6 +106,24 @@ pub(crate) struct ProfileConfig {
     /// you turn it off.
     #[serde(default, skip_serializing_if = "OnSwitch::is_on")]
     pub reconnect: OnSwitch,
+    /// Keys this build does not know, which a newer build wrote. They
+    /// ride along as they are, so a save never drops them. The tables a
+    /// profile leaves behind on purpose stay out, see [`DROPPED_KEYS`].
+    #[serde(flatten, deserialize_with = "unknown_keys")]
+    pub extra: BTreeMap<String, toml::Value>,
+}
+
+/// The tables a profile file reads past without keeping: `[connection]`,
+/// which builds before 0.9 wrote and nothing reads, and `[vosh_export]`,
+/// which an export adds after the profile, see `crate::profile::export`.
+const DROPPED_KEYS: [&str; 2] = ["connection", "vosh_export"];
+
+fn unknown_keys<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<BTreeMap<String, toml::Value>, D::Error> {
+    let mut keys = BTreeMap::<String, toml::Value>::deserialize(d)?;
+    keys.retain(|key, _| !DROPPED_KEYS.contains(&key.as_str()));
+    Ok(keys)
 }
 
 /// A switch that stays on until you turn it off, such as Reconnect when
@@ -256,6 +274,7 @@ impl ProfileConfig {
             alerts: profile.alerts.clone(),
             preset_edits: profile.preset_edits.clone(),
             reconnect: profile.reconnect,
+            extra: profile.file_extra.clone(),
         };
         config.set_prompt(profile.prompt.clone());
         config
@@ -392,6 +411,7 @@ impl ProfileConfig {
         profile.alerts.clone_from(&self.alerts);
         profile.preset_edits.clone_from(&self.preset_edits);
         profile.reconnect = self.reconnect;
+        profile.file_extra = self.extra.clone();
 
         warnings
     }
@@ -598,6 +618,69 @@ mod tests {
         let read: ProfileConfig = toml::from_str(older).unwrap();
         assert_eq!(read.tick.interval_secs, 45);
         assert!(!toml::to_string(&read).unwrap().contains("[connection]"));
+    }
+
+    #[test]
+    fn a_save_keeps_the_keys_a_newer_build_wrote() {
+        // A newer build, or a dev build, added these. This one reads past
+        // them and writes them back as they were, at the top, in [ui] and
+        // in [ui.panes].
+        let newer = "\
+later_switch = true
+
+[ui]
+theme = \"triad\"
+later_style = \"tiles\"
+
+[ui.panes]
+version = 1
+panel_open = true
+
+[ui.panes.root]
+id = \"root\"
+split = \"column\"
+
+[[ui.panes.root.children]]
+id = \"map\"
+pane = \"map\"
+
+[ui.panes.later_tree]
+id = \"later\"
+split = \"column\"
+
+[later_table]
+count = 3
+";
+        let read = ProfileConfig::from_toml(newer).unwrap();
+        let text = read.to_toml().unwrap();
+        let again: toml::Table = toml::from_str(&text).unwrap();
+        assert_eq!(again["later_switch"].as_bool(), Some(true), "{text}");
+        assert_eq!(
+            again["later_table"]["count"].as_integer(),
+            Some(3),
+            "{text}"
+        );
+        assert_eq!(again["ui"]["later_style"].as_str(), Some("tiles"), "{text}");
+        assert_eq!(
+            again["ui"]["panes"]["later_tree"]["id"].as_str(),
+            Some("later"),
+            "{text}"
+        );
+        assert_eq!(
+            ProfileConfig::from_toml(&text).unwrap().to_toml().unwrap(),
+            text
+        );
+        // The live profile carries them to its next save too.
+        let mut profile = Profile::default();
+        read.apply_to(&mut profile);
+        let saved = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+        let saved: toml::Table = toml::from_str(&saved).unwrap();
+        assert_eq!(saved["later_switch"].as_bool(), Some(true));
+        assert_eq!(saved["ui"]["later_style"].as_str(), Some("tiles"));
+        assert_eq!(
+            saved["ui"]["panes"]["later_tree"]["id"].as_str(),
+            Some("later")
+        );
     }
 
     #[test]

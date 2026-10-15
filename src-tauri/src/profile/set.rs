@@ -513,6 +513,7 @@ impl ProfileSet {
         if path.exists() {
             std::fs::remove_file(&path)?;
         }
+        crate::profile::layout_history::delete(&self.root, name);
         self.save_index()?;
         Ok(())
     }
@@ -533,6 +534,7 @@ impl ProfileSet {
             // its new name.
             crate::disk::atomic::follow_unread(&old_path, &new_path);
         }
+        crate::profile::layout_history::rename(&self.root, old, &new);
         if self.index.active == old {
             self.index.active.clone_from(&new);
         }

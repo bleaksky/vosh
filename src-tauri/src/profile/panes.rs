@@ -84,6 +84,10 @@ pub(crate) struct PaneLayoutPersist {
         skip_serializing_if = "PaneNode::is_empty_split"
     )]
     pub sidebar: PaneNode,
+    /// Keys this build does not know, which a newer build wrote. They
+    /// ride along as they are, so a save never drops them.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, toml::Value>,
 }
 
 /// One node of the pane tree. A leaf sets `pane`; a split sets
@@ -114,6 +118,10 @@ pub(crate) struct PaneNode {
     /// `id` and `title`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub props: BTreeMap<String, String>,
+    /// A pane folded down to its header, which keeps its place. Only a
+    /// leaf folds, and the file writes it only while it is folded.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub folded: bool,
 }
 
 fn default_pane_layout_version() -> u32 {
@@ -177,7 +185,7 @@ fn old_zone_rank(zone: &str, align: &str) -> Option<u8> {
 }
 
 impl PaneNode {
-    fn leaf(pane: &str, weight: f64) -> Self {
+    pub(crate) fn leaf(pane: &str, weight: f64) -> Self {
         Self {
             id: pane.to_string(),
             pane: Some(pane.to_string()),
@@ -185,6 +193,7 @@ impl PaneNode {
             weight,
             children: Vec::new(),
             props: BTreeMap::new(),
+            folded: false,
         }
     }
 
@@ -193,7 +202,7 @@ impl PaneNode {
         self.pane.is_none() && self.children.is_empty()
     }
 
-    fn split(id: &str, dir: &str, children: Vec<PaneNode>) -> Self {
+    pub(crate) fn split(id: &str, dir: &str, children: Vec<PaneNode>) -> Self {
         Self {
             id: id.to_string(),
             pane: None,
@@ -201,6 +210,7 @@ impl PaneNode {
             weight: 1.0,
             children,
             props: BTreeMap::new(),
+            folded: false,
         }
     }
 }
@@ -214,6 +224,7 @@ impl PaneLayoutPersist {
             panel_width: None,
             root: default_pane_root(),
             sidebar: empty_sidebar(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -227,6 +238,7 @@ impl PaneLayoutPersist {
             panel_width: self.panel_width,
             root: default_pane_root(),
             sidebar: empty_sidebar(),
+            extra: self.extra.clone(),
         }
     }
 
@@ -240,6 +252,7 @@ impl PaneLayoutPersist {
             panel_width: self.panel_width,
             root: trees.root.clone(),
             sidebar: trees.sidebar.clone(),
+            extra: self.extra.clone(),
         };
         out.sanitize();
         out
@@ -311,6 +324,7 @@ impl PaneLayoutPersist {
             panel_width: None,
             root: PaneNode::split("root", "column", children),
             sidebar: empty_sidebar(),
+            extra: BTreeMap::new(),
         };
         layout.sanitize();
         layout
@@ -534,6 +548,7 @@ impl TreeSanitizer {
             return Some(PaneNode {
                 id,
                 props: raw.props,
+                folded: raw.folded,
                 ..PaneNode::leaf(kind, weight)
             });
         }
@@ -670,6 +685,7 @@ pub(crate) mod tests {
             panel_width: Some(360),
             root: PaneNode::split("root", "column", vec![PaneNode::leaf("map", 0.6), row]),
             sidebar: PaneNode::split("sidebar", "column", vec![PaneNode::leaf("stats", 1.0)]),
+            extra: BTreeMap::new(),
         };
         layout.sanitize();
         layout

@@ -23,6 +23,14 @@ Vosh keeps its data in one app data folder named `com.aabahran.vosh`.
 Exports go to your Downloads folder instead. The page keeps a few small
 choices in the webview's browser storage.
 
+A debug build, the one `npm run tauri dev` runs, keeps a folder of its
+own beside that one, named `com.aabahran.vosh.dev`. Its first launch
+copies the installed app's folder into it, without `logs.sqlite`,
+`maps.sqlite` and the backups, and from then on the two never touch each
+other's files. `src-tauri/src/disk/dev_folder.rs` does this. A dev folder
+without its `.copied` mark, which a failed copy leaves, moves aside and
+is copied again. Delete the dev folder to start again from a fresh copy.
+
 ## How a TOML save works
 
 Profile files, profiles.toml, global.toml, catalog.toml, loadouts.toml,
@@ -35,6 +43,12 @@ write leaves the old file in place.
 A file Vosh could not read goes on the unread list, and every save to it
 fails until it reads again. So a save never writes the defaults over
 settings Vosh could not parse.
+
+A profile file, its `[ui]` and `[ui.panes]` tables, and global.toml keep
+the keys this build does not know in an `extra` map and write them back
+as they were. So a build older than the one that wrote a key saves the
+file without losing it. A profile file reads past `[connection]`, which
+builds before 0.9 wrote, and `[vosh_export]`, which an export adds.
 
 `writing.toml` and the files in a plugin folder go through `swap_in`,
 which swaps the text in whole and keeps no backup. A backup inside a
@@ -56,6 +70,7 @@ it the same way.
 | `catalog.journal.toml`                      | TOML                | `src-tauri/src/loadouts/wizard/journal.rs`                     |
 | `affect_full.toml`                          | TOML, `version = 1` | `src-tauri/src/affects/full.rs`                                |
 | `writing.toml`                              | TOML, `version = 1` | `src-tauri/src/writing.rs`                                     |
+| `layouts/<name>.toml`, `layouts/.seen.toml` | TOML                | `src-tauri/src/profile/layout_history.rs`                      |
 | `logs.sqlite`                               | SQLite in WAL mode  | `crates/log/src/sqlite.rs`                                     |
 | `scrollback.txt`, `scrollback-<n>.txt`      | Raw bytes, CRLF     | `src-tauri/src/logs.rs`                                        |
 | `scripts/`                                  | A folder            | `create_scripts_dir` in `src-tauri/src/app/launch.rs`          |
@@ -88,6 +103,10 @@ aliases, triggers and macros live in catalog.toml instead, and the
 profile file keeps the rest. Room triggers sit in `[[room_triggers]]`,
 apart from `[[triggers]]`, since 0.8.0 fails a whole file on a trigger
 target it does not know.
+
+A pane in `[ui.panes]` writes `folded = true` while it is folded down
+to its header, and nothing while it is open. Builds before 0.95.6 drop
+the key and open the pane.
 
 The first save that adds `[prompt]` to a file without one first copies
 the file to `<name>.toml.before-prompt-editor`. The prompt capture
@@ -160,6 +179,18 @@ The most hours Vosh has seen for each affect since it was cast, so the
 Affects pane can drain a gauge. `[characters]` keys each character by
 `{host}:{port} {name}`. A store writes only when it changes what the
 file holds, a moment after a burst settles.
+
+### layouts/
+
+`layouts/<name>.toml` holds up to 20 pane layouts the profile `name` had
+before, newest first, each in an `[[earlier]]` entry with `until`, the
+Unix milliseconds it gave way, `why` (`change`, `arrange`, `reset`,
+`restore` or `update`), `version` for an update, and the `[ui.panes]`
+table it had as `panes`. A rename takes the file along and a delete
+drops it. `layouts/.seen.toml` names in `version` the last version whose
+first launch kept every profile's layout, so each version does that
+once, before any profile opens. Both go through `swap_in` with no
+backup, and a file that does not read counts as empty.
 
 ### writing.toml
 

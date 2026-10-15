@@ -1,6 +1,7 @@
 //! Everything about a profile. `live.rs` holds the profile in memory,
-//! `file.rs` the profile file format, `ui.rs` its `[ui]` table and
-//! `panes.rs` its pane layout. `shared.rs` holds global.toml and the
+//! `file.rs` the profile file format, `ui.rs` its `[ui]` table,
+//! `panes.rs` its pane layout and `layout_history.rs` the layouts it had
+//! before. `shared.rs` holds global.toml and the
 //! sharing scope, `set.rs` profiles.toml and the set of profiles,
 //! `login_match.rs` which profile a login picks and `worlds.rs` the
 //! worlds Vosh knows. `open.rs` holds a profile the sessions play,
@@ -11,6 +12,7 @@
 pub(crate) mod export;
 pub(crate) mod file;
 pub(crate) mod inactive;
+pub(crate) mod layout_history;
 pub(crate) mod live;
 pub(crate) mod login_match;
 pub(crate) mod open;

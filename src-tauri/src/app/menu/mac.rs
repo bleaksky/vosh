@@ -157,6 +157,7 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let sep_b = sep()?;
     let sep_c = sep()?;
     let sep_d = sep()?;
+    let arrange = item("panel-arrange", "Arrange panes")?;
     let reset = item("panel-reset", "Reset panel layout")?;
     // AppKit words this row itself, Enter Full Screen or Exit Full
     // Screen, and runs it.
@@ -173,6 +174,7 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             view_items.push(row);
         }
     }
+    view_items.push(&arrange);
     view_items.push(&reset);
     view_items.push(&sep_c);
     view_items.push(&themes);

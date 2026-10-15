@@ -52,6 +52,7 @@ function wire(layout: PaneLayout): unknown {
           pane: n.pane,
           weight: n.weight,
           ...(Object.keys(n.props).length > 0 ? { props: n.props } : {}),
+          ...(n.folded ? { folded: true } : {}),
         }
       : {
           id: n.id,

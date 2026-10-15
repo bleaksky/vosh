@@ -267,6 +267,7 @@ fn full_panes() -> PaneLayoutPersist {
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect(),
+        folded: false,
     };
     PaneLayoutPersist {
         version: 1,
@@ -289,9 +290,11 @@ fn full_panes() -> PaneLayoutPersist {
                         leaf("group", 0.4, &[]),
                     ],
                     props: BTreeMap::new(),
+                    folded: false,
                 },
             ],
             props: BTreeMap::new(),
+            folded: false,
         },
         sidebar: PaneNode {
             id: "sidebar".into(),
@@ -300,7 +303,9 @@ fn full_panes() -> PaneLayoutPersist {
             weight: 1.0,
             children: vec![leaf("stats", 1.0, &[])],
             props: BTreeMap::new(),
+            folded: false,
         },
+        extra: BTreeMap::new(),
     }
 }
 
@@ -482,6 +487,7 @@ fn full_ui() -> UiConfig {
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),
         ]),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -709,6 +715,7 @@ fn full_profile() -> ProfileConfig {
         preset_edits: full_preset_edits(),
         // Reconnect when the link drops, turned off.
         reconnect: OnSwitch(false),
+        extra: BTreeMap::new(),
     };
     config.set_prompt(full_prompt());
     config
@@ -817,6 +824,7 @@ fn full_global() -> GlobalConfig {
             align: Some("bottom".into()),
         }]),
         custom_themes: Some(vec![full_theme()]),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -1110,7 +1118,12 @@ async fn a_fresh_install_writes_these_files_on_its_first_save() {
     }
     assert_eq!(
         written_files(root),
-        ["global.toml", "profiles.toml", "profiles/default.toml"],
+        [
+            "global.toml",
+            "layouts/.seen.toml",
+            "profiles.toml",
+            "profiles/default.toml"
+        ],
         "a first save writes these files and no others"
     );
     for (golden, file) in [
@@ -1374,6 +1387,7 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
         weight,
         children: Vec::new(),
         props: BTreeMap::new(),
+        folded: false,
     };
     assert_eq!(
         config.ui.pane_layout(),
@@ -1388,6 +1402,7 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
                 weight: 1.0,
                 children: vec![leaf("map", 0.45), leaf("group", 0.25), leaf("affects", 0.3)],
                 props: BTreeMap::new(),
+                folded: false,
             },
             sidebar: PaneNode {
                 id: "sidebar".into(),
@@ -1396,7 +1411,9 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
                 weight: 1.0,
                 children: Vec::new(),
                 props: BTreeMap::new(),
+                folded: false,
             },
+            extra: BTreeMap::new(),
         }
     );
 }

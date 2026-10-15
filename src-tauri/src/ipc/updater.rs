@@ -32,7 +32,9 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 
 /// Download + install the pending update and restart the app. Errors
 /// surface to the frontend; the relaunch is a hard exit so any UI
-/// confirmation has to happen before this call returns.
+/// confirmation has to happen before this call returns. Tauri does not
+/// let a restart wait, so before it the windows send the edits they hold
+/// back, such as a pane move still in its debounce, as a quit does.
 #[tauri::command]
 pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_updater::UpdaterExt;
@@ -48,5 +50,6 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
         .download_and_install(|_chunk, _total| {}, || {})
         .await
         .map_err(|e| e.to_string())?;
+    crate::app::exit::ask_windows_to_flush(&app).await;
     app.restart();
 }

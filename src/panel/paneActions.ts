@@ -5,20 +5,18 @@ import {
   cleanTrees,
   closePane,
   countPanes,
+  findNode,
   isLeaf,
   leafIdFor,
-  moveLeaf,
   moveToOtherTree,
   otherTree,
   paneCap,
   paneRef,
-  replacePane,
   sanitize,
-  splitPane,
+  setFolded,
   treeIn,
   treeOf,
   withTree,
-  type PaneDrop,
   type PaneLayout,
   type PaneLeaf,
   type PaneNode,
@@ -26,15 +24,14 @@ import {
   type PaneSplit,
   type PaneTree,
   type PaneType,
-  type SplitDir,
 } from './paneLayout';
 import { getPanelLayout, updatePanelLayout } from './panelLayoutStore';
-import { luaPaneRef, luaPanesToAdd, paneTypesToAdd } from './paneTypes';
 import { chatFilterOf, chatFilterProps, chatLeaves, checkedChannels } from './chat/chatFilter';
 import { pushToast } from '../stores/toasts';
+import { profileInFront } from '../stores/session/sessionsStore';
 
-// What a pane's header and menu, the palette and the title band can do
-// to the panel and the sidebar. Each action reads the store's current
+// What a pane's menu and the palette can do to the panel and the
+// sidebar, outside arrange mode. Each action reads the store's current
 // layout when it runs, so a menu that stayed open across a profile
 // switch or a drag never writes back a stale copy. An action on a pane
 // finds the tree that holds it by its id, which is unique across both.
@@ -44,23 +41,6 @@ export const PaneLeafContext = createContext<PaneLeaf | null>(null);
 
 export function usePaneLeaf(): PaneLeaf | null {
   return useContext(PaneLeafContext);
-}
-
-/** The pane a split of leaf `id` adds. On a Chat pane it is another
- *  Chat while there is room. Elsewhere it is the first pane neither
- *  the panel nor the sidebar shows, a built-in pane first and then a
- *  Lua pane, and another Chat once they show them all. */
-export function paneToSplitIn(id: string): PaneRef | null {
-  const layout = getPanelLayout();
-  const tree = layout ? bothTrees(layout) : null;
-  const types = paneTypesToAdd(tree);
-  const chat = types.includes('chat');
-  if (chat && chatLeaves(tree).some((leaf) => leaf.id === id)) return paneRef('chat');
-  const fresh = types.find((t) => tree === null || countPanes(tree, paneRef(t)) === 0);
-  if (fresh !== undefined) return paneRef(fresh);
-  const lua = luaPanesToAdd(tree)[0];
-  if (lua !== undefined) return luaPaneRef(lua);
-  return chat ? paneRef('chat') : null;
 }
 
 /** The Chat pane that turns to Everything else as another Chat pane
@@ -100,11 +80,9 @@ function setLayoutLeafProps(
 
 // Place `ref` in the tree `which` of `layout` with `put`. A pane the
 // two trees hold once leaves the other tree, so placing it moves it,
-// and a Chat pane needs room across both. A new Chat pane starts on
-// what chatRefToAdd gives. The pane that shows Everything else from
-// then on says rest in the same write, so the new pane never takes it,
-// and when that pane was alone on All, a toast says it now shows
-// Everything else, since All is not offered beside another Chat pane.
+// and a Chat pane needs room across both. A new Chat pane joins as
+// readyForChat says, and when the other pane was alone on All, a toast
+// says it now shows Everything else.
 function placeIn(
   layout: PaneLayout,
   which: PaneTree,
@@ -123,44 +101,67 @@ function placeIn(
     const tree = put(treeIn(base, which), ref);
     return tree === treeIn(base, which) ? layout : cleanTrees(withTree(base, which, tree));
   }
-  const all = bothTrees(base);
-  const chat = chatRefToAdd(all);
-  const rest = chatLeaves(all).length > 0 ? restCandidate(all) : undefined;
-  const ready = rest ? setLayoutLeafProps(base, rest.id, chatFilterProps({ kind: 'rest' })) : base;
+  const chat = chatRefToAdd(bothTrees(base));
+  const { layout: ready, turned } = readyForChat(base);
   const tree = put(treeIn(ready, which), chat);
   if (tree === treeIn(ready, which)) return layout;
-  if (rest && chatLeaves(all).length === 1) {
+  if (turned) {
     pushToast({ kind: 'info', message: 'Your other Chat pane now shows Everything else.' });
   }
   return cleanTrees(withTree(ready, which, tree));
 }
 
-// A Chat pane left alone shows All, whatever it showed beside the
-// others.
-function loneChatToAll(before: PaneLayout, next: PaneLayout): PaneLayout {
+/** `layout` ready for a new Chat pane to join, which starts on what
+ *  chatRefToAdd gives. The pane that shows Everything else from then on
+ *  says rest, so the new pane never takes it. `turned` says that pane
+ *  was alone on All, which is not offered beside another Chat pane. */
+export function readyForChat(layout: PaneLayout): { layout: PaneLayout; turned: boolean } {
+  const all = bothTrees(layout);
+  const chats = chatLeaves(all);
+  const rest = chats.length > 0 ? restCandidate(all) : undefined;
+  if (!rest) return { layout, turned: false };
+  const ready = setLayoutLeafProps(layout, rest.id, chatFilterProps({ kind: 'rest' }));
+  return { layout: ready, turned: ready !== layout && chats.length === 1 };
+}
+
+/** `next` with a Chat pane left alone showing All, whatever it showed
+ *  beside the others in `before`. */
+export function loneChatToAll(before: PaneLayout, next: PaneLayout): PaneLayout {
   const chats = chatLeaves(bothTrees(next));
   if (chats.length !== 1 || chatLeaves(bothTrees(before)).length < 2) return next;
   return setLayoutLeafProps(next, chats[0].id, chatFilterProps({ kind: 'all' }));
 }
 
-export function splitHere(id: string, dir: SplitDir): void {
-  const pane = paneToSplitIn(id);
-  if (!pane) return;
-  updatePanelLayout((l) => {
-    const which = treeOf(l, id);
-    if (which === null) return l;
-    return placeIn(l, which, pane, (tree, ref) => splitPane(tree, id, dir, ref));
+/** Close the pane `id`, and offer to bring it back where it was in a
+ *  toast that names it `label`. */
+export function closeWithUndo(id: string, label: string): void {
+  const before = getPanelLayout();
+  const profile = profileInFront();
+  closeHere(id);
+  if (!before) return;
+  pushToast({
+    kind: 'info',
+    message: `Closed ${label}`,
+    action: {
+      label: 'Undo',
+      // Only while the same profile is in front, so its panes never land
+      // in another's.
+      run: () => {
+        if (profileInFront() !== profile) return;
+        updatePanelLayout((l) => ({ ...l, root: before.root, sidebar: before.sidebar }));
+      },
+    },
   });
 }
 
-export function showHereInstead(id: string, ref: PaneRef): void {
+/** Fold the pane `id` down to its header, or open it again. */
+export function toggleFold(id: string): void {
   updatePanelLayout((l) => {
     const which = treeOf(l, id);
     if (which === null) return l;
-    return loneChatToAll(
-      l,
-      placeIn(l, which, ref, (tree, r) => replacePane(tree, id, r)),
-    );
+    const leaf = findNode(treeIn(l, which), id);
+    if (leaf === null || !isLeaf(leaf)) return l;
+    return withTree(l, which, setFolded(treeIn(l, which), id, leaf.folded !== true));
   });
 }
 
@@ -191,34 +192,6 @@ export function togglePane(pane: PaneType, sidebarShows = true): void {
     }
     const shown = leaf !== null ? l : placeIn(l, 'panel', ref, addPane);
     return { ...shown, panel_open: true };
-  });
-}
-
-/** Add a pane from the title band, at the bottom of the panel. */
-export function addPaneAtBottom(ref: PaneRef): void {
-  updatePanelLayout((l) => ({ ...placeIn(l, 'panel', ref, addPane), panel_open: true }));
-}
-
-/** Add a pane from the title band's Add to the sidebar, at the bottom
- *  of the sidebar. */
-export function addPaneToSidebar(ref: PaneRef): void {
-  updatePanelLayout((l) => placeIn(l, 'sidebar', ref, addPane));
-}
-
-/** Move the pane `id` to the foot of the other tree, as Move to panel
- *  and Move to sidebar do. A pane moved to a hidden panel opens it. */
-export function movePaneAcross(id: string): void {
-  updatePanelLayout((l) => {
-    const next = moveToOtherTree(l, id);
-    return next !== l && treeOf(next, id) === 'panel' ? { ...next, panel_open: true } : next;
-  });
-}
-
-/** Move the pane `id` where a drag dropped it. */
-export function dropPane(id: string, drop: PaneDrop): void {
-  updatePanelLayout((l) => {
-    const next = moveLeaf(l, id, drop);
-    return next !== l && drop.tree === 'panel' ? { ...next, panel_open: true } : next;
   });
 }
 

@@ -10,6 +10,7 @@ import {
 import {
   PANE_TYPES,
   bothTrees,
+  findNode,
   isPaneType,
   leafKey,
   setWeights,
@@ -29,10 +30,19 @@ import { ImmPane } from './imm/ImmPane';
 import { LuaPane } from './lua/LuaPane';
 import { MapPane } from './map/MapPane';
 import { PaneLeafContext } from './paneActions';
-import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
+import {
+  dragSizes,
+  layoutPanes,
+  paneMinH,
+  unfolded,
+  weightsAfterDrag,
+  type HandleBox,
+} from './paneGeometry';
 import { getPanelLayout, setTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { WritingPane } from '../writing/WritingPane';
+import { arrangeView, useArranging } from './arrange/arrange';
+import { ArrangeTile } from './arrange/ArrangeTile';
 import { paneLabel } from './paneTypes';
 import { chatFilterIn, chatFilterLabel, chatLeaves } from './chat/chatFilter';
 import { usePaneMins } from './usePaneMins';
@@ -54,10 +64,10 @@ import type { TextColors } from './VitalsText';
 // Every pane renders as a flat, absolutely placed sibling keyed by its
 // leafKey: its paneKey for a pane the tree holds once, with the leaf id
 // added for a Chat pane, which the tree can hold up to four times.
-// Splitting, closing, or showing a pane somewhere else only moves
-// boxes, so the map canvas and each pane's scroll position survive
-// every tree edit, and a pane moved with Show here instead keeps its
-// state too.
+// Moving a pane in arrange mode, its preview while you drag, or closing
+// a pane only moves boxes, so the map canvas and each pane's scroll
+// position survive every tree edit. While you arrange, each pane wears
+// a tile (arrange/ArrangeTile.tsx) and the lines between them rest.
 //
 // Every pane draws at your panel size. The main window writes it on the
 // root as --panel-text-px for panel.css, and the panel hands it to
@@ -120,10 +130,11 @@ export function PanelHost({
   const footer = panelVitals(promptShow, useVitalsOptions());
   const vitalsMenu = useVitalsMenu();
 
+  const arranging = useArranging() !== null;
   return (
     <PaneTextSizeContext.Provider value={textSize}>
       <div
-        className="panel-host"
+        className={`panel-host${arranging ? ' is-arranging' : ''}`}
         onContextMenu={(e) => {
           if (e.target instanceof Element && e.target.closest(FOOTER)) vitalsMenu.open(e);
         }}
@@ -167,7 +178,12 @@ function PaneArea({
   textSize: number;
   hint?: boolean;
 }) {
-  const layout = usePanelLayout();
+  // While you arrange, the panes show the draft, or where a drag would
+  // land, and each one wears a tile.
+  const live = usePanelLayout();
+  const arranging = useArranging();
+  const view = arranging ? arrangeView(arranging) : null;
+  const layout = view ? view.layout : live;
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
 
@@ -187,7 +203,11 @@ function PaneArea({
 
   useMoreBelow(areaRef);
 
-  const root = layout ? treeIn(layout, which) : null;
+  // A folded pane opens while you arrange, so every tile is easy to
+  // pick up.
+  const tree = layout ? treeIn(layout, which) : null;
+  const arrangingNow = view !== null;
+  const root = useMemo(() => (tree && arrangingNow ? unfolded(tree) : tree), [tree, arrangingNow]);
   const all = layout ? bothTrees(layout) : null;
   const mins = usePaneMins(root, box.w, textSize);
   const geometry = useMemo(
@@ -208,7 +228,7 @@ function PaneArea({
       {leaves.map(({ leaf, rect }) => (
         <section
           key={leafKey(leaf)}
-          className={`pane pane-${leaf.pane}`}
+          className={`pane pane-${leaf.pane}${view ? ' is-arranging' : ''}${leaf.folded ? ' is-folded' : ''}`}
           data-leaf={leaf.id}
           aria-label={sectionLabel(leaf)}
           style={{
@@ -222,19 +242,30 @@ function PaneArea({
           <PaneLeafContext.Provider value={leaf}>
             {isPaneType(leaf.pane) ? PANES[leaf.pane]() : <LuaPane />}
           </PaneLeafContext.Provider>
+          {view && (
+            <ArrangeTile leaf={leaf} label={sectionLabel(leaf)} slot={view.slot === leaf.id} />
+          )}
         </section>
       ))}
-      {geometry?.handles.map((h) => (
-        <PaneHandle key={`${h.parentId}:${h.index}`} handle={h} which={which} />
-      ))}
-      {which === 'panel' && root && root.children.length === 0 && (
-        <p className="pane-empty panel-empty">
-          Add a pane to show the map, your affects, your group, your stats, or chat.
+      {!view &&
+        geometry?.handles.map((h) => (
+          <PaneHandle key={`${h.parentId}:${h.index}`} handle={h} which={which} />
+        ))}
+      {view && root && root.children.length === 0 && (
+        <p className="pane-empty arrange-drop-here">
+          {which === 'panel'
+            ? 'Drop a pane here to show it in the panel.'
+            : 'Drop a pane here to keep it beside your sessions.'}
         </p>
       )}
-      {which === 'sidebar' && hint && root && root.children.length === 0 && (
+      {!view && which === 'panel' && root && root.children.length === 0 && (
+        <p className="pane-empty panel-empty">
+          Arrange panes to show the map, your affects, your group, your stats, or chat.
+        </p>
+      )}
+      {!view && which === 'sidebar' && hint && root && root.children.length === 0 && (
         <p className="pane-empty panel-empty sidebar-hint">
-          Drag a pane here, or choose Move to sidebar in its menu.
+          Arrange panes to keep one here, beside your sessions.
         </p>
       )}
     </div>
@@ -303,14 +334,10 @@ function PaneHandle({ handle, which }: { handle: HandleBox; which: PaneTree }) {
   const apply = (sizes: number[]) => {
     const layout = getPanelLayout();
     if (!layout) return;
-    setTree(
-      which,
-      setWeights(
-        treeIn(layout, which),
-        handle.parentId,
-        sizes.map((s) => Math.max(1, s)),
-      ),
-    );
+    const tree = treeIn(layout, which);
+    const parent = findNode(tree, handle.parentId);
+    if (!parent) return;
+    setTree(which, setWeights(tree, handle.parentId, weightsAfterDrag(parent, sizes)));
   };
 
   const coord = (e: PointerEvent) => (vertical ? e.clientY : e.clientX);
@@ -334,11 +361,12 @@ function PaneHandle({ handle, which }: { handle: HandleBox; which: PaneTree }) {
           Math.max(1, handle.sizes[handle.index] + handle.sizes[handle.index + 1])) *
           100,
       )}
-      tabIndex={0}
-      className={`pane-handle ${vertical ? 'pane-handle-h' : 'pane-handle-v'}`}
+      tabIndex={handle.inert ? -1 : 0}
+      aria-disabled={handle.inert}
+      className={`pane-handle ${vertical ? 'pane-handle-h' : 'pane-handle-v'}${handle.inert ? ' is-inert' : ''}`}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
       onPointerDown={(e) => {
-        if (e.button !== 0) return;
+        if (e.button !== 0 || handle.inert) return;
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
         drag.current = { start: coord(e), sizes: handle.sizes };
@@ -352,6 +380,7 @@ function PaneHandle({ handle, which }: { handle: HandleBox; which: PaneTree }) {
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onKeyDown={(e) => {
+        if (handle.inert) return;
         const step = e.shiftKey ? KEY_STEP_BIG : KEY_STEP;
         const back = vertical ? 'ArrowUp' : 'ArrowLeft';
         const fwd = vertical ? 'ArrowDown' : 'ArrowRight';

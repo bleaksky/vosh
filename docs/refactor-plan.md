@@ -2072,6 +2072,34 @@ You asked on October 14 for the space across from the panel to hold panes, with 
 
 Help 4.1 Arrange the panels says how to put panes in the sidebar and move them, and 1.4 says when the sidebar shows with one session and what its toggle says.
 
+#### October 15. Layouts that last
+
+Your sidebar panes were gone after the update to 0.95.5. The dev builds shared your profile folder and saved the sidebar under a new key, and the installed 0.95.4, which knew no such key, read past it and wrote every open profile back without it on its way out to install. You took the fixes on October 15, after the mockups (https://claude.ai/artifact/SUeHjGDUqnaymU9Tgjfsyr), with a dev folder of its own as the architecture call. The build is on feat/pane-arranging from one-window 67453ad2.
+
+- Dev folder. A debug build keeps its data in `com.aabahran.vosh.dev` beside the installed folder. Its first launch copies the installed folder there through a sibling that takes the name once whole, without `logs.sqlite`, `maps.sqlite` and the backups. `src-tauri/src/disk/dev_folder.rs` does it, and `data_folder` in launch.rs picks the folder.
+- Kept keys. A profile file, its `[ui]` and `[ui.panes]` tables, and global.toml read the keys this build does not know into an `extra` map and write them back. The live profile carries the file's top level ones, a pane layout from the page keeps the stored layout's, and a global save keeps those of the file on disk. A profile file still reads past `[connection]` and `[vosh_export]`.
+- Updater. The install asks the windows for the writes they hold back before it restarts, as a quit does, since Tauri does not let a restart wait.
+
+#### October 15. Layout history
+
+- Keeping. Each profile keeps up to 20 earlier layouts in `layouts/<name>.toml`, newest first. A change of which panes show, or where, keeps the layout it replaced, once for a run of changes within ten minutes. Done in arrange mode, Reset to default and a restore always keep it. A change of sizes or folds never counts. The first launch of a version keeps every profile's layout as its file holds it, marked with that version, before any profile opens, and `layouts/.seen.toml` names that version. A rename takes the file along and a delete drops it. `src-tauri/src/profile/layout_history.rs` holds it.
+- Putting back. `pane_history_get` lists them and `pane_history_restore` puts one back, keeping whether the panel shows and how wide it is, through the same path as a reset. Earlier layouts on the Panel layout card in Settings > Characters and on arrange mode's card lists them by until when each held, with Before 0.95.6, Before Reset or Before a restore after the ones a step replaced (`src/panel/EarlierLayoutsMenu.tsx`).
+
+#### October 15. Arrange mode
+
+- Turning it on. The layout button in the title band, where Add a pane was, Arrange panes in a pane's menu, in the View menu and in the palette. The panel and the sidebar both show while you arrange, and a switch to another session ends it without saving.
+- Moving. Every pane is a tile. A tile dropped on a pane goes above or below it, or beside it from its outer quarters when both fit side by side at 120 px each, and on an empty side it goes there alone. The panes measure once without the tile, every target comes from those boxes, and the panes reflow to show the result, the tile's place as a dashed accent slot. Up and Down move a focused tile past its neighbor, the arrow toward the other side moves it there, and Delete puts it away.
+- Shelf. The terminal's column turns into a card. Its shelf holds the panes you put away, then every pane the session offers that neither side shows, Lua panes included, and another Chat while fewer than four show. A new Chat starts as one from the palette does, on tell, and the pane on All turns to Everything else.
+- Ending it. Undo, Start from the default, Earlier layouts, Cancel and Done. Done saves through `pane_trees_set` with `arranged`, so the layout it replaced joins the earlier ones, a Chat pane left alone shows All, a hidden panel that now holds panes shows, and a toast says the layout saved for the character.
+- Gone. The header drag, Split right, Split down, Show here instead, Move to sidebar, Move to panel and Add a pane. The pane menu holds Fold pane, Arrange panes, what the pane offers, and Close pane, which a toast can undo. Show me on Add Chat and Group opens arrange mode and rings Chat and Group on the shelf. Settings > Characters > Panel layout keeps its drawing.
+
+#### October 15. Folding panes
+
+- A press on a pane header, its chevron or Fold pane in its menu folds the pane down to the header, which keeps its place and its counts. Down a column it keeps the header height and the open panes share the rest, and the lines beside it do not drag. In a row it keeps its share of the width. The pane stays mounted under its header.
+- The leaf writes `folded = true` while it is folded, which `fixtures/pane-layout/sanitize.json` holds both sanitizers to. Arrange mode lays every pane out open.
+
+Help 4.1 Arrange the panels says how to fold a pane, close one and undo it, use arrange mode and its keys, and put an earlier layout back.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
