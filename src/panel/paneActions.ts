@@ -5,6 +5,7 @@ import {
   cleanTrees,
   closePane,
   countPanes,
+  findNode,
   isLeaf,
   leafIdFor,
   moveLeaf,
@@ -13,6 +14,7 @@ import {
   paneCap,
   paneRef,
   sanitize,
+  setFolded,
   treeIn,
   treeOf,
   withTree,
@@ -144,6 +146,17 @@ export function closeWithUndo(id: string, label: string): void {
       label: 'Undo',
       run: () => updatePanelLayout((l) => ({ ...l, root: before.root, sidebar: before.sidebar })),
     },
+  });
+}
+
+/** Fold the pane `id` down to its header, or open it again. */
+export function toggleFold(id: string): void {
+  updatePanelLayout((l) => {
+    const which = treeOf(l, id);
+    if (which === null) return l;
+    const leaf = findNode(treeIn(l, which), id);
+    if (leaf === null || !isLeaf(leaf)) return l;
+    return withTree(l, which, setFolded(treeIn(l, which), id, leaf.folded !== true));
   });
 }
 

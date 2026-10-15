@@ -75,6 +75,9 @@ export interface HandleBox {
   /** The minimum of every child of the parent along its axis, in
    *  order. A drag leaves each neighbour at least this much. */
   mins: number[];
+  /** A folded pane sits on one side, whose header keeps its height, so
+   *  the line draws but does not drag. */
+  inert?: true;
 }
 
 export interface PaneGeometry {
@@ -242,6 +245,7 @@ export function minExtent(
 ): number {
   if (isLeaf(node)) {
     if (dir === 'row') return MIN_PANE_W;
+    if (node.folded) return paneText(size).header;
     const min = mins[node.pane] ?? paneMinH(node.pane, size);
     return floor ? Math.min(paneFloorH(size), min) : min;
   }
@@ -383,6 +387,29 @@ export function paneWidth(root: PaneSplit, width: number, pane: PaneType): numbe
   return box ? box.rect.w : null;
 }
 
+/** The height `node` keeps in a column while every pane in it is
+ *  folded: a header each down a column, one header across a row. Null
+ *  while any pane in it is open, so it shares the column by weight. */
+export function foldedHeight(node: PaneNode, size: number = PANE_TEXT_PX): number | null {
+  if (isLeaf(node)) return node.folded ? paneText(size).header : null;
+  const parts = node.children.map((c) => foldedHeight(c, size));
+  if (parts.length === 0 || parts.some((p) => p === null)) return null;
+  const heights = parts as number[];
+  return node.split === 'row'
+    ? Math.max(...heights)
+    : sum(heights) + HANDLE_PX * (heights.length - 1);
+}
+
+/** The tree with every pane open, as arrange mode lays it out. */
+export function unfolded<T extends PaneNode>(node: T): T {
+  if (isLeaf(node)) {
+    if (!node.folded) return node;
+    const { folded: _was, ...open } = node;
+    return open as T;
+  }
+  return { ...node, children: node.children.map(unfolded) };
+}
+
 function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins, size: number): void {
   if (isLeaf(node)) {
     out.leaves.push({ leaf: node, rect });
@@ -393,12 +420,20 @@ function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins, si
   const vertical = node.split === 'column';
   const axis = vertical ? rect.h : rect.w;
   const childMins = node.children.map((c) => minExtent(c, node.split, false, mins, size));
-  const sizes = allocate(
-    Math.max(0, axis - HANDLE_PX * (n - 1)),
-    node.children.map((c) => c.weight),
-    childMins,
-    node.children.map((c) => minExtent(c, node.split, true, mins, size)),
+  // Down a column a folded pane keeps its header's height, and the open
+  // ones share the rest by weight. With every pane folded, the space
+  // under the last header stays empty.
+  const fixed = vertical ? node.children.map((c) => foldedHeight(c, size)) : [];
+  const free = node.children.map((_, i) => fixed[i] === undefined || fixed[i] === null);
+  const room = Math.max(0, axis - HANDLE_PX * (n - 1) - sum(fixed.map((f) => f ?? 0)));
+  const openSizes = allocate(
+    free.some(Boolean) ? room : 0,
+    node.children.filter((_, i) => free[i]).map((c) => c.weight),
+    childMins.filter((_, i) => free[i]),
+    node.children.filter((_, i) => free[i]).map((c) => minExtent(c, node.split, true, mins, size)),
   );
+  let open = 0;
+  const sizes = node.children.map((_, i) => (free[i] ? openSizes[open++] : (fixed[i] ?? 0)));
   let at = vertical ? rect.y : rect.x;
   node.children.forEach((child, i) => {
     const extent = sizes[i];
@@ -417,6 +452,7 @@ function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins, si
           : { x: at, y: rect.y, w: HANDLE_PX, h: rect.h },
         sizes,
         mins: childMins,
+        ...(!free[i] || !free[i + 1] ? { inert: true as const } : {}),
       });
       at += HANDLE_PX;
     }

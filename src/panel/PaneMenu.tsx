@@ -28,16 +28,17 @@ import { LUA_PANE, type PaneLeaf } from './paneLayout';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
-import { closeWithUndo, returnToCommandLine } from './paneActions';
+import { closeWithUndo, returnToCommandLine, toggleFold } from './paneActions';
 import { submenuAt } from '../ui/menuPlacement';
 import { CheckIcon, ChevronRightIcon } from '../ui/icons';
 import { statsStyleChoices } from './stats/statsView';
 import { paneLabel } from './paneTypes';
 import { enterArrangeMode } from './arrange/arrangeActions';
 
-// The more menu on every pane header: Arrange panes, which turns on
-// arrange mode to move, add and put away panes, then what the pane
-// itself offers, and Close pane, which a toast can undo.
+// The more menu on every pane header: Fold pane or Unfold pane, then
+// Arrange panes, which turns on arrange mode to move, add and put away
+// panes, then what the pane itself offers, and Close pane, which a
+// toast can undo.
 // The Affects pane adds Style and Marker, each a submenu with a check
 // on the current pick, Change when affects warn, which opens Settings
 // on the hours under Layout, Affects, and Edit tracked affects, which
@@ -267,6 +268,9 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         at={at}
         onClose={close}
       >
+        <MenuItem onHover={closeSub} onFocus={closeSub} onSelect={run(() => toggleFold(leaf.id))}>
+          {leaf.folded ? 'Unfold pane' : 'Fold pane'}
+        </MenuItem>
         <MenuItem
           onHover={closeSub}
           onFocus={closeSub}

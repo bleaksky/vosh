@@ -215,6 +215,12 @@ describe('PaneMenu', () => {
     }
   });
 
+  it('offers Unfold pane on a folded pane', () => {
+    const leaf: PaneLeaf = { id: 'leaf-map', pane: 'map', weight: 1, props: {}, folded: true };
+    const html = renderToStaticMarkup(<PaneMenu leaf={leaf} anchor={anchor} onClose={() => {}} />);
+    expect(menuRows(html)[0]).toBe('Unfold pane');
+  });
+
   it('offers to edit the plugin of a Lua pane before Close pane', () => {
     const leaf: PaneLeaf = {
       id: 'leaf-weather',
@@ -226,6 +232,7 @@ describe('PaneMenu', () => {
     const node = drawn.rows as ReactNode;
     const list = rows(node).map((row) => (row === '---' ? row : label(row)));
     expect(list).toEqual([
+      'Fold pane',
       'Arrange panes',
       '---',
       'Edit weather_pane in Scripts…',
@@ -243,10 +250,10 @@ describe('PaneMenu', () => {
     }
   });
 
-  it('opens on Arrange panes and ends on Close pane, with nothing else that moves a pane', () => {
+  it('opens on Fold pane and Arrange panes and ends on Close pane, with nothing else that moves a pane', () => {
     for (const pane of ['map', 'affects', 'group', 'stats', 'chat'] as const) {
       const rows = menuRows(menu(pane));
-      expect(rows[0], pane).toBe('Arrange panes');
+      expect(rows.slice(0, 2), pane).toEqual(['Fold pane', 'Arrange panes']);
       expect(rows.at(-1), pane).toBe('Close pane');
       expect(
         rows.filter((row) => /^(Split|Show here|Move to)/.test(row)),

@@ -267,6 +267,7 @@ fn full_panes() -> PaneLayoutPersist {
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect(),
+        folded: false,
     };
     PaneLayoutPersist {
         version: 1,
@@ -289,9 +290,11 @@ fn full_panes() -> PaneLayoutPersist {
                         leaf("group", 0.4, &[]),
                     ],
                     props: BTreeMap::new(),
+                    folded: false,
                 },
             ],
             props: BTreeMap::new(),
+            folded: false,
         },
         sidebar: PaneNode {
             id: "sidebar".into(),
@@ -300,6 +303,7 @@ fn full_panes() -> PaneLayoutPersist {
             weight: 1.0,
             children: vec![leaf("stats", 1.0, &[])],
             props: BTreeMap::new(),
+            folded: false,
         },
         extra: BTreeMap::new(),
     }
@@ -1383,6 +1387,7 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
         weight,
         children: Vec::new(),
         props: BTreeMap::new(),
+        folded: false,
     };
     assert_eq!(
         config.ui.pane_layout(),
@@ -1397,6 +1402,7 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
                 weight: 1.0,
                 children: vec![leaf("map", 0.45), leaf("group", 0.25), leaf("affects", 0.3)],
                 props: BTreeMap::new(),
+                folded: false,
             },
             sidebar: PaneNode {
                 id: "sidebar".into(),
@@ -1405,6 +1411,7 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
                 weight: 1.0,
                 children: Vec::new(),
                 props: BTreeMap::new(),
+                folded: false,
             },
             extra: BTreeMap::new(),
         }

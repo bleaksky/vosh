@@ -29,7 +29,7 @@ import { ImmPane } from './imm/ImmPane';
 import { LuaPane } from './lua/LuaPane';
 import { MapPane } from './map/MapPane';
 import { PaneLeafContext } from './paneActions';
-import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
+import { dragSizes, layoutPanes, paneMinH, unfolded, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { WritingPane } from '../writing/WritingPane';
@@ -195,7 +195,11 @@ function PaneArea({
 
   useMoreBelow(areaRef);
 
-  const root = layout ? treeIn(layout, which) : null;
+  // A folded pane opens while you arrange, so every tile is easy to
+  // pick up.
+  const tree = layout ? treeIn(layout, which) : null;
+  const arrangingNow = view !== null;
+  const root = useMemo(() => (tree && arrangingNow ? unfolded(tree) : tree), [tree, arrangingNow]);
   const all = layout ? bothTrees(layout) : null;
   const mins = usePaneMins(root, box.w, textSize);
   const geometry = useMemo(
@@ -216,7 +220,7 @@ function PaneArea({
       {leaves.map(({ leaf, rect }) => (
         <section
           key={leafKey(leaf)}
-          className={`pane pane-${leaf.pane}${view ? ' is-arranging' : ''}`}
+          className={`pane pane-${leaf.pane}${view ? ' is-arranging' : ''}${leaf.folded ? ' is-folded' : ''}`}
           data-leaf={leaf.id}
           aria-label={sectionLabel(leaf)}
           style={{
@@ -353,11 +357,12 @@ function PaneHandle({ handle, which }: { handle: HandleBox; which: PaneTree }) {
           Math.max(1, handle.sizes[handle.index] + handle.sizes[handle.index + 1])) *
           100,
       )}
-      tabIndex={0}
-      className={`pane-handle ${vertical ? 'pane-handle-h' : 'pane-handle-v'}`}
+      tabIndex={handle.inert ? -1 : 0}
+      aria-disabled={handle.inert}
+      className={`pane-handle ${vertical ? 'pane-handle-h' : 'pane-handle-v'}${handle.inert ? ' is-inert' : ''}`}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
       onPointerDown={(e) => {
-        if (e.button !== 0) return;
+        if (e.button !== 0 || handle.inert) return;
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
         drag.current = { start: coord(e), sizes: handle.sizes };
@@ -371,6 +376,7 @@ function PaneHandle({ handle, which }: { handle: HandleBox; which: PaneTree }) {
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onKeyDown={(e) => {
+        if (handle.inert) return;
         const step = e.shiftKey ? KEY_STEP_BIG : KEY_STEP;
         const back = vertical ? 'ArrowUp' : 'ArrowLeft';
         const fwd = vertical ? 'ArrowDown' : 'ArrowRight';

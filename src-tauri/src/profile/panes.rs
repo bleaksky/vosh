@@ -118,6 +118,10 @@ pub(crate) struct PaneNode {
     /// `id` and `title`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub props: BTreeMap<String, String>,
+    /// A pane folded down to its header, which keeps its place. Only a
+    /// leaf folds, and the file writes it only while it is folded.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub folded: bool,
 }
 
 fn default_pane_layout_version() -> u32 {
@@ -189,6 +193,7 @@ impl PaneNode {
             weight,
             children: Vec::new(),
             props: BTreeMap::new(),
+            folded: false,
         }
     }
 
@@ -205,6 +210,7 @@ impl PaneNode {
             weight: 1.0,
             children,
             props: BTreeMap::new(),
+            folded: false,
         }
     }
 }
@@ -542,6 +548,7 @@ impl TreeSanitizer {
             return Some(PaneNode {
                 id,
                 props: raw.props,
+                folded: raw.folded,
                 ..PaneNode::leaf(kind, weight)
             });
         }

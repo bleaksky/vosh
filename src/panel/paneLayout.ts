@@ -124,6 +124,9 @@ export interface PaneLeaf {
   /** Per-pane settings, such as the chat pane's channel filter, and
    *  the plugin, id and title of a Lua pane. */
   props: Record<string, string>;
+  /** Folded down to its header, keeping its place. Set only while it
+   *  is folded. */
+  folded?: true;
 }
 
 export interface PaneSplit {
@@ -229,6 +232,7 @@ interface RawNode {
   weight: number;
   children: RawNode[];
   props: Record<string, string>;
+  folded: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -250,6 +254,7 @@ function readNode(value: unknown): RawNode {
     weight: typeof o.weight === 'number' ? o.weight : 1,
     children: Array.isArray(o.children) ? o.children.map(readNode) : [],
     props,
+    folded: o.folded === true,
   };
 }
 
@@ -347,7 +352,13 @@ function sanitizeNode(ctx: SanitizeContext, raw: RawNode, depth: number): PaneNo
     const placed = ctx.panes.get(key) ?? 0;
     if (placed >= paneCap(ref)) return null;
     ctx.panes.set(key, placed + 1);
-    return { id: claimId(ctx, raw.id, kind), pane: kind, weight, props: sortedProps(raw.props) };
+    return {
+      id: claimId(ctx, raw.id, kind),
+      pane: kind,
+      weight,
+      props: sortedProps(raw.props),
+      ...(raw.folded ? { folded: true as const } : {}),
+    };
   }
   const dir = splitDir(raw.split);
   const id = claimId(ctx, raw.id, 'split');
@@ -405,7 +416,15 @@ function sanitizeRoot(ctx: SanitizeContext, rawRoot: RawNode, base: string): Pan
   // A bare leaf at the root gets wrapped so the root stays a split.
   const raw: RawNode =
     rawRoot.pane !== null
-      ? { id: '', pane: null, split: 'column', weight: 1, children: [rawRoot], props: {} }
+      ? {
+          id: '',
+          pane: null,
+          split: 'column',
+          weight: 1,
+          children: [rawRoot],
+          props: {},
+          folded: false,
+        }
       : rawRoot;
   let dir = splitDir(raw.split);
   const id = claimId(ctx, raw.id, base);
@@ -631,6 +650,20 @@ export function setWeights(tree: PaneSplit, parentId: string, weights: number[])
     mapTree(tree, parentId, (n) =>
       isLeaf(n) ? n : { ...n, children: n.children.map((c, i) => ({ ...c, weight: weights[i] })) },
     ),
+  );
+}
+
+/** Fold the leaf `id` down to its header, or open it again. Returns
+ *  the input tree when nothing changes. */
+export function setFolded(tree: PaneSplit, id: string, folded: boolean): PaneSplit {
+  const target = findNode(tree, id);
+  if (target === null || !isLeaf(target) || (target.folded === true) === folded) return tree;
+  return sanitize(
+    mapTree(tree, id, (n) => {
+      if (!isLeaf(n)) return n;
+      const { folded: _was, ...rest } = n;
+      return folded ? { ...rest, folded: true } : rest;
+    }),
   );
 }
 

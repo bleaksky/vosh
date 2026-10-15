@@ -125,6 +125,7 @@ const SCALED: [string, string, string, string][] = [
   ['.pane-meta', 'font-size', '11px', '15px'],
   ['.pane-meta', 'line-height', '15px', '20px'],
   ['.pane-more', 'top', '4px', '8px'],
+  ['.pane-fold', 'top', '6px', '10px'],
   ['.pane-select', 'height', '15px', '20px'],
   ['.pane-select', 'font-size', '11px', '15px'],
   ['.pane-select', 'line-height', '15px', '20px'],
