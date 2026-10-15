@@ -40,6 +40,13 @@ pub(crate) struct MenuState {
     pub(crate) sessions: usize,
     /// The sessions sidebar shows in the main window.
     pub(crate) sessions_shown: bool,
+    /// The sidebar holds a pane, so View names it Show sidebar.
+    #[serde(default)]
+    pub(crate) sidebar_holds_panes: bool,
+    /// The sidebar toggle shows though one session is open, as it does
+    /// for a sidebar that holds a pane, so its View row takes a click.
+    #[serde(default)]
+    pub(crate) sidebar_toggleable: bool,
     /// How many snoop tabs the selected session has, live or ended. View
     /// lists Go to snoop while there is one.
     #[serde(default)]
@@ -101,11 +108,29 @@ const SESSION_ROWS: [SessionRow; 10] = [
 ];
 
 /// Whether the rows that move between sessions take a click: Next
-/// session, Previous session and Show sessions. One session has nowhere
-/// to step and no sidebar, so they show dimmed.
+/// session and Previous session. One session has nowhere to step, so
+/// they show dimmed.
 #[cfg(target_os = "macos")]
 fn between_sessions(state: &MenuState) -> bool {
     state.sessions >= 2
+}
+
+/// Whether Show sessions takes a click: between sessions, and while the
+/// sidebar toggle shows for a sidebar that holds a pane.
+#[cfg(target_os = "macos")]
+fn sidebar_toggles(state: &MenuState) -> bool {
+    between_sessions(state) || state.sidebar_toggleable
+}
+
+/// The View row that hides the sidebar, which names the sidebar while
+/// it holds a pane.
+#[cfg(target_os = "macos")]
+fn sidebar_label(state: &MenuState) -> &'static str {
+    if state.sidebar_holds_panes {
+        "Show sidebar"
+    } else {
+        "Show sessions"
+    }
 }
 
 /// Whether the Session menu ends on Disconnect in place of Connect: while

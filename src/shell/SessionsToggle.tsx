@@ -10,17 +10,21 @@ import { SidebarIcon } from './icons';
 // while the sidebar shows and the quieter tertiary tone while it hides,
 // and no fill. Its label and tooltip say what a press does, so it has
 // no pressed state on top of them ("Hide sessions, pressed" reads
-// backward). MainWindow shows it while two or more sessions are open.
+// backward). MainWindow shows it while two or more sessions are open,
+// or while the sidebar holds a pane, when it says Sidebar.
 
 interface Props {
   /** The sidebar shows, in its column or over the terminal. */
   pressed: boolean;
   /** Hide the sidebar or show it, and put the caret where it belongs. */
   onToggle: () => void;
+  /** The sidebar holds a pane, so the toggle names the sidebar. */
+  sidebar?: boolean;
 }
 
-export function SessionsToggle({ pressed, onToggle }: Props) {
-  const label = pressed ? 'Hide sessions' : 'Show sessions';
+export function SessionsToggle({ pressed, onToggle, sidebar = false }: Props) {
+  const what = sidebar ? 'sidebar' : 'sessions';
+  const label = pressed ? `Hide ${what}` : `Show ${what}`;
   const spec = appShortcut('sessions-sidebar');
   return (
     <button

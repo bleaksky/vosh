@@ -10,8 +10,10 @@ import {
 } from './sessionsColumn';
 
 // Whether the main window shows the sessions sidebar, and how wide. It
-// shows while two or more sessions are open, unless you hid it in this
-// window or the window is too narrow to hold it. Either way it folds
+// shows while two or more sessions are open or it holds a pane, unless
+// you hid it in this window or the window is too narrow to hold it. In
+// a narrow window only the sessions slide over the terminal, so with one
+// session and panes there the sidebar simply waits for room. Either way it folds
 // and the session popover lists the sessions. Once you hide it, it
 // stays hidden as sessions open and close. One toggle in the window's
 // top left corner hides it and shows it again, as do Ctrl Cmd S, the
@@ -54,8 +56,13 @@ export interface SessionsSidebar {
   /** The sidebar shows, in its column or over the terminal, so the
    *  toggle reads pressed and Hide sessions is what it offers. */
   pressed: boolean;
-  /** Two or more sessions are open, so the toggle shows. */
+  /** Two or more sessions are open, or the sidebar holds a pane in a
+   *  window wide enough for it, so the toggle shows. */
   toggleable: boolean;
+  /** The sidebar holds a pane, so the toggle says Sidebar. */
+  holdsPanes: boolean;
+  /** The window has room for the sidebar's column. */
+  fits: boolean;
   /** Two or more sessions are open and the sidebar does not show them
    *  in its column, so the session popover does. */
   folded: boolean;
@@ -79,12 +86,14 @@ function caretStranded(): boolean {
   return active instanceof Element && active.closest(STRANDED) !== null;
 }
 
-/** The sidebar for `count` sessions beside a panel open or hidden.
- *  `focusInput` puts the caret back on the command line. */
+/** The sidebar for `count` sessions beside a panel open or hidden,
+ *  holding panes of its own or not. `focusInput` puts the caret back on
+ *  the command line. */
 export function useSessionsSidebar(
   count: number,
   panelOpen: boolean,
   focusInput: () => void = () => {},
+  holdsPanes = false,
 ): SessionsSidebar {
   const [hidden, setHidden] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -100,12 +109,13 @@ export function useSessionsSidebar(
     return () => window.removeEventListener('resize', check);
   }, [width, panel]);
 
-  const toggleable = count >= 2;
+  const several = count >= 2;
+  const toggleable = several || (holdsPanes && !narrow);
   // The overlay lives only in a narrow window with two or more sessions.
-  const overlay = overlayOpen && narrow && toggleable;
+  const overlay = overlayOpen && narrow && several;
   useEffect(() => {
-    if (overlayOpen && !(narrow && toggleable)) setOverlayOpen(false);
-  }, [overlayOpen, narrow, toggleable]);
+    if (overlayOpen && !(narrow && several)) setOverlayOpen(false);
+  }, [overlayOpen, narrow, several]);
 
   // Esc puts the sidebar over the terminal away, as the topmost surface.
   useEscape(overlay, () => {
@@ -119,7 +129,9 @@ export function useSessionsSidebar(
     overlay,
     pressed: shown || overlay,
     toggleable,
-    folded: toggleable && !shown,
+    holdsPanes,
+    fits: !narrow,
+    folded: several && !shown,
     width,
     setWidth: (px) => {
       setWidth(px);

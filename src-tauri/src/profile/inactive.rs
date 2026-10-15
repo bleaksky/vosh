@@ -45,6 +45,9 @@ pub(crate) struct ProfileDetail {
     pub world_name: Option<String>,
     pub tracked_affects: Vec<TrackedAffect>,
     pub panes: PaneLayoutPersist,
+    /// The side the panel takes, `right` or `left`. The sidebar takes
+    /// the other.
+    pub panel_side: String,
     /// The live pane generation for the active profile. None for any
     /// other, whose tree no pane layout write can target.
     pub generation: Option<u64>,
@@ -73,6 +76,7 @@ impl ProfileDetail {
             world_name,
             tracked_affects: ui.tracked_affects.clone(),
             panes: ui.pane_layout(),
+            panel_side: ui.panel_side.clone(),
             generation,
             login_on,
         }
@@ -243,32 +247,36 @@ pub(crate) async fn profile_detail(
     })
 }
 
-/// Reset the saved tree of a profile no session plays, or hand back the
-/// open copy of one a session plays.
-pub(crate) async fn reset_inactive_panes(
+/// Rewrite the saved panes of a profile no session plays with `edit`,
+/// or hand back the open copy of one a session plays. A reset and a move
+/// in Settings > Characters both land here.
+pub(crate) async fn edit_inactive_panes(
     state: &SharedState,
     name: &str,
+    edit: impl FnOnce(&PaneLayoutPersist) -> PaneLayoutPersist + Send,
 ) -> Result<Stored<PaneLayoutPersist>, String> {
     edit_inactive_profile(state, name, |set, config| {
         let mut ui = config.ui.clone();
         apply_global_dock(set, &mut ui);
-        let layout = ui.pane_layout().with_default_tree();
+        let layout = edit(&ui.pane_layout());
         config.ui.panes = Some(layout.clone());
         layout
     })
     .await
 }
 
-/// Reset the tree of `p`, a profile a session plays, and hand back its
-/// new envelope. The tree the selected session's profile shows takes a
-/// new generation, so a splitter drag still in flight is refused. Any
-/// other has no generation, since no pane layout write can target it.
-pub(crate) fn reset_open_panes(
+/// Edit the panes of `p`, a profile a session plays, with `edit` and
+/// hand back its new envelope. The tree the selected session's profile
+/// shows takes a new generation, so a splitter drag still in flight is
+/// refused. Any other has no generation, since no pane layout write can
+/// target it.
+pub(crate) fn edit_open_panes(
     state: &SharedState,
     p: &mut Profile,
     shown: bool,
+    edit: impl FnOnce(&PaneLayoutPersist) -> PaneLayoutPersist,
 ) -> PaneLayoutEnvelope {
-    let layout = p.ui.pane_layout().with_default_tree();
+    let layout = edit(&p.ui.pane_layout());
     p.ui.panes = Some(layout.clone());
     if !shown {
         return PaneLayoutEnvelope {
@@ -517,7 +525,11 @@ mod tests {
         config.ui.tracked_affects = vec![affect("Haste")];
         write_profile(dir.path(), "Healer", &config);
 
-        let Stored::File(reset) = reset_inactive_panes(&state, "Healer").await.unwrap() else {
+        let Stored::File(reset) =
+            edit_inactive_panes(&state, "Healer", PaneLayoutPersist::with_default_tree)
+                .await
+                .unwrap()
+        else {
             panic!("Healer's file takes the reset");
         };
         assert_eq!(reset, arranged().with_default_tree());
@@ -538,7 +550,12 @@ mod tests {
         state.selected_profile().await.ui.panes = Some(arranged());
         let before = state.panes_generation();
 
-        let envelope = reset_open_panes(&state, &mut *state.selected_profile().await, true);
+        let envelope = edit_open_panes(
+            &state,
+            &mut *state.selected_profile().await,
+            true,
+            PaneLayoutPersist::with_default_tree,
+        );
         assert_eq!(envelope.layout, arranged().with_default_tree());
         assert!(envelope.generation.unwrap() > before);
         assert_eq!(
@@ -546,11 +563,40 @@ mod tests {
             Some(arranged().with_default_tree())
         );
         assert!(matches!(
-            reset_inactive_panes(&state, DEFAULT_PROFILE_NAME)
-                .await
-                .unwrap(),
+            edit_inactive_panes(
+                &state,
+                DEFAULT_PROFILE_NAME,
+                PaneLayoutPersist::with_default_tree
+            )
+            .await
+            .unwrap(),
             Stored::Open(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn a_move_in_settings_rewrites_an_inactive_profile_and_keeps_its_panel() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.ui.panes = Some(arranged());
+        config.ui.panel_side = "left".into();
+        write_profile(dir.path(), "Healer", &config);
+
+        let mut trees = arranged();
+        trees.sidebar = trees.root.clone();
+        trees.root = PaneLayoutPersist::default_layout().root;
+        let Stored::File(moved) = edit_inactive_panes(&state, "Healer", |l| l.with_trees(&trees))
+            .await
+            .unwrap()
+        else {
+            panic!("Healer's file takes the move");
+        };
+        assert!(!moved.panel_open);
+        assert_eq!(moved.panel_width, Some(360));
+        let detail = profile_detail(&state, "Healer").await.unwrap();
+        assert_eq!(detail.panes, moved);
+        assert_eq!(detail.panel_side, "left");
     }
 
     #[tokio::test]

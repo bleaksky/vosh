@@ -3,13 +3,17 @@ import fixture from '../../fixtures/pane-layout/sanitize.json';
 import {
   addPane,
   allPanes,
+  bothTrees,
   closePane,
   countPanes,
   defaultLayout,
   findNode,
+  insertBeside,
   isLeaf,
   leafIdFor,
   leafKey,
+  moveLeaf,
+  moveToOtherTree,
   paneKey,
   paneRef,
   replacePane,
@@ -17,6 +21,7 @@ import {
   sanitizeLayout,
   setWeights,
   splitPane,
+  treeOf,
   type PaneLayout,
   type PaneLeaf,
   type PaneNode,
@@ -59,6 +64,7 @@ function wire(layout: PaneLayout): unknown {
     panel_open: layout.panel_open,
     ...(layout.panel_width !== null ? { panel_width: layout.panel_width } : {}),
     root: node(layout.root),
+    ...(layout.sidebar.children.length > 0 ? { sidebar: node(layout.sidebar) } : {}),
   };
 }
 
@@ -453,6 +459,93 @@ describe('the Writing pane', () => {
   it('closes like any pane and leaves the others their space', () => {
     const one = deepFreeze(addPane(root(), writing));
     expect(allPanes(closePane(one, 'writing'))).toEqual(['map', 'affects']);
+  });
+});
+
+describe('the sidebar', () => {
+  // A layout with `panel` in the panel and `side` in the sidebar, each
+  // a column of leaves named by type.
+  const both = (panel: unknown[], side: unknown[]): PaneLayout =>
+    sanitizeLayout({
+      root: { split: 'column', children: panel },
+      sidebar: { split: 'column', children: side },
+    });
+  const leaf = (pane: string, props: Record<string, string> = {}) => ({ id: pane, pane, props });
+  const ids = (tree: PaneSplit) => allPanes(tree);
+
+  it('reads across both trees, and knows which holds a pane', () => {
+    const l = both([leaf('map'), leaf('chat')], [leaf('stats')]);
+    expect(allPanes(bothTrees(l))).toEqual(['map', 'chat', 'stats']);
+    expect(treeOf(l, 'map')).toBe('panel');
+    expect(treeOf(l, 'stats')).toBe('sidebar');
+    expect(treeOf(l, 'group')).toBeNull();
+  });
+
+  it('halves the share of the pane a drop lands beside in a column', () => {
+    const tree = sanitize({ split: 'column', children: [leaf('map'), leaf('chat')] });
+    const put = { id: 'stats', pane: 'stats' as const, weight: 1, props: {} };
+    const above = insertBeside(tree, 'chat', put, 'before');
+    expect(ids(above)).toEqual(['map', 'stats', 'chat']);
+    expect(above.children.map((c) => c.weight)).toEqual([0.5, 0.25, 0.25]);
+    expect(ids(insertBeside(tree, 'map', put, 'after'))).toEqual(['map', 'stats', 'chat']);
+    expect(ids(insertBeside(tree, null, put, 'before'))).toEqual(['map', 'chat', 'stats']);
+  });
+
+  it('stacks a drop beside a pane in a row as a column of the two', () => {
+    const tree = sanitize({
+      split: 'column',
+      children: [{ split: 'row', children: [leaf('map'), leaf('affects')] }, leaf('group')],
+    });
+    const put = { id: 'stats', pane: 'stats' as const, weight: 1, props: {} };
+    const row = insertBeside(tree, 'affects', put, 'before').children[0];
+    if (isLeaf(row)) throw new Error('row');
+    const stack = row.children[1];
+    if (isLeaf(stack)) throw new Error('stack');
+    expect(stack.split).toBe('column');
+    expect(ids(stack)).toEqual(['stats', 'affects']);
+  });
+
+  it('moves a pane from the panel to the sidebar with its id and props', () => {
+    const l = both([leaf('map'), leaf('chat', { channel: 'tell' })], [leaf('stats')]);
+    const moved = moveLeaf(l, 'chat', { tree: 'sidebar', at: 'stats', edge: 'before' });
+    expect(ids(moved.root)).toEqual(['map']);
+    expect(ids(moved.sidebar)).toEqual(['chat', 'stats']);
+    expect(findNode(moved.sidebar, 'chat')).toMatchObject({ props: { channel: 'tell' } });
+  });
+
+  it('moves a pane within one tree', () => {
+    const l = both([leaf('map'), leaf('affects'), leaf('group')], []);
+    const moved = moveLeaf(l, 'group', { tree: 'panel', at: 'map', edge: 'before' });
+    expect(ids(moved.root)).toEqual(['group', 'map', 'affects']);
+    expect(moved.sidebar.children).toEqual([]);
+  });
+
+  it('fills an empty sidebar with a pane dropped on it', () => {
+    const l = both([leaf('map'), leaf('stats')], []);
+    const moved = moveLeaf(l, 'stats', { tree: 'sidebar', at: null, edge: 'after' });
+    expect(ids(moved.root)).toEqual(['map']);
+    expect(ids(moved.sidebar)).toEqual(['stats']);
+  });
+
+  it('leaves the layout alone for a drop that cannot land', () => {
+    const l = both([leaf('map'), leaf('writing')], [leaf('stats')]);
+    // On the pane itself, on a pane the drop names in the wrong tree,
+    // from a pane that has gone, and the writing card.
+    expect(moveLeaf(l, 'map', { tree: 'panel', at: 'map', edge: 'after' })).toBe(l);
+    expect(moveLeaf(l, 'map', { tree: 'panel', at: 'stats', edge: 'after' })).toBe(l);
+    expect(moveLeaf(l, 'group', { tree: 'sidebar', at: null, edge: 'after' })).toBe(l);
+    expect(moveLeaf(l, 'writing', { tree: 'sidebar', at: 'stats', edge: 'after' })).toBe(l);
+  });
+
+  it('sends a pane to the foot of the other tree', () => {
+    const l = both([leaf('map'), leaf('affects')], [leaf('stats')]);
+    const there = moveToOtherTree(l, 'map');
+    expect(ids(there.root)).toEqual(['affects']);
+    expect(ids(there.sidebar)).toEqual(['stats', 'map']);
+    const back = moveToOtherTree(there, 'stats');
+    expect(ids(back.root)).toEqual(['affects', 'stats']);
+    expect(ids(back.sidebar)).toEqual(['map']);
+    expect(moveToOtherTree(l, 'group')).toBe(l);
   });
 });
 

@@ -427,6 +427,53 @@
   color: var(--danger-text);
 }
 
+/* ── Moving a pane ───────────────────────────────────────────────── */
+
+/* A pane on its way fades where it was. Where it would land washes in
+   the accent with a 2 px line along the edge it joins, and its name
+   rides beside the pointer on the raised ground. */
+.pane.is-dragged {
+  opacity: 0.35;
+}
+
+body.is-dragging-pane,
+body.is-dragging-pane * {
+  cursor: grabbing !important;
+}
+
+.pane-drag-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-card);
+  pointer-events: none;
+}
+
+.pane-drop-wash {
+  position: fixed;
+  background: var(--accent-soft);
+}
+
+.pane-drop-line {
+  position: fixed;
+  height: 2px;
+  background: var(--accent);
+}
+
+.pane-drag-ghost {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: var(--r-row);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+}
+
+.pane-drag-ghost > .pane-label {
+  color: var(--secondary);
+}
+
 /* ── Stats ───────────────────────────────────────────────────────── */
 
 /* Your score sheet's numbers in three styles. Every length that sits

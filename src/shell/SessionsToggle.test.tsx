@@ -22,10 +22,13 @@ function on<T>(platform: Platform, fn: () => T): T {
   }
 }
 
-/** The toggle's button tag, pressed or not, on `platform`. */
-function toggle(platform: Platform, pressed: boolean): string {
+/** The toggle's button tag, pressed or not, on `platform`, for a
+ *  sidebar that holds panes or not. */
+function toggle(platform: Platform, pressed: boolean, sidebar = false): string {
   const html = on(platform, () =>
-    renderToStaticMarkup(<SessionsToggle pressed={pressed} onToggle={() => undefined} />),
+    renderToStaticMarkup(
+      <SessionsToggle pressed={pressed} onToggle={() => undefined} sidebar={sidebar} />,
+    ),
   );
   return html.match(/<button [^>]*>/)?.[0] ?? '';
 }
@@ -66,6 +69,11 @@ describe('the sessions toggle', () => {
     expect(attr(toggle('macos', false), 'title')).toBe('Show sessions (⌃⌘S)');
     expect(attr(toggle('windows', true), 'title')).toBe('Hide sessions (Ctrl+Shift+S)');
     expect(attr(toggle('linux', false), 'title')).toBe('Show sessions (Ctrl+Shift+S)');
+  });
+
+  it('names the sidebar while it holds a pane', () => {
+    expect(attr(toggle('macos', true, true), 'aria-label')).toBe('Hide sidebar');
+    expect(attr(toggle('macos', false, true), 'title')).toBe('Show sidebar (⌃⌘S)');
   });
 
   it('reads in the secondary tone while the sidebar shows and the tertiary one while it hides', () => {

@@ -9,10 +9,13 @@ import {
 } from 'react';
 import {
   PANE_TYPES,
+  bothTrees,
   isPaneType,
   leafKey,
   setWeights,
+  treeIn,
   type PaneLeaf,
+  type PaneTree,
   type PaneType,
 } from './paneLayout';
 import type { PromptShowState } from '../ipc/prompt';
@@ -27,7 +30,7 @@ import { LuaPane } from './lua/LuaPane';
 import { MapPane } from './map/MapPane';
 import { PaneLeafContext } from './paneActions';
 import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
-import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
+import { getPanelLayout, setTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { WritingPane } from '../writing/WritingPane';
 import { paneLabel } from './paneTypes';
@@ -37,8 +40,9 @@ import { VitalsFooter } from './VitalsFooter';
 import { useVitalsMenu } from './useVitalsMenu';
 import type { TextColors } from './VitalsText';
 
-// The right-hand panel: the active profile's pane tree from
-// the title band down, then the vitals pinned at the bottom. While your
+// The panel: the active profile's pane tree from the title band down,
+// then the vitals pinned at the bottom. SidebarPanes draws the sidebar's
+// tree the same way under the session list, with no vitals. While your
 // prompt shows pinned above the command line and Hide vitals while your
 // prompt is pinned is on, the vitals go and the panes take their room
 // (see panelVitals), all but your opponent's row in a fight. With Show
@@ -113,9 +117,57 @@ export function PanelHost({
   textColors?: TextColors;
 }) {
   const textSize = paneTextSize(size);
-  const layout = usePanelLayout();
   const footer = panelVitals(promptShow, useVitalsOptions());
   const vitalsMenu = useVitalsMenu();
+
+  return (
+    <PaneTextSizeContext.Provider value={textSize}>
+      <div
+        className="panel-host"
+        onContextMenu={(e) => {
+          if (e.target instanceof Element && e.target.closest(FOOTER)) vitalsMenu.open(e);
+        }}
+      >
+        <PaneArea which="panel" textSize={textSize} />
+        {footer && <VitalsFooter opponentOnly={footer === 'opponent'} textColors={textColors} />}
+        {vitalsMenu.menu}
+      </div>
+    </PaneTextSizeContext.Provider>
+  );
+}
+
+/** The sidebar's panes, under the session list or at the top of the
+ *  sidebar with one session. While it holds none, `hint` says how to
+ *  put one there. */
+export function SidebarPanes({
+  textSize: size,
+  hint,
+}: {
+  textSize?: number | undefined;
+  hint: boolean;
+}) {
+  const textSize = paneTextSize(size);
+  return (
+    <PaneTextSizeContext.Provider value={textSize}>
+      <div className="panel-host sidebar-panes">
+        <PaneArea which="sidebar" textSize={textSize} hint={hint} />
+      </div>
+    </PaneTextSizeContext.Provider>
+  );
+}
+
+/** One tree's panes, each placed in its box, with the lines between
+ *  them to drag. */
+function PaneArea({
+  which,
+  textSize,
+  hint = false,
+}: {
+  which: PaneTree;
+  textSize: number;
+  hint?: boolean;
+}) {
+  const layout = usePanelLayout();
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
 
@@ -135,7 +187,8 @@ export function PanelHost({
 
   useMoreBelow(areaRef);
 
-  const root = layout?.root ?? null;
+  const root = layout ? treeIn(layout, which) : null;
+  const all = layout ? bothTrees(layout) : null;
   const mins = usePaneMins(root, box.w, textSize);
   const geometry = useMemo(
     () => (root ? layoutPanes(root, box.w, box.h, mins, textSize) : null),
@@ -144,52 +197,47 @@ export function PanelHost({
   const leaves = geometry ? [...geometry.leaves].sort((a, b) => domOrder(a.leaf, b.leaf)) : [];
   // With two or more Chat panes, each one's label names its filter, as
   // Chat, Tell, so a screen reader tells them apart.
-  const chatsNamed = chatLeaves(root).length > 1;
+  const chatsNamed = chatLeaves(all).length > 1;
   const sectionLabel = (leaf: PaneLeaf) =>
     chatsNamed && leaf.pane === 'chat'
-      ? `${paneLabel(leaf)}, ${chatFilterLabel(chatFilterIn(root, leaf))}`
+      ? `${paneLabel(leaf)}, ${chatFilterLabel(chatFilterIn(all, leaf))}`
       : paneLabel(leaf);
 
   return (
-    <PaneTextSizeContext.Provider value={textSize}>
-      <div
-        className="panel-host"
-        onContextMenu={(e) => {
-          if (e.target instanceof Element && e.target.closest(FOOTER)) vitalsMenu.open(e);
-        }}
-      >
-        <div ref={areaRef} className="panel-panes">
-          {leaves.map(({ leaf, rect }) => (
-            <section
-              key={leafKey(leaf)}
-              className={`pane pane-${leaf.pane}`}
-              aria-label={sectionLabel(leaf)}
-              style={{
-                left: rect.x,
-                top: rect.y,
-                width: rect.w,
-                height: rect.h,
-                overflowY: rect.h < paneMinH(leaf.pane, textSize) ? 'auto' : undefined,
-              }}
-            >
-              <PaneLeafContext.Provider value={leaf}>
-                {isPaneType(leaf.pane) ? PANES[leaf.pane]() : <LuaPane />}
-              </PaneLeafContext.Provider>
-            </section>
-          ))}
-          {geometry?.handles.map((h) => (
-            <PaneHandle key={`${h.parentId}:${h.index}`} handle={h} />
-          ))}
-          {root && root.children.length === 0 && (
-            <p className="pane-empty panel-empty">
-              Add a pane to show the map, your affects, your group, your stats, or chat.
-            </p>
-          )}
-        </div>
-        {footer && <VitalsFooter opponentOnly={footer === 'opponent'} textColors={textColors} />}
-        {vitalsMenu.menu}
-      </div>
-    </PaneTextSizeContext.Provider>
+    <div ref={areaRef} className="panel-panes" data-tree={which}>
+      {leaves.map(({ leaf, rect }) => (
+        <section
+          key={leafKey(leaf)}
+          className={`pane pane-${leaf.pane}`}
+          data-leaf={leaf.id}
+          aria-label={sectionLabel(leaf)}
+          style={{
+            left: rect.x,
+            top: rect.y,
+            width: rect.w,
+            height: rect.h,
+            overflowY: rect.h < paneMinH(leaf.pane, textSize) ? 'auto' : undefined,
+          }}
+        >
+          <PaneLeafContext.Provider value={leaf}>
+            {isPaneType(leaf.pane) ? PANES[leaf.pane]() : <LuaPane />}
+          </PaneLeafContext.Provider>
+        </section>
+      ))}
+      {geometry?.handles.map((h) => (
+        <PaneHandle key={`${h.parentId}:${h.index}`} handle={h} which={which} />
+      ))}
+      {which === 'panel' && root && root.children.length === 0 && (
+        <p className="pane-empty panel-empty">
+          Add a pane to show the map, your affects, your group, your stats, or chat.
+        </p>
+      )}
+      {which === 'sidebar' && hint && root && root.children.length === 0 && (
+        <p className="pane-empty panel-empty sidebar-hint">
+          Drag a pane here, or choose Move to sidebar in its menu.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -245,7 +293,7 @@ function useMoreBelow(areaRef: RefObject<HTMLDivElement | null>) {
 
 /** The line between two sibling panes. Drag it, or focus it and use
  *  the arrow keys. Neither neighbour goes below its minimum. */
-function PaneHandle({ handle }: { handle: HandleBox }) {
+function PaneHandle({ handle, which }: { handle: HandleBox; which: PaneTree }) {
   const drag = useRef<{ start: number; sizes: number[] } | null>(null);
   const vertical = handle.dir === 'column';
   const { rect, index, mins } = handle;
@@ -253,11 +301,12 @@ function PaneHandle({ handle }: { handle: HandleBox }) {
     dragSizes(sizes, index, delta, mins[index], mins[index + 1]);
 
   const apply = (sizes: number[]) => {
-    const root = getPanelLayout()?.root;
-    if (!root) return;
-    setPaneTree(
+    const layout = getPanelLayout();
+    if (!layout) return;
+    setTree(
+      which,
       setWeights(
-        root,
+        treeIn(layout, which),
         handle.parentId,
         sizes.map((s) => Math.max(1, s)),
       ),

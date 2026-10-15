@@ -17,6 +17,7 @@ import { useLuaPanes } from '../stores/session/luaPanesStore';
 import { usePluginRows } from '../stores/session/pluginRowsStore';
 import type { Connection } from '../stores/session/useConnection';
 import {
+  ChevronRightIcon,
   CloseIcon,
   MaximizeIcon,
   MinimizeIcon,
@@ -27,7 +28,8 @@ import {
 import type { PanelSide } from '../ipc/uiConfig';
 import { PanelIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
-import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { MenuItem, MenuSeparator, MenuSurface } from '../ui/MenuSurface';
+import { submenuAt } from '../ui/menuPlacement';
 import { ShellMenu } from './ShellMenu';
 import { chatRefToAdd } from '../panel/paneActions';
 import { TitleButton } from './TitleButton';
@@ -52,10 +54,14 @@ interface Props {
   onTogglePalette: () => void;
   /** Open Settings, the same as its shortcut. */
   onOpenSettings: () => void;
-  /** The panel's pane tree. Add a pane lists the pane types it does
-   *  not show yet, then the Lua panes it does not show. */
+  /** The panel's and the sidebar's panes, read as one tree. Add a pane
+   *  lists the pane types neither shows yet, then the Lua panes they do
+   *  not show. */
   paneTree: PaneSplit | null;
   onAddPane: (ref: PaneRef) => void;
+  /** Add a pane to the sidebar, from Add to the sidebar, which shows
+   *  only when this is given. */
+  onAddPaneToSidebar?: ((ref: PaneRef) => void) | undefined;
   /** Runs after a menu closes, or after the gear opens Settings, to
    *  hand the caret back to the command line. */
   onMenuClosed: () => void;
@@ -81,6 +87,7 @@ export function TitleBand({
   onOpenSettings,
   paneTree,
   onAddPane,
+  onAddPaneToSidebar,
   onMenuClosed,
   renameInRow,
   listSessions = false,
@@ -216,6 +223,13 @@ export function TitleBand({
             closeMenu();
             onAddPane(ref);
           }}
+          onAddToSidebar={
+            onAddPaneToSidebar &&
+            ((ref) => {
+              closeMenu();
+              onAddPaneToSidebar(ref);
+            })
+          }
           onClose={closeMenu}
         />
       )}
@@ -223,36 +237,40 @@ export function TitleBand({
   );
 }
 
-// Add a pane's menu: the pane types the tree has room for, then the
-// Lua panes it does not show. It reads the Lua pane and plugin stores
-// only while it is open, since a plugin can send its panes on every
-// prompt and the band should not draw again for each one.
+// Add a pane's menu: the pane types the panel and the sidebar have
+// room for, then the Lua panes they do not show. A pick adds to the
+// panel. The last row, Add to the sidebar, opens the same list beside
+// it, and a pick there adds to the sidebar. It reads the Lua pane and
+// plugin stores only while it is open, since a plugin can send its
+// panes on every prompt and the band should not draw again for each
+// one.
 function AddPaneMenu({
   anchor,
   align,
   paneTree,
   onAdd,
+  onAddToSidebar,
   onClose,
 }: {
   anchor: HTMLElement | null;
   align: 'start' | 'end';
   paneTree: PaneSplit | null;
   onAdd: (ref: PaneRef) => void;
+  onAddToSidebar: ((ref: PaneRef) => void) | undefined;
   onClose: () => void;
 }) {
   const luaPanes = useLuaPanes();
   const pluginRows = usePluginRows();
+  const [sub, setSub] = useState<{ focus: boolean } | null>(null);
+  const rowRef = useRef<HTMLButtonElement | null>(null);
   const builtIns = paneTypesToAdd(paneTree);
   const luaToAdd = luaPanesToAdd(paneTree, offeredLuaPanes(luaPanes, pluginRows));
   // A second Chat pane starts on tell, and the menu says so.
   const chatOnTell = chatRefToAdd(paneTree).props.channel === 'tell';
-  return (
-    <ShellMenu anchor={anchor} align={align} label="Add a pane" onClose={onClose}>
-      {builtIns.length === 0 && luaToAdd.length === 0 && (
-        <li role="none" className="menu-note">
-          Every pane is showing.
-        </li>
-      )}
+  const any = builtIns.length > 0 || luaToAdd.length > 0;
+  const closeSub = () => setSub(null);
+  const rows = (pick: (ref: PaneRef) => void, inSub: boolean) => (
+    <>
       {builtIns.map((pane) => (
         <MenuItem
           key={pane}
@@ -261,7 +279,8 @@ function AddPaneMenu({
               <span className="menu-hint">starts on Tell</span>
             ) : undefined
           }
-          onSelect={() => onAdd(paneRef(pane))}
+          {...(!inSub && { onHover: closeSub, onFocus: closeSub })}
+          onSelect={() => pick(paneRef(pane))}
         >
           {PANE_LABELS[pane]}
         </MenuItem>
@@ -273,13 +292,64 @@ function AddPaneMenu({
           <MenuItem
             key={paneKey(ref)}
             trailing={<span className="menu-hint">{offer.plugin}</span>}
-            onSelect={() => onAdd(ref)}
+            {...(!inSub && { onHover: closeSub, onFocus: closeSub })}
+            onSelect={() => pick(ref)}
           >
             {paneLabel(ref)}
           </MenuItem>
         );
       })}
-    </ShellMenu>
+    </>
+  );
+  const row = rowRef.current;
+  return (
+    <>
+      <ShellMenu anchor={anchor} align={align} label="Add a pane" onClose={onClose}>
+        {!any && (
+          <li role="none" className="menu-note">
+            Every pane is showing.
+          </li>
+        )}
+        {rows(onAdd, false)}
+        {any && onAddToSidebar && (
+          <>
+            <MenuSeparator />
+            <MenuItem
+              itemRef={(el) => {
+                rowRef.current = el;
+              }}
+              submenu={{
+                open: sub !== null,
+                controls: 'add-pane-sidebar',
+                onOpen: (focus) => setSub({ focus }),
+              }}
+              trailing={<ChevronRightIcon className="menu-chevron" />}
+            >
+              Add to the sidebar
+            </MenuItem>
+          </>
+        )}
+      </ShellMenu>
+      {sub && row && onAddToSidebar && (
+        <MenuSurface
+          id="add-pane-sidebar"
+          label="Add to the sidebar"
+          nested
+          autoFocus={sub.focus}
+          className="menu-sub"
+          at={submenuAt(
+            row.getBoundingClientRect(),
+            row.closest('menu')?.getBoundingClientRect() ?? row.getBoundingClientRect(),
+          )}
+          onClose={() => {
+            setSub(null);
+            rowRef.current?.focus();
+          }}
+        >
+          {rows(onAddToSidebar, true)}
+        </MenuSurface>
+      )}
+    </>
   );
 }
 

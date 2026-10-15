@@ -245,12 +245,32 @@ describe('PaneMenu', () => {
     }
   });
 
+  it('offers Move to sidebar in the panel and Move to panel in the sidebar', () => {
+    const leaf = (pane: PaneType): PaneLeaf => ({ id: `leaf-${pane}`, pane, weight: 1, props: {} });
+    laid.layout = {
+      version: 1,
+      panel_open: true,
+      panel_width: null,
+      root: { id: 'root', split: 'column', weight: 1, children: [leaf('map'), leaf('writing')] },
+      sidebar: { id: 'sidebar', split: 'column', weight: 1, children: [leaf('stats')] },
+    };
+    const after = (pane: PaneType) => {
+      const rows = menuRows(menu(pane));
+      return rows[rows.indexOf('Show here instead') + 1];
+    };
+    expect(after('map')).toBe('Move to sidebar');
+    expect(after('stats')).toBe('Move to panel');
+    // The writing card stays in the panel.
+    expect(menuRows(menu('writing')).some((row) => row.startsWith('Move'))).toBe(false);
+  });
+
   it('offers a split only when every pane keeps its minimum at your panel size', () => {
     // Map, Affects and Chat in a 300 by 650 panel, so a split adds Group.
     laid.layout = {
       version: 1,
       panel_open: true,
       panel_width: 300,
+      sidebar: { id: 'sidebar', split: 'column', weight: 1, children: [] },
       root: {
         id: 'root',
         split: 'column',

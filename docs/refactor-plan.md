@@ -2060,6 +2060,18 @@ Aabahran sends `Char.Stats` since its commit c12955f9, the numbers on the score 
 
 Help 4.9 Read your stats says what each style draws, what the colors and marks mean, how each gives way and when the game sends the numbers.
 
+#### October 14. Sidebar panes
+
+You asked on October 14 for the space across from the panel to hold panes, with one session as well, and below the session list with two or more. After the mockup (https://claude.ai/artifact/87nmAdfUP7yznYAtH72cSP) you took its five answers as drawn. The build is on feat/sidebar-panes from feat/stats-pane.
+
+- Saving. The profile's `[ui.panes]` gains a `sidebar` tree beside `root`, written only while it holds a pane, so a profile from before reads an empty sidebar. `PaneLayoutPersist::sanitize` and `sanitizeLayout` clean both trees as one pass. Ids are unique across them, a pane the panel holds once drops out of the sidebar, Chat counts four across the two, and the writing card never sits in the sidebar. Five new cases in `fixtures/pane-layout/sanitize.json` hold both sides to that. The sidebar's width stays per install, as before.
+- Moving. A pane's header drags it within a tree or to the other one. The half of the pane under the pointer it would land against washes in the accent with a 2 px line along that edge, an empty sidebar washes whole, and Esc puts it back. The pane menu's Move to sidebar or Move to panel sends it to the foot of the other tree, and Add a pane ends on Add to the sidebar with the same list beside it. A pane that moves keeps its id and props, so a Chat pane keeps its channel. Every action reads both trees, so a pane added to one leaves the other, and a split offers the first pane neither shows.
+- Showing. The sidebar shows with two or more sessions or while it holds a pane, and the one toggle hides and shows all of it. While it holds a pane, the toggle, the View menu row and the palette say Hide sidebar and Show sidebar, and the View row takes a click with one session. A pane in a hidden sidebar reads unchecked in View and the palette, and choosing it shows the sidebar again, or moves the pane to the panel when the window has no room for the sidebar. In a narrow window the sidebar's panes hide, and with two or more sessions the toggle slides in the sessions alone.
+- Settings. You asked on October 14 for Characters, Panel layout to draw both and to move panes there too. It draws the sidebar, 112 wide, beside the panel's 180 on the sides the profile's `panel_side` gives them, which `profile_detail_get` now sends, so the two fit the card at the narrowest Settings window. A pane drags as in the window, with the wash and the line drawn in the drawing, and Tab reaches each pane, where Up and Down move it past its neighbor and the arrow toward the other box moves it there. `src/settings/characters/schematicMove.ts` holds those rules. Each move saves through `pane_trees_set`, which gives any profile, played or not, the two trees and keeps its panel shown or hidden and its width. It shares one path with `pane_layout_reset`, so the profile in front takes a new generation and tells every window.
+- Kept as they were. The vitals footer stays in the panel, and Reset to default empties the sidebar too.
+
+Help 4.1 Arrange the panels says how to put panes in the sidebar and move them, and 1.4 says when the sidebar shows with one session and what its toggle says.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

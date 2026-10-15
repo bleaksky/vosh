@@ -26,9 +26,13 @@ import { usePlayPalette } from '../theme/fitGameColors';
 import type { XtermPalette } from '../theme/themes';
 import {
   LUA_PANE,
+  WRITING_PANE,
+  bothTrees,
   paneKey,
   paneRef,
   splitPane,
+  treeIn,
+  treeOf,
   type PaneLeaf,
   type PaneRef,
   type SplitDir,
@@ -38,6 +42,7 @@ import { formatSettingsTarget } from '../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
 import {
   closeHere,
+  movePaneAcross,
   paneToSplitIn,
   returnToCommandLine,
   showHereInstead,
@@ -53,7 +58,9 @@ import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } f
 
 // The more menu on every pane header: Split right, Split
 // down, Show here instead with a submenu of pane types and then, after
-// a rule, the Lua panes on offer, and Close pane.
+// a rule, the Lua panes on offer, Move to sidebar in the panel or Move
+// to panel in the sidebar, and Close pane. The writing card stays in
+// the panel, so its menu has no Move.
 // The Affects pane adds Style and Marker, each a submenu with a check
 // on the current pick, Change when affects warn, which opens Settings
 // on the hours under Layout, Affects, and Edit tracked affects, which
@@ -134,10 +141,12 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   };
 
   const splitIn = paneToSplitIn(leaf.id);
-  const showHere = panesToShowInstead(leaf, getPanelLayout()?.root ?? null);
+  const layout = getPanelLayout();
+  const showHere = panesToShowInstead(leaf, layout ? bothTrees(layout) : null);
+  const where = layout ? treeOf(layout, leaf.id) : null;
   const area = anchor.closest('.panel-panes');
   const canSplit = (dir: SplitDir) => {
-    const root = getPanelLayout()?.root;
+    const root = layout && where ? treeIn(layout, where) : null;
     if (!root || splitIn === null) return false;
     if (!area) return true;
     return fitsPanel(
@@ -325,6 +334,15 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         </MenuItem>
         <MenuSeparator />
         {submenuRow('show', showHere.builtIns.length === 0 && showHere.lua.length === 0)}
+        {where !== null && leaf.pane !== WRITING_PANE && (
+          <MenuItem
+            onHover={closeSub}
+            onFocus={closeSub}
+            onSelect={run(() => movePaneAcross(leaf.id))}
+          >
+            {where === 'panel' ? 'Move to sidebar' : 'Move to panel'}
+          </MenuItem>
+        )}
         {leaf.pane === 'stats' && (
           <>
             <MenuSeparator />

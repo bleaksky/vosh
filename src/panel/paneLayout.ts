@@ -2,14 +2,19 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import {
   paneLayoutGet,
   paneLayoutReset,
+  paneTreesSet,
   paneLayoutSet,
   subscribePaneLayoutChanged,
 } from '../ipc/panes';
 import { subscribeProfileSwitched } from '../ipc/profiles';
 import { pendingWrites } from '../lib/pendingWrites';
 
-// The one-window panel's pane tree, saved per profile. Mirrors
-// PaneLayoutPersist and PaneNode in src-tauri/src/profile/panes.rs.
+// The one-window panel's pane tree and the sidebar's, saved per
+// profile. Mirrors PaneLayoutPersist and PaneNode in
+// src-tauri/src/profile/panes.rs. The sidebar across from the panel
+// holds a tree of its own under the session list. A pane shows in one
+// of the two at a time, Chat up to four times across both, and the
+// writing card only in the panel.
 //
 // The backend owns the saved copy. getPaneLayout reads the active
 // profile's tree, setPaneLayout writes one (debounced for splitter
@@ -137,6 +142,9 @@ export interface PaneLayout {
   /** Always a split. No children means the panel shows only the
    *  pinned vitals. */
   root: PaneSplit;
+  /** The sidebar's panes, under the session list. Always a split, with
+   *  no children while the sidebar holds none. */
+  sidebar: PaneSplit;
   /** The backend's count of profile swaps when it handed out this
    *  tree. Edits keep it, a write sends it back, and the backend
    *  refuses a write made against a profile that has since been
@@ -171,14 +179,21 @@ export function isPaneType(value: unknown): value is PaneType {
   return typeof value === 'string' && (PANE_TYPES as readonly string[]).includes(value);
 }
 
-/** Map above affects with the panel open, the stock layout. */
+/** Map above affects with the panel open and an empty sidebar, the
+ *  stock layout. */
 export function defaultLayout(): PaneLayout {
   return {
     version: PANE_LAYOUT_VERSION,
     panel_open: true,
     panel_width: null,
     root: defaultRoot(),
+    sidebar: emptySidebar(),
   };
+}
+
+/** The sidebar with no panes. */
+export function emptySidebar(): PaneSplit {
+  return { id: 'sidebar', split: 'column', weight: 1, children: [] };
 }
 
 // The map's share of the stock layout, over affects. It gives the Map
@@ -244,6 +259,20 @@ interface SanitizeContext {
   used: Set<string>;
   /** How many leaves of each paneKey are placed so far. */
   panes: Map<string, number>;
+  /** Whether the tree being read may hold the writing card, which only
+   *  the panel's does. */
+  writing: boolean;
+}
+
+/** A context for one pass over `roots`, which reserves their ids. */
+function sanitizeContext(...roots: RawNode[]): SanitizeContext {
+  const reserved = new Set<string>();
+  const collect = (node: RawNode) => {
+    if (node.id.trim().length > 0) reserved.add(node.id);
+    node.children.forEach(collect);
+  };
+  roots.forEach(collect);
+  return { reserved, used: new Set(), panes: new Map(), writing: true };
 }
 
 function claimId(ctx: SanitizeContext, raw: string, base: string): string {
@@ -310,6 +339,7 @@ function sanitizeNode(ctx: SanitizeContext, raw: RawNode, depth: number): PaneNo
   if (raw.pane !== null) {
     const kind = paneType(raw.pane);
     if (kind === null) return null;
+    if (kind === WRITING_PANE && !ctx.writing) return null;
     if (kind === LUA_PANE && (blank(raw.props.plugin) || blank(raw.props.id))) return null;
     const ref = { pane: kind, props: raw.props };
     const key = paneKey(ref);
@@ -364,22 +394,20 @@ function sanitizeChildren(
  *  past depth three flatten, weights become positive shares that sum
  *  to 1 (four places), and the root is always a split. */
 export function sanitize(tree: unknown): PaneSplit {
-  const rawRoot = readNode(tree);
-  const reserved = new Set<string>();
-  const collect = (node: RawNode) => {
-    if (node.id.trim().length > 0) reserved.add(node.id);
-    node.children.forEach(collect);
-  };
-  collect(rawRoot);
-  const ctx: SanitizeContext = { reserved, used: new Set(), panes: new Map() };
+  const raw = readNode(tree);
+  return sanitizeRoot(sanitizeContext(raw), raw, 'root');
+}
 
+// One tree's root in `ctx`, which may already hold the panes and ids of
+// another tree.
+function sanitizeRoot(ctx: SanitizeContext, rawRoot: RawNode, base: string): PaneSplit {
   // A bare leaf at the root gets wrapped so the root stays a split.
   const raw: RawNode =
     rawRoot.pane !== null
       ? { id: '', pane: null, split: 'column', weight: 1, children: [rawRoot], props: {} }
       : rawRoot;
   let dir = splitDir(raw.split);
-  const id = claimId(ctx, raw.id, 'root');
+  const id = claimId(ctx, raw.id, base);
   let children = sanitizeChildren(ctx, dir, raw.children, 0);
   // A lone split under the root takes its place, keeping the root id.
   const only = children.length === 1 ? children[0] : undefined;
@@ -391,8 +419,10 @@ export function sanitize(tree: unknown): PaneSplit {
 }
 
 /** Repair a whole layout. Missing fields take their defaults, the
- *  width clamps to the panel bounds, and the tree goes through
- *  {@link sanitize}. */
+ *  width clamps to the panel bounds, and each tree goes through the
+ *  rules of {@link sanitize}, the sidebar's after the panel's: a pane
+ *  the panel shows drops out of the sidebar, an id stays unique across
+ *  both, and the writing card never sits in the sidebar. */
 export function sanitizeLayout(raw: unknown): PaneLayout {
   const o = isRecord(raw) ? raw : {};
   const width =
@@ -407,9 +437,20 @@ export function sanitizeLayout(raw: unknown): PaneLayout {
     version: PANE_LAYOUT_VERSION,
     panel_open: typeof o.panel_open === 'boolean' ? o.panel_open : true,
     panel_width: width,
-    root: o.root === undefined || o.root === null ? defaultRoot() : sanitize(o.root),
+    ...sanitizeTrees(o.root, o.sidebar),
     ...generation,
   };
+}
+
+// The panel's tree, the stock one when none came, and the sidebar's,
+// empty when none came, in one pass.
+function sanitizeTrees(root: unknown, sidebar: unknown): Pick<PaneLayout, 'root' | 'sidebar'> {
+  const rawRoot = readNode(root === undefined || root === null ? defaultRoot() : root);
+  const rawSide = readNode(sidebar === undefined || sidebar === null ? emptySidebar() : sidebar);
+  const ctx = sanitizeContext(rawRoot, rawSide);
+  const cleanRoot = sanitizeRoot(ctx, rawRoot, 'root');
+  ctx.writing = false;
+  return { root: cleanRoot, sidebar: sanitizeRoot(ctx, rawSide, 'sidebar') };
 }
 
 // ---------------------------------------------------------------
@@ -601,7 +642,13 @@ export function setWeights(tree: PaneSplit, parentId: string, weights: number[])
  *  leaves the tree alone. */
 export function addPane(tree: PaneSplit, ref: PaneRef): PaneSplit {
   if (countPanes(tree, ref) >= paneCap(ref)) return tree;
-  const fresh = freshLeaf(tree, ref);
+  return appendLeaf(tree, freshLeaf(tree, ref));
+}
+
+/** Put `leaf` at the foot of `tree`, with the share addPane gives a new
+ *  pane, keeping its id and props. */
+export function appendLeaf(tree: PaneSplit, leaf: PaneLeaf): PaneSplit {
+  const fresh = { ...leaf, weight: 1 };
   if (tree.children.length === 0) {
     return sanitize({ ...tree, split: 'column', children: [fresh] });
   }
@@ -610,7 +657,7 @@ export function addPane(tree: PaneSplit, ref: PaneRef): PaneSplit {
   const held = above.reduce((acc, c) => acc + c.weight, 0);
   const read = above.reduce((acc, c) => acc + readingHeight(c), 0);
   const weight =
-    held > 0 && read > 0 ? (held * PANE_MIN_H[ref.pane]) / read : 1 / Math.max(1, above.length);
+    held > 0 && read > 0 ? (held * PANE_MIN_H[leaf.pane]) / read : 1 / Math.max(1, above.length);
   return sanitize({
     id: tree.id,
     split: 'column',
@@ -626,6 +673,136 @@ function readingHeight(node: PaneNode): number {
   const parts = node.children.map(readingHeight);
   if (parts.length === 0) return 0;
   return node.split === 'column' ? parts.reduce((acc, p) => acc + p, 0) : Math.max(...parts);
+}
+
+// ---------------------------------------------------------------
+// The panel and the sidebar together.
+// ---------------------------------------------------------------
+
+/** The two trees a layout holds. */
+export type PaneTree = 'panel' | 'sidebar';
+
+/** The tree `which` of `layout`. */
+export function treeIn(layout: Pick<PaneLayout, 'root' | 'sidebar'>, which: PaneTree): PaneSplit {
+  return which === 'panel' ? layout.root : layout.sidebar;
+}
+
+/** `layout` with `tree` as its tree `which`, the same layout when it
+ *  already is. */
+export function withTree(layout: PaneLayout, which: PaneTree, tree: PaneSplit): PaneLayout {
+  if (treeIn(layout, which) === tree) return layout;
+  return which === 'panel' ? { ...layout, root: tree } : { ...layout, sidebar: tree };
+}
+
+/** Both trees under one split, to read across them, such as which
+ *  panes show anywhere or how many Chat panes there are. Never saved
+ *  and never edited. */
+export function bothTrees(layout: Pick<PaneLayout, 'root' | 'sidebar'>): PaneSplit {
+  return { id: '', split: 'column', weight: 1, children: [layout.root, layout.sidebar] };
+}
+
+/** The tree that holds the pane `id`, or null when neither does. A
+ *  tree's own root counts as in it. */
+export function treeOf(layout: Pick<PaneLayout, 'root' | 'sidebar'>, id: string): PaneTree | null {
+  if (findNode(layout.root, id) !== null) return 'panel';
+  if (findNode(layout.sidebar, id) !== null) return 'sidebar';
+  return null;
+}
+
+/** The other tree. */
+export function otherTree(which: PaneTree): PaneTree {
+  return which === 'panel' ? 'sidebar' : 'panel';
+}
+
+/** Where a dragged pane lands: next to the pane `at` in tree `tree`,
+ *  above it or below it, or alone in an empty tree when `at` is null. */
+export interface PaneDrop {
+  tree: PaneTree;
+  at: string | null;
+  edge: 'before' | 'after';
+}
+
+/** Put `leaf` above or below the pane `id` in `tree`. In a column the
+ *  two halve the old share. In a row the pane becomes a column of the
+ *  two. With `id` null or not found, `leaf` goes at the foot. */
+export function insertBeside(
+  tree: PaneSplit,
+  id: string | null,
+  leaf: PaneLeaf,
+  edge: 'before' | 'after',
+): PaneSplit {
+  if (id === null || id === tree.id || findNode(tree, id) === null) return appendLeaf(tree, leaf);
+  const insert = (node: PaneSplit): PaneSplit => {
+    const at = node.children.findIndex((c) => c.id === id);
+    if (at < 0) {
+      return { ...node, children: node.children.map((c) => (isLeaf(c) ? c : insert(c))) };
+    }
+    const hit = node.children[at];
+    const children = node.children.slice();
+    if (node.split === 'column') {
+      const half = hit.weight / 2;
+      const pair = [
+        { ...hit, weight: half },
+        { ...leaf, weight: half },
+      ];
+      children.splice(at, 1, ...(edge === 'before' ? pair.reverse() : pair));
+    } else {
+      const both =
+        edge === 'before'
+          ? [
+              { ...leaf, weight: 1 },
+              { ...hit, weight: 1 },
+            ]
+          : [
+              { ...hit, weight: 1 },
+              { ...leaf, weight: 1 },
+            ];
+      children[at] = {
+        id: freshId(tree, 'split'),
+        split: 'column',
+        weight: hit.weight,
+        children: both,
+      };
+    }
+    return { ...node, children };
+  };
+  return sanitize(insert(tree));
+}
+
+/** Move the pane `id` to where `drop` says, from either tree to either
+ *  tree. It keeps its id and props, so a Chat pane keeps its channel.
+ *  The writing card stays where it is, as does a drop on the pane
+ *  itself or on a pane that has gone. */
+export function moveLeaf(layout: PaneLayout, id: string, drop: PaneDrop): PaneLayout {
+  const from = treeOf(layout, id);
+  if (from === null || drop.at === id) return layout;
+  const leaf = findNode(treeIn(layout, from), id);
+  if (leaf === null || !isLeaf(leaf) || leaf.pane === WRITING_PANE) return layout;
+  if (drop.at !== null && treeOf(layout, drop.at) !== drop.tree) return layout;
+  const lifted = withTree(
+    layout,
+    from,
+    removeWhere(treeIn(layout, from), (n) => n.id === id),
+  );
+  const placed = withTree(
+    lifted,
+    drop.tree,
+    insertBeside(treeIn(lifted, drop.tree), drop.at, leaf, drop.edge),
+  );
+  return { ...placed, ...sanitizeTrees(placed.root, placed.sidebar) };
+}
+
+/** Move the pane `id` to the foot of the other tree, as Move to panel
+ *  and Move to sidebar do. */
+export function moveToOtherTree(layout: PaneLayout, id: string): PaneLayout {
+  const from = treeOf(layout, id);
+  if (from === null) return layout;
+  return moveLeaf(layout, id, { tree: otherTree(from), at: null, edge: 'after' });
+}
+
+/** Clean both trees of `layout` as one pass, keeping its other fields. */
+export function cleanTrees(layout: PaneLayout): PaneLayout {
+  return { ...layout, ...sanitizeTrees(layout.root, layout.sidebar) };
 }
 
 // ---------------------------------------------------------------
@@ -716,6 +893,12 @@ export async function getPaneLayout(): Promise<PaneLayout> {
  *  when you name none, and return the new layout (paneLayoutReset). */
 export async function resetPaneLayout(profile?: string | null): Promise<PaneLayout> {
   return sanitizeLayout(await paneLayoutReset(profile));
+}
+
+/** Give the profile `profile` the trees of `layout`, as a move in
+ *  Settings > Characters does, and return its layout as saved. */
+export async function setProfileTrees(profile: string, layout: PaneLayout): Promise<PaneLayout> {
+  return sanitizeLayout(await paneTreesSet(profile, layout));
 }
 
 /** Save the active profile's pane layout. Calls within 250 ms coalesce

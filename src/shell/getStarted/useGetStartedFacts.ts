@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { onPresetsChanged } from '../../ipc/automation';
 import { getUiConfig } from '../../ipc/uiConfig';
-import { allPanes } from '../../panel/paneLayout';
+import { allPanes, bothTrees } from '../../panel/paneLayout';
 import { usePanelLayout } from '../../panel/panelLayoutStore';
 import { PROMPT_SHOW_LABELS, usePromptShow } from '../../prompt/showState';
 import { createConfigStore } from '../../stores/config/configStore';
@@ -38,7 +38,7 @@ export function useGetStartedFacts(): GetStartedFacts {
     () => ({
       character,
       enabledPresets: presets,
-      panes: layout ? allPanes(layout.root) : [],
+      panes: layout ? allPanes(bothTrees(layout)) : [],
       tracked,
       promptPlace: show && show !== 'text' ? PROMPT_SHOW_LABELS[show] : null,
     }),

@@ -279,3 +279,31 @@ describe('Show me on Track the affects you keep up', () => {
     );
   });
 });
+
+describe('Panel layout under Characters', () => {
+  it('draws the sidebar and the panel and saves a move to the profile', async () => {
+    let boxes: string[] = [];
+    await run(
+      (root) => {
+        boxes = findAll(
+          root,
+          (el) => el.getAttribute('class') === 'st-schematic-label st-schematic-caption',
+        ).map((el) => el.textContent);
+      },
+      (root) => {
+        const map = findAll(root, (el) => el.getAttribute('data-leaf') === 'map')[0];
+        props<{ onKeyDown: (e: unknown) => void }>(map).onKeyDown({
+          key: 'ArrowLeft',
+          preventDefault: () => undefined,
+        });
+      },
+    );
+    // The panel takes the right, so the sidebar comes first.
+    expect(boxes).toEqual(['Sidebar', 'Panel']);
+    const saved = state.invoked.find((c) => c.cmd === 'pane_trees_set');
+    expect(saved?.args?.profile).toBe('Healer');
+    const layout = saved?.args?.layout as ReturnType<typeof defaultLayout>;
+    expect(layout.sidebar.children.map((c) => c.id)).toEqual(['map']);
+    expect(layout.root.children.map((c) => c.id)).toEqual(['affects']);
+  });
+});

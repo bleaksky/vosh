@@ -264,6 +264,16 @@ id = "group"
 pane = "group"
 weight = 0.4
 
+[ui.panes.sidebar]
+id = "sidebar"
+split = "column"
+weight = 1.0
+
+[[ui.panes.sidebar.children]]
+id = "stats"
+pane = "stats"
+weight = 1.0
+
 [[ui.custom_themes]]
 id = "custom-dusk"
 label = "Dusk"

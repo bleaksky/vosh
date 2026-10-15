@@ -71,7 +71,7 @@ Variables set with `#var` have session scope. They clear when the next connectio
 
 <!-- id: get-connected.sessions -->
 
-Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the side of the window across from the panel, with one row for each session. At first that is the left side. With one session, the sidebar hides on its own.
+Each session is one connection to a game. It has its own terminal, command line, and command history. While two or more sessions are open, the sessions sidebar shows on the side of the window across from the panel, with one row for each session. At first that is the left side. With one session, the sidebar hides on its own, unless it holds a pane. Section 4.1 tells how to put panes in the sidebar.
 
 Each row has two lines. The first line starts with a mark that shows the state of the session. Then comes its name. At the end is a count when something waits for you there. The second line tells what the session is doing.
 
@@ -79,7 +79,7 @@ Each row has two lines. The first line starts with a mark that shows the state o
 - Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front. Press `Cmd+Shift+]` for the next row and `Cmd+Shift+[` for the row before. After the last row, they go round to the first. Hold `Cmd` for a moment and each row shows its key. On macOS the Session menu also has `Next session` and `Previous session`.
 - The sessions behind keep playing. Their triggers, timers, and Lua run as usual. Only the drawing waits until you look.
 - To hide the sidebar in this window, click the sidebar button at the top left of the window. On macOS it sits just after the window buttons. Click it again to show the sidebar. The button never moves, and it is brighter while the sidebar shows. The sidebar stays hidden when you open another session.
-- On macOS `Ctrl+Cmd+S` also hides and shows the sidebar. On Windows and Linux the key is `Ctrl+Shift+S`. `Hide sessions` and `Show sessions` in the command palette (`Cmd+K`) do the same. On macOS they are also in the View menu.
+- On macOS `Ctrl+Cmd+S` also hides and shows the sidebar. On Windows and Linux the key is `Ctrl+Shift+S`. `Hide sessions` and `Show sessions` in the command palette (`Cmd+K`) do the same. On macOS they are also in the View menu. While the sidebar holds a pane, they say `Hide sidebar` and `Show sidebar`.
 - Right click a row to open its menu. It has `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each item acts on the session of that row. `Rename session…` and `Edit connection…` first bring that session to the front.
 
 `Sessions` is the heading of the list. It shows how many sessions are open, such as `Sessions 3`. When there are more rows than fit, they scroll under the heading. A thin line shows under the heading when a row has scrolled under it.
@@ -867,12 +867,27 @@ The panel holds your panes. At first it is on the right side of the window. At f
 - In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
 - To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
 - To change the width of the panel, drag its inner edge, the edge next to the terminal. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
-- To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`.
+- To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`. When that pane is in the sidebar and the sidebar is hidden, the sidebar shows again.
 - To put the panel on the left side, go to Settings under Layout, then Panel, and set `Side` to `Left`. The sessions sidebar moves to the right side. The panel buttons in the title band move to the left end with the panel, and the sessions button moves to the right end. On macOS the window buttons stay at the top left. On Windows and Linux, minimize, maximize, and close stay at the top right. Each profile keeps its own side.
 
-To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects. The panel keeps its width, and it stays shown or hidden.
+The sidebar on the other side of the window can hold panes too. With one session, the sidebar shows while it holds a pane. With two or more sessions, its panes go below the list of sessions.
 
-Settings under Characters draws the panel of each character under Panel layout. So you can see how each one is arranged.
+- To move a pane, drag its header onto a different pane, in the panel or in the sidebar. An accent shows the half of that pane where it goes, with a line along that edge. Release the pointer to put the pane there. Press `Escape` to stop.
+- In the menu of a pane in the panel, `Move to sidebar` puts the pane at the bottom of the sidebar. In the sidebar, `Move to panel` puts it at the bottom of the panel.
+- To add a pane to the sidebar, click `Add a pane` and point at `Add to the sidebar` at the bottom. Then choose the pane.
+- Each pane shows one time across the panel and the sidebar. Up to four Chat panes show in the two together. The writing card and your vitals stay in the panel.
+- The sidebar button at the top left hides and shows the full sidebar. While the sidebar holds a pane, the button, the View menu, and the command palette say `Hide sidebar` and `Show sidebar`.
+- When the window is too narrow for the sidebar, its panes hide until the window gets wider. With two or more sessions, the sidebar button then slides in the list of sessions alone.
+
+Vosh keeps the panes of the sidebar for each character. The width of the sidebar is the same for all characters.
+
+To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects, and the sidebar loses its panes. The panel keeps its width, and it stays shown or hidden.
+
+Settings under Characters draws the sidebar and the panel of each character under Panel layout, on the sides the window shows them. You can arrange a character there without playing it.
+
+- Drag a pane in the drawing onto a different pane, or into an empty box. The accent shows where it goes, as in the window.
+- Or press `Tab` to get to a pane. `Up` and `Down` move it past the pane before or after it. `Left` and `Right` move it to the sidebar or the panel.
+- Each move saves to that character at once. When you play the character now, the window changes too.
 
 To open Settings, click the gear at the right end of the title band, after the panel button. You can also press `Cmd+,` on macOS or `Ctrl+,` on Windows and Linux. `Open settings` in the command palette and the `Settings` list in the right click menu of the terminal also open it.
 

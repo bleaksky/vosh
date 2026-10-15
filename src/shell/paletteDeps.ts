@@ -7,8 +7,8 @@ import { openHelpWindow, openSettingsWindow } from '../ipc/windows';
 import type { WritingKind } from '../ipc/writing';
 import { openSettingsTab } from '../lib/settingsLink';
 import { togglePane } from '../panel/paneActions';
-import { isOfferedPaneType, PANE_TYPES } from '../panel/paneLayout';
-import { togglePanelOpen } from '../panel/panelLayoutStore';
+import { isOfferedPaneType, leafIdFor, PANE_TYPES, paneRef } from '../panel/paneLayout';
+import { getPanelLayout, togglePanelOpen } from '../panel/panelLayoutStore';
 import { offeredPaneTypes } from '../panel/paneTypes';
 import type { CardRequestView } from '../prompt/cardRules';
 import type { usePromptShow } from '../prompt/showState';
@@ -42,7 +42,12 @@ interface PaletteState {
   closing: Pick<Closing, 'closeSession'>;
   sessions: SessionRow[];
   selected: number;
-  sessionsSidebar: Pick<SessionsSidebar, 'pressed' | 'toggle'>;
+  sessionsSidebar: Pick<
+    SessionsSidebar,
+    'shown' | 'pressed' | 'toggle' | 'toggleable' | 'holdsPanes' | 'fits'
+  >;
+  /** The panes the sidebar shows now. */
+  sidebarPanes: string[];
   inputRef: RefObject<InputHandle | null>;
   promptShow: ReturnType<typeof usePromptShow>;
   openPromptCard: (view: CardRequestView) => void;
@@ -68,6 +73,7 @@ export function paletteDepsFor({
   sessions,
   selected,
   sessionsSidebar,
+  sidebarPanes,
   inputRef,
   promptShow,
   openPromptCard,
@@ -92,10 +98,17 @@ export function paletteDepsFor({
     // The staff queues row waits for Imm.Queues, like Add a pane, but a
     // pane the tree already shows stays listed so you can hide it.
     paneTypes: PANE_TYPES.filter(isOfferedPaneType).filter(
-      (t) => offeredPaneTypes().includes(t) || shownPanes.includes(t),
+      (t) => offeredPaneTypes().includes(t) || shownPanes.includes(t) || sidebarPanes.includes(t),
     ),
-    paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
-    togglePane,
+    paneVisible: (pane) => (panelOpen && shownPanes.includes(pane)) || sidebarPanes.includes(pane),
+    // A pane in the hidden sidebar comes back with the sidebar while the
+    // window has room for it, and moves to the panel when it has not.
+    togglePane: (pane) => {
+      const layout = getPanelLayout();
+      const aside = layout !== null && leafIdFor(layout.sidebar, paneRef(pane)) !== null;
+      if (aside && !sessionsSidebar.shown && sessionsSidebar.fits) sessionsSidebar.toggle();
+      else togglePane(pane, sessionsSidebar.shown);
+    },
     openHelp: openHelpWindow,
     openGetStarted,
     openFind,
@@ -112,6 +125,8 @@ export function paletteDepsFor({
       goTo,
       step: (step) => goTo(sessionStep(step)),
       toggleShown: sessionsSidebar.toggle,
+      sidebar: sessionsSidebar.holdsPanes,
+      toggleable: sessionsSidebar.toggleable,
     },
     snoops: {
       tabs: getSnoops().tabs,

@@ -297,6 +297,8 @@ describe('ChatPane', () => {
     panel.layout = {
       version: 1,
       panel_open: true,
+      panel_width: null,
+      sidebar: { id: 'sidebar', split: 'column', weight: 1, children: [] },
       root: sanitize({
         split: 'column',
         children: [
@@ -304,7 +306,7 @@ describe('ChatPane', () => {
           { id: 'chat-2', pane: 'chat', props: second },
         ],
       }),
-    } as PaneLayout;
+    };
   };
 
   it('names its filter on the select and says what will show here', () => {

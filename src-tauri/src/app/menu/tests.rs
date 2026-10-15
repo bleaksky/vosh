@@ -166,6 +166,22 @@ fn the_session_rows_dim_with_one_session() {
 }
 
 #[test]
+fn the_sidebar_row_names_the_sidebar_and_takes_a_click_for_its_panes() {
+    let mut state = menu_state();
+    assert!(!sidebar_toggles(&state));
+    assert_eq!(sidebar_label(&state), "Show sessions");
+    // One session and a sidebar that holds a pane in a window with room.
+    state.sidebar_holds_panes = true;
+    state.sidebar_toggleable = true;
+    assert!(sidebar_toggles(&state));
+    assert!(!between_sessions(&state));
+    assert_eq!(sidebar_label(&state), "Show sidebar");
+    state.sidebar_toggleable = false;
+    state.sessions = 2;
+    assert!(sidebar_toggles(&state));
+}
+
+#[test]
 fn quit_goes_through_the_exit_request_on_the_system_shortcut() {
     assert_eq!(route("quit"), Route::Quit);
     let parsed = muda::accelerator::Accelerator::from_str(QUIT_ACCELERATOR).unwrap();
@@ -304,6 +320,8 @@ fn menu_state() -> MenuState {
         theme: "nord".to_string(),
         sessions: 1,
         sessions_shown: false,
+        sidebar_holds_panes: false,
+        sidebar_toggleable: false,
         snoops: 0,
     }
 }
@@ -340,6 +358,8 @@ fn a_page_without_snoops_reads_none() {
     }"#;
     let state: MenuState = serde_json::from_str(json).unwrap();
     assert_eq!(state.snoops, 0);
+    assert!(!state.sidebar_holds_panes);
+    assert!(!state.sidebar_toggleable);
 }
 
 #[test]
@@ -366,6 +386,8 @@ fn state_reads_camel_case() {
         "theme": "nord",
         "sessions": 2,
         "sessionsShown": true,
+        "sidebarHoldsPanes": true,
+        "sidebarToggleable": true,
         "snoops": 3
     }"#;
     let state: MenuState = serde_json::from_str(json).unwrap();
@@ -377,5 +399,7 @@ fn state_reads_camel_case() {
     assert_eq!(state.themes[0].label, "Nord");
     assert_eq!(state.sessions, 2);
     assert!(state.sessions_shown);
+    assert!(state.sidebar_holds_panes);
+    assert!(state.sidebar_toggleable);
     assert_eq!(state.snoops, 3);
 }

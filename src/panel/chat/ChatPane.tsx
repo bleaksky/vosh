@@ -14,6 +14,7 @@ import { themeTokens, type XtermPalette } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
 import { MenuItem, MenuSeparator, MenuSurface } from '../../ui/MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from '../paneActions';
+import { bothTrees } from '../paneLayout';
 import { usePanelLayout } from '../panelLayoutStore';
 import { PaneHeader } from '../PaneHeader';
 import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
@@ -48,7 +49,9 @@ import {
 
 export function ChatPane() {
   const leaf = usePaneLeaf();
-  const tree = usePanelLayout()?.root ?? null;
+  const layout = usePanelLayout();
+  // Every Chat pane, in the panel and the sidebar, splits the channels.
+  const tree = useMemo(() => (layout ? bothTrees(layout) : null), [layout]);
   const filter: ChatFilter = leaf ? chatFilterIn(tree, leaf) : { kind: 'all' };
   const label = chatFilterLabel(filter);
   const owned = useMemo(() => ownPaneChannels(tree, leaf?.id ?? ''), [tree, leaf?.id]);

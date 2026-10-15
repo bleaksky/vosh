@@ -35,7 +35,7 @@ export interface GetStartedFacts {
   /** The presets the profile has on, as its file stores them, or null
    *  until Vosh reads them. */
   enabledPresets: readonly string[] | null;
-  /** The panes the panel holds. */
+  /** The panes the panel and the sidebar hold. */
   panes: readonly string[];
   /** How many affects the profile tracks. */
   tracked: number;
@@ -107,7 +107,8 @@ export function suggestionsOn(host: string, facts: GetStartedFacts): number {
   return suggestedPresets(host).filter((p) => on.has(p.id)).length;
 }
 
-/** The Chat and Group panes the panel holds, in that order. */
+/** The Chat and Group panes the panel or the sidebar holds, in that
+ *  order. */
 function socialPanes(facts: GetStartedFacts): string[] {
   return ['Chat', 'Group'].filter((pane) => facts.panes.includes(pane.toLowerCase()));
 }
