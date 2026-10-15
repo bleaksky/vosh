@@ -883,7 +883,11 @@ Vosh keeps the panes of the sidebar for each character. The width of the sidebar
 
 To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects, and the sidebar loses its panes. The panel keeps its width, and it stays shown or hidden.
 
-Settings under Characters draws the panel of each character under Panel layout. So you can see how each one is arranged.
+Settings under Characters draws the sidebar and the panel of each character under Panel layout, on the sides the window shows them. You can arrange a character there without playing it.
+
+- Drag a pane in the drawing onto a different pane, or into an empty box. The accent shows where it goes, as in the window.
+- Or press `Tab` to get to a pane. `Up` and `Down` move it past the pane before or after it. `Left` and `Right` move it to the sidebar or the panel.
+- Each move saves to that character at once. When you play the character now, the window changes too.
 
 To open Settings, click the gear at the right end of the title band, after the panel button. You can also press `Cmd+,` on macOS or `Ctrl+,` on Windows and Linux. `Open settings` in the command palette and the `Settings` list in the right click menu of the terminal also open it.
 
