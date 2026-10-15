@@ -32,6 +32,12 @@ vi.mock('../stores/toasts', () => ({
   pushToast: (input: ToastInput) => state.toasts.push(input),
 }));
 vi.mock('../stores/gmcp/immStore', () => ({ getImmState: () => ({ received: false }) }));
+// The profile in front, which Close pane's Undo checks.
+const front = vi.hoisted(() => ({ profile: 'Tolliver' as string | null }));
+vi.mock('../stores/session/sessionsStore', async (actual) => ({
+  ...(await actual<typeof import('../stores/session/sessionsStore')>()),
+  profileInFront: () => front.profile,
+}));
 vi.mock('../stores/session/luaPanesStore', () => ({
   getLuaPanes: () =>
     new Map([
@@ -214,5 +220,16 @@ describe('Close pane', () => {
     expect(toast?.message).toBe('Closed Affects');
     toast?.action?.run();
     expect(trees()).toEqual([['map', 'affects'], ['stats']]);
+  });
+
+  it('puts nothing back once another profile is in front', () => {
+    state.toasts = [];
+    front.profile = 'Tolliver';
+    layBoth(['map', 'affects'], []);
+    closeWithUndo('affects', 'Affects');
+    front.profile = 'Maren';
+    state.toasts.at(-1)?.action?.run();
+    expect(trees()).toEqual([['map'], []]);
+    front.profile = 'Tolliver';
   });
 });

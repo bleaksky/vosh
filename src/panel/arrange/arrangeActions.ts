@@ -38,20 +38,25 @@ export async function finishArranging(): Promise<void> {
     JSON.stringify([a.entered.root, a.entered.sidebar]);
   if (!changed) return;
   const owner = profileDisplayName(a.profile);
+  // The window shows the draft only while its profile is still in front.
+  const shown = () => profileInFront() === a.profile;
   // A Chat pane you left alone shows All, as closing the others does.
   const next = loneChatToAll(a.entered, {
     ...a.entered,
     root: a.draft.root,
     sidebar: a.draft.sidebar,
   });
-  acceptPaneLayout(next);
+  if (shown()) acceptPaneLayout(next);
   try {
-    acceptPaneLayout(await setProfileTrees(a.profile, next, true));
-    if (!a.entered.panel_open && next.root.children.length > 0) setPanelOpen(true);
+    const saved = await setProfileTrees(a.profile, next, true);
+    if (shown()) {
+      acceptPaneLayout(saved);
+      if (!a.entered.panel_open && next.root.children.length > 0) setPanelOpen(true);
+    }
     pushToast({ kind: 'success', message: `Saved the layout for ${owner}` });
   } catch (e) {
     console.error('[arrange] save failed', e);
-    acceptPaneLayout(a.entered);
+    if (shown()) acceptPaneLayout(a.entered);
     pushToast({ kind: 'error', message: `Vosh could not save the layout for ${owner}` });
   }
 }

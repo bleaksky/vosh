@@ -224,6 +224,8 @@ export function movable(leaf: PaneLeaf): boolean {
  *  it, the side it left or the shelf, and on the shelf the entry it had
  *  if you put it away, which a pane the session offers has not. */
 interface Lifted {
+  /** The leaf as the draft or the shelf holds it, its fold with it. */
+  leaf: PaneLeaf;
   base: PaneLayout;
   away: PutAway[];
   from: PaneTree | 'shelf';
@@ -233,22 +235,32 @@ interface Lifted {
 /** Take `leaf` out of the draft or off the shelf, ready to land. */
 function lift(a: Arranging, leaf: PaneLeaf): Lifted {
   const lifted = liftLeaf(a.draft, leaf.id);
-  if (lifted) return { base: lifted.layout, away: a.putAway, from: lifted.from, home: null };
+  if (lifted) {
+    return {
+      leaf: lifted.leaf,
+      base: lifted.layout,
+      away: a.putAway,
+      from: lifted.from,
+      home: null,
+    };
+  }
+  const home = a.putAway.find((p) => p.leaf.id === leaf.id) ?? null;
   return {
+    leaf: home?.leaf ?? leaf,
     base: a.draft,
     away: a.putAway.filter((p) => p.leaf.id !== leaf.id),
     from: 'shelf',
-    home: a.putAway.find((p) => p.leaf.id === leaf.id) ?? null,
+    home,
   };
 }
 
-/** Where `leaf`, lifted as `l` says, would be with `target`: the layout
- *  and the shelf. */
+/** Where the leaf `l` lifted would be with `target`: the layout and the
+ *  shelf. */
 export function landed(
   l: Lifted,
-  leaf: PaneLeaf,
   target: ArrangeTarget,
 ): { layout: PaneLayout; putAway: PutAway[] } {
+  const { leaf } = l;
   if (target.kind === 'shelf') {
     // A pane the session offered and you never placed needs no tile of
     // its own, since the shelf offers it again.
@@ -269,7 +281,7 @@ export function moveTo(leaf: PaneLeaf, target: ArrangeTarget): void {
   if (!a || !movable(leaf)) return;
   const lifted = lift(a, leaf);
   if (lifted.from === 'shelf' && target.kind === 'shelf') return;
-  const next = landed(lifted, leaf, target);
+  const next = landed(lifted, target);
   commit(a, next.layout, next.putAway);
 }
 
@@ -288,12 +300,23 @@ export function putBack(item: ShelfItem): void {
 }
 
 /** The side a key moves a pane to, for the panel on `panelSide`: the
- *  arrow toward the other column. */
-function across(from: PaneTree, key: string, panelSide: 'left' | 'right'): PaneTree | null {
+ *  arrow toward the other column, never to a sidebar the window has no
+ *  room to show. */
+function across(
+  from: PaneTree,
+  key: string,
+  panelSide: 'left' | 'right',
+  sidebarShows: boolean,
+): PaneTree | null {
   const leftTree: PaneTree = panelSide === 'left' ? 'panel' : 'sidebar';
-  if (key === 'ArrowLeft' && from !== leftTree) return leftTree;
-  if (key === 'ArrowRight' && from === leftTree) return leftTree === 'panel' ? 'sidebar' : 'panel';
-  return null;
+  const rightTree: PaneTree = leftTree === 'panel' ? 'sidebar' : 'panel';
+  const to =
+    key === 'ArrowLeft' && from !== leftTree
+      ? leftTree
+      : key === 'ArrowRight' && from === leftTree
+        ? rightTree
+        : null;
+  return to === 'sidebar' && !sidebarShows ? null : to;
 }
 
 /** What a key does to the tile of `leaf`: Up and Down move it past the
@@ -306,6 +329,7 @@ export function keyTarget(
   leaf: PaneLeaf,
   key: string,
   panelSide: 'left' | 'right',
+  sidebarShows = true,
 ): ArrangeTarget | 'back' | null {
   const lifted = liftLeaf(a.draft, leaf.id);
   if (!lifted) return key === 'Enter' || key === ' ' ? 'back' : null;
@@ -319,7 +343,7 @@ export function keyTarget(
   if (key === 'ArrowDown' && i < order.length - 1) {
     return { kind: 'pane', drop: { tree: from, at: order[i + 1], edge: 'after' } };
   }
-  const to = across(from, key, panelSide);
+  const to = across(from, key, panelSide, sidebarShows);
   if (to) return { kind: 'pane', drop: { tree: to, at: null, edge: 'after' } };
   return null;
 }
@@ -359,12 +383,12 @@ export function dragTo(x: number, y: number, target: ArrangeTarget | null): void
 export function endDrag(drop: boolean): void {
   const a = store.get();
   if (!a?.drag) return;
-  const { leaf, lifted, target } = a.drag;
+  const { lifted, target } = a.drag;
   if (!drop || !target || (lifted.from === 'shelf' && target.kind === 'shelf')) {
     store.set({ ...a, drag: null });
     return;
   }
-  const next = landed(lifted, leaf, target);
+  const next = landed(lifted, target);
   commit(a, next.layout, next.putAway);
 }
 
@@ -381,6 +405,6 @@ export function arrangeView(a: Arranging): {
   if (!d) return { layout: a.draft, putAway: a.putAway, slot: null };
   if (!d.measured) return { layout: d.lifted.base, putAway: d.lifted.away, slot: null };
   if (!d.target) return { layout: a.draft, putAway: a.putAway, slot: d.leaf.id };
-  const next = landed(d.lifted, d.leaf, d.target);
+  const next = landed(d.lifted, d.target);
   return { ...next, slot: d.leaf.id };
 }

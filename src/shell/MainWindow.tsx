@@ -48,6 +48,7 @@ import {
   rename,
   select,
   useOpened,
+  useProfileOf,
   useSelected,
   useSessions,
 } from '../stores/session/sessionsStore';
@@ -341,11 +342,12 @@ function MainWindow() {
       readerOn,
     });
 
-  // Another session in front may play another profile, so arranging
-  // stops without saving.
+  // Another session in front, or another profile in this one, has panes
+  // of its own, so arranging stops without saving.
+  const profileHere = useProfileOf(selected);
   useEffect(() => {
     cancelArranging();
-  }, [selected]);
+  }, [selected, profileHere]);
 
   // Show me arranges the panes or opens the terminal menu here
   // (showMe.ts).

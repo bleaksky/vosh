@@ -35,6 +35,7 @@ import {
   paneMinH,
   paneWidth,
   unfolded,
+  weightsAfterDrag,
 } from './paneGeometry';
 
 const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -622,6 +623,16 @@ describe('a folded pane', () => {
     const row = layoutPanes(tree(['map'], 'row'), 360, 600).leaves.map(({ rect }) => rect.w);
     expect(row).toEqual([119, 120, 119]);
     expect(minExtent(tree(['map']).children[0], 'column', false, {}, 16)).toBe(37);
+  });
+
+  it('keeps its share when you drag the line between the open panes', () => {
+    const root = tree(['chat']);
+    // Map and Affects share 570 px evenly, and Chat holds a third.
+    const weights = weightsAfterDrag(root, [370, 200, 28]);
+    expect(weights[0] / weights[1]).toBeCloseTo(370 / 200);
+    expect(weights[2] / (weights[0] + weights[1])).toBeCloseTo(
+      root.children[2].weight / (root.children[0].weight + root.children[1].weight),
+    );
   });
 
   it('opens again for arrange mode, which lays every pane out open', () => {

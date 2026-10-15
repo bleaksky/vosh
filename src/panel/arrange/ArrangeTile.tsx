@@ -44,7 +44,9 @@ export function ArrangeTile({
     if (e.target !== e.currentTarget) return;
     const a = getArranging();
     if (!a) return;
-    const target = keyTarget(a, leaf, e.key, panelSide);
+    // The sidebar shows its panes only while the window has room for it.
+    const sidebarShows = document.querySelector('[data-tree="sidebar"]') !== null;
+    const target = keyTarget(a, leaf, e.key, panelSide, sidebarShows);
     if (!target || target === 'back') return;
     e.preventDefault();
     flushSync(() => moveTo(leaf, target));

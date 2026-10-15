@@ -10,6 +10,7 @@ import {
 import {
   PANE_TYPES,
   bothTrees,
+  findNode,
   isPaneType,
   leafKey,
   setWeights,
@@ -29,7 +30,14 @@ import { ImmPane } from './imm/ImmPane';
 import { LuaPane } from './lua/LuaPane';
 import { MapPane } from './map/MapPane';
 import { PaneLeafContext } from './paneActions';
-import { dragSizes, layoutPanes, paneMinH, unfolded, type HandleBox } from './paneGeometry';
+import {
+  dragSizes,
+  layoutPanes,
+  paneMinH,
+  unfolded,
+  weightsAfterDrag,
+  type HandleBox,
+} from './paneGeometry';
 import { getPanelLayout, setTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { WritingPane } from '../writing/WritingPane';
@@ -326,14 +334,10 @@ function PaneHandle({ handle, which }: { handle: HandleBox; which: PaneTree }) {
   const apply = (sizes: number[]) => {
     const layout = getPanelLayout();
     if (!layout) return;
-    setTree(
-      which,
-      setWeights(
-        treeIn(layout, which),
-        handle.parentId,
-        sizes.map((s) => Math.max(1, s)),
-      ),
-    );
+    const tree = treeIn(layout, which);
+    const parent = findNode(tree, handle.parentId);
+    if (!parent) return;
+    setTree(which, setWeights(tree, handle.parentId, weightsAfterDrag(parent, sizes)));
   };
 
   const coord = (e: PointerEvent) => (vertical ? e.clientY : e.clientX);

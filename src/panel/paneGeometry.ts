@@ -400,6 +400,21 @@ export function foldedHeight(node: PaneNode, size: number = PANE_TEXT_PX): numbe
     : sum(heights) + HANDLE_PX * (heights.length - 1);
 }
 
+/** The weights a drag of the lines between `parent`'s children leaves,
+ *  from their new pixel `sizes`. An open child takes its size. A folded
+ *  one keeps its share beside the open ones, since its size is only its
+ *  header, so it opens again as large as it was. */
+export function weightsAfterDrag(parent: PaneNode, sizes: readonly number[]): number[] {
+  if (isLeaf(parent) || parent.children.length !== sizes.length)
+    return sizes.map((x) => Math.max(1, x));
+  const folded = parent.children.map((c) => foldedHeight(c) !== null);
+  if (!folded.some(Boolean)) return sizes.map((x) => Math.max(1, x));
+  const openSizes = sum(sizes.filter((_, i) => !folded[i]));
+  const openWeights = sum(parent.children.filter((_, i) => !folded[i]).map((c) => c.weight));
+  const scale = openWeights > 0 ? openSizes / openWeights : 1;
+  return parent.children.map((c, i) => Math.max(1, folded[i] ? c.weight * scale : sizes[i]));
+}
+
 /** The tree with every pane open, as arrange mode lays it out. */
 export function unfolded<T extends PaneNode>(node: T): T {
   if (isLeaf(node)) {

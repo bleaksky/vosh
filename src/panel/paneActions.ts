@@ -30,6 +30,7 @@ import {
 import { getPanelLayout, updatePanelLayout } from './panelLayoutStore';
 import { chatFilterOf, chatFilterProps, chatLeaves, checkedChannels } from './chat/chatFilter';
 import { pushToast } from '../stores/toasts';
+import { profileInFront } from '../stores/session/sessionsStore';
 
 // What a pane's menu and the palette can do to the panel and the
 // sidebar, outside arrange mode. Each action reads the store's current
@@ -137,6 +138,7 @@ export function loneChatToAll(before: PaneLayout, next: PaneLayout): PaneLayout 
  *  toast that names it `label`. */
 export function closeWithUndo(id: string, label: string): void {
   const before = getPanelLayout();
+  const profile = profileInFront();
   closeHere(id);
   if (!before) return;
   pushToast({
@@ -144,7 +146,12 @@ export function closeWithUndo(id: string, label: string): void {
     message: `Closed ${label}`,
     action: {
       label: 'Undo',
-      run: () => updatePanelLayout((l) => ({ ...l, root: before.root, sidebar: before.sidebar })),
+      // Only while the same profile is in front, so its panes never land
+      // in another's.
+      run: () => {
+        if (profileInFront() !== profile) return;
+        updatePanelLayout((l) => ({ ...l, root: before.root, sidebar: before.sidebar }));
+      },
     },
   });
 }

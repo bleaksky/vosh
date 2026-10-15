@@ -227,3 +227,23 @@ describe('a Chat pane from the shelf', () => {
     expect(view.slot).toBe('map');
   });
 });
+
+describe('a folded pane in arrange mode', () => {
+  it('stays folded where you move it', () => {
+    const layout = laidOut();
+    layout.root.children[0] = { ...leaf('map'), folded: true };
+    startArranging(layout, 'Tolliver');
+    // The tile holds the leaf open, as arrange mode lays it out.
+    moveTo(leaf('map'), { kind: 'pane', drop: { tree: 'sidebar', at: null, edge: 'after' } });
+    expect(arrangeView(getArranging()!).layout.sidebar.children.at(-1)).toMatchObject({
+      id: 'map',
+      folded: true,
+    });
+  });
+});
+
+describe('the arrow toward the sidebar', () => {
+  it('moves nothing while the window has no room to show the sidebar', () => {
+    expect(keyTarget({ draft: laidOut() }, leaf('map'), 'ArrowLeft', 'right', false)).toBeNull();
+  });
+});
