@@ -1,20 +1,17 @@
 import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import tauriConf from '../../src-tauri/tauri.conf.json';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/shortcuts';
-import type { LuaPane } from '../ipc/panes';
-import type { PluginRow } from '../ipc/scripts';
-import { PANEL_WIDTH_MIN, panelWidthFloor, type PaneSplit } from '../panel/paneLayout';
+import { PANEL_WIDTH_MIN, panelWidthFloor } from '../panel/paneLayout';
 import type { Connection } from '../stores/session/useConnection';
 import frameCss from '../styles/frame.css?raw';
 import { FakeDocument, FakeElement, findAll } from '../test/fakeDom';
-import { ADD_PANE_MENU_EVENT } from '../lib/appMenu';
 import { TitleBand } from './TitleBand';
 
-// The title band's buttons at the right end: Add a pane while the panel
-// shows, Search commands, the panel toggle, and Settings, then the
+// The title band's buttons at the right end: Arrange panes while the
+// panel shows, Search commands, the panel toggle, and Settings, then the
 // window controls on Windows and Linux. Windows and Linux have no menu
 // bar, so the gear is the button that shows you where Settings lives.
 
@@ -43,39 +40,11 @@ vi.mock('@tauri-apps/api/window', () => ({
   }),
 }));
 
-// The staff queues store behind Add a pane reaches the Tauri bridge
-// when it starts.
+// The stores behind the session button reach the Tauri bridge when
+// they start.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
-}));
-// The Lua panes the session in front holds and its plugin rows, none
-// unless a test sets them.
-const lua = vi.hoisted(() => ({
-  panes: new Map<string, unknown>(),
-  rows: null as unknown[] | null,
-  /** How many draws read the Lua pane store. */
-  reads: 0,
-}));
-vi.mock('../stores/session/luaPanesStore', () => ({
-  useLuaPanes: () => {
-    lua.reads += 1;
-    return lua.panes;
-  },
-  getLuaPanes: () => lua.panes,
-}));
-vi.mock('../stores/session/pluginRowsStore', () => ({
-  usePluginRows: () => lua.rows,
-  getPluginRows: () => lua.rows,
-}));
-// Add a pane draws its rows in place, with no page to portal into.
-vi.mock('./ShellMenu', async (actual) => ({
-  ...(await actual<typeof import('./ShellMenu')>()),
-  ShellMenu: ({ label, children }: { label: string; children: ReactNode }) => (
-    <div role="menu" aria-label={label}>
-      {children}
-    </div>
-  ),
 }));
 
 const connection: Connection = {
@@ -96,8 +65,8 @@ const props = {
   onTogglePanel: () => undefined,
   onTogglePalette: () => undefined,
   onOpenSettings: () => undefined,
-  paneTree: null,
-  onAddPane: () => undefined,
+  arranging: false,
+  onArrange: () => undefined,
   onMenuClosed: () => undefined,
 };
 
@@ -138,7 +107,7 @@ describe('the Settings button in the title band', () => {
     const labels = (html: string) => buttons(html).map((b) => attr(b, 'aria-label'));
     // The session button comes first, centered over the terminal.
     expect(labels(draw('macos', true)).slice(1)).toEqual([
-      'Add a pane',
+      'Arrange panes',
       'Search commands',
       'Hide panel',
       'Settings',
@@ -150,7 +119,7 @@ describe('the Settings button in the title band', () => {
     ]);
     for (const platform of ['windows', 'linux'] as const) {
       expect(labels(draw(platform, true)).slice(1), platform).toEqual([
-        'Add a pane',
+        'Arrange panes',
         'Search commands',
         'Hide panel',
         'Settings',
@@ -415,279 +384,32 @@ describe('pressing the Settings button', () => {
     expect(doc.activeElement).toBe(field);
   });
 
-  it('opens Add a pane when Show me asks for it', async () => {
-    await mount();
-    const add = () => {
-      const [button] = findAll(doc.body, (el) => el.getAttribute('aria-label') === 'Add a pane');
-      if (!button) throw new Error('no Add a pane button');
-      return button;
-    };
-    expect(add().getAttribute('aria-expanded')).toBe('false');
-    expect(heard.get(ADD_PANE_MENU_EVENT)?.size).toBe(1);
-    await act(async () => {
-      for (const fn of heard.get(ADD_PANE_MENU_EVENT) ?? []) fn(new Event(ADD_PANE_MENU_EVENT));
-    });
-    expect(add().getAttribute('aria-expanded')).toBe('true');
-    const menus = findAll(doc.body, (el) => el.getAttribute('role') === 'menu');
-    expect(menus.map((el) => el.getAttribute('aria-label'))).toEqual(['Add a pane']);
-  });
-});
-
-// ── Add a pane ───────────────────────────────────────────────────────
-
-const pane = (plugin: string, id: string, title: string): LuaPane => ({
-  plugin,
-  id,
-  title,
-  meta: '',
-  blocks: [],
-});
-
-const row = (name: string, on: boolean, stopped: PluginRow['stopped'] = null): PluginRow => ({
-  name,
-  version: '1.0',
-  author: '',
-  description: '',
-  entry: 'init.lua',
-  on,
-  stopped,
-  loaded_ms: null,
-  misnamed: false,
-});
-
-/** A panel that shows Affects and Chat, so Map, Group and a second
- *  Chat are left. */
-const tree = (...extra: PaneSplit['children']): PaneSplit => ({
-  id: 'root',
-  split: 'column',
-  weight: 1,
-  children: [
-    { id: 'affects', pane: 'affects', weight: 1, props: {} },
-    { id: 'chat', pane: 'chat', weight: 1, props: {} },
-    ...extra,
-  ],
-});
-
-const allShown = (): PaneSplit =>
-  tree(
-    { id: 'map', pane: 'map', weight: 1, props: {} },
-    { id: 'group', pane: 'group', weight: 1, props: {} },
-    { id: 'stats', pane: 'stats', weight: 1, props: {} },
-    { id: 'chat-2', pane: 'chat', weight: 1, props: {} },
-    { id: 'chat-3', pane: 'chat', weight: 1, props: {} },
-    { id: 'chat-4', pane: 'chat', weight: 1, props: {} },
-  );
-
-describe('Add a pane', () => {
-  const cleanups = useStandInDom();
-
-  // A test before this describe may have opened the menu and read.
-  beforeEach(() => {
-    lua.reads = 0;
-  });
-
-  afterEach(() => {
-    lua.panes = new Map();
-    lua.rows = null;
-    lua.reads = 0;
-  });
-
-  /** Weather and Worth, held in the order the plugins drew them. */
-  function holdPanes(weather = true, worth = true) {
-    lua.panes = new Map([
-      ['["worth_pane","worth"]', pane('worth_pane', 'worth', 'Worth')],
-      ['["weather_pane","weather"]', pane('weather_pane', 'weather', 'Weather')],
-    ]);
-    lua.rows = [row('weather_pane', weather), row('worth_pane', worth)];
-  }
-
-  async function open(paneTree: PaneSplit, sidebar = false) {
-    const onAddPane = vi.fn();
-    const onAddPaneToSidebar = sidebar ? vi.fn() : undefined;
+  it('turns arrange mode on, and reads pressed while you arrange', async () => {
+    const onArrange = vi.fn();
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     const root = createRoot(container as unknown as HTMLElement);
-    await act(async () => {
-      root.render(
-        createElement(TitleBand, {
-          ...props,
-          panelOpen: true,
-          paneTree,
-          onAddPane,
-          onAddPaneToSidebar,
-        }),
-      );
-    });
+    const draw = (arranging: boolean) =>
+      act(async () => {
+        root.render(createElement(TitleBand, { ...props, panelOpen: true, arranging, onArrange }));
+      });
     cleanups.push(async () => {
       await act(async () => root.unmount());
       doc.body.removeChild(container);
     });
-    const [plus] = findAll(container, (el) => el.getAttribute('aria-label') === 'Add a pane');
-    if (!plus) throw new Error('no Add a pane button');
-    await act(async () => on(plus).onClick());
-    const [menu] = findAll(container, (el) => el.getAttribute('role') === 'menu');
-    if (!menu) throw new Error('no Add a pane menu');
-    /** Each row's text, with a rule as `---` and the plugin after a
-     *  bar, and the note when the menu has no rows. */
-    const lines = findAll(
-      menu,
-      (el) =>
-        ['menuitem', 'separator'].includes(el.getAttribute('role') ?? '') ||
-        el.getAttribute('class') === 'menu-note',
-    ).map((el) => {
-      if (el.getAttribute('role') === 'separator') return '---';
-      if (el.getAttribute('class') === 'menu-note') return el.textContent;
-      const kbd = findAll(el, (k) => k.getAttribute('class') === 'menu-hint')[0];
-      const name = findAll(el, (k) => k.getAttribute('class') === 'menu-label')[0];
-      return kbd ? `${name.textContent} | ${kbd.textContent}` : el.textContent;
-    });
-    const pick = (text: string) =>
-      act(async () => {
-        const item = findAll(
-          menu,
-          (el) => el.getAttribute('role') === 'menuitem' && el.textContent.startsWith(text),
-        )[0];
-        on(item).onClick();
-      });
-    return { lines, pick, onAddPane, onAddPaneToSidebar, menu };
-  }
-
-  it('ends on Add to the sidebar, which lists the same panes and adds there', async () => {
-    holdPanes();
-    const m = await open(tree(), true);
-    expect(m.lines.slice(-3)).toEqual(['Worth | worth_pane', '---', 'Add to the sidebar']);
-    const [row] = findAll(
-      m.menu,
-      (el) => el.getAttribute('role') === 'menuitem' && el.textContent === 'Add to the sidebar',
-    );
-    const box = { left: 0, top: 0, right: 200, bottom: 24, width: 200, height: 24 };
-    Object.assign(row, { getBoundingClientRect: () => box });
-    // The pointer on the row opens the list beside it, with no other
-    // submenu open for it to aim at.
-    Object.assign(doc, { querySelectorAll: () => [] });
-    cleanups.push(async () => void Reflect.deleteProperty(doc, 'querySelectorAll'));
-    await act(async () => on(row).onPointerEnter({ currentTarget: row }));
-    expect(row.getAttribute('aria-expanded')).toBe('true');
-    const [sub] = findAll(
-      doc.body,
-      (el) =>
-        el.getAttribute('role') === 'menu' &&
-        el.getAttribute('aria-label') === 'Add to the sidebar',
-    );
-    if (!sub) throw new Error('no Add to the sidebar menu');
-    const names = findAll(sub, (el) => el.getAttribute('role') === 'menuitem').map(
-      (el) => findAll(el, (k) => k.getAttribute('class') === 'menu-label')[0].textContent,
-    );
-    expect(names).toEqual(['Map', 'Group', 'Stats', 'Chat', 'Weather', 'Worth']);
-    const [stats] = findAll(
-      sub,
-      (el) => el.getAttribute('role') === 'menuitem' && el.textContent.startsWith('Stats'),
-    );
-    await act(async () => on(stats).onClick());
-    expect(m.onAddPaneToSidebar).toHaveBeenCalledWith({ pane: 'stats', props: {} });
-    expect(m.onAddPane).not.toHaveBeenCalled();
-  });
-
-  it('has no Add to the sidebar without somewhere to add, or with every pane showing', async () => {
-    expect((await open(tree())).lines).not.toContain('Add to the sidebar');
-    expect((await open(allShown(), true)).lines).toEqual(['Every pane is showing.']);
-  });
-
-  it('reads the Lua panes only while the menu is open', async () => {
-    holdPanes();
-    renderToStaticMarkup(<TitleBand {...props} panelOpen paneTree={tree()} />);
-    expect(lua.reads).toBe(0);
-    await open(tree());
-    expect(lua.reads).toBeGreaterThan(0);
-  });
-
-  it('lists the Lua panes after a rule, in title order, each with its plugin', async () => {
-    holdPanes();
-    expect((await open(tree())).lines).toEqual([
-      'Map',
-      'Group',
-      'Stats',
-      'Chat | starts on Tell',
-      '---',
-      'Weather | weather_pane',
-      'Worth | worth_pane',
-    ]);
-  });
-
-  it('lists a Lua pane only while its plugin is on and running', async () => {
-    holdPanes(false);
-    expect((await open(tree())).lines).toEqual([
-      'Map',
-      'Group',
-      'Stats',
-      'Chat | starts on Tell',
-      '---',
-      'Worth | worth_pane',
-    ]);
-    lua.rows = [row('weather_pane', true, 'time'), row('worth_pane', true)];
-    expect((await open(tree())).lines).toEqual([
-      'Map',
-      'Group',
-      'Stats',
-      'Chat | starts on Tell',
-      '---',
-      'Worth | worth_pane',
-    ]);
-    lua.rows = null;
-    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Stats', 'Chat | starts on Tell']);
-  });
-
-  it('drops a Lua pane once the panel shows it', async () => {
-    holdPanes();
-    const weather = {
-      id: 'weather',
-      pane: 'lua',
-      weight: 1,
-      props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
-    } as const;
-    expect((await open(tree(weather))).lines).toEqual([
-      'Map',
-      'Group',
-      'Stats',
-      'Chat | starts on Tell',
-      '---',
-      'Worth | worth_pane',
-    ]);
-    expect((await open(allShown())).lines).toEqual([
-      'Weather | weather_pane',
-      'Worth | worth_pane',
-    ]);
-  });
-
-  it('says every pane is showing only when neither list has one', async () => {
-    expect((await open(allShown())).lines).toEqual(['Every pane is showing.']);
-    holdPanes(false, false);
-    expect((await open(allShown())).lines).toEqual(['Every pane is showing.']);
-  });
-
-  it('says a second Chat pane starts on Tell', async () => {
-    const solo = (props: Record<string, string>): PaneSplit => ({
-      id: 'root',
-      split: 'column',
-      weight: 1,
-      children: [{ id: 'chat', pane: 'chat', weight: 1, props }],
-    });
-    const empty: PaneSplit = { id: 'root', split: 'column', weight: 1, children: [] };
-    expect((await open(empty)).lines).toContain('Chat');
-    expect((await open(solo({ rest: '1' }))).lines).toContain('Chat | starts on Tell');
-    expect((await open(solo({ channel: 'tell' }))).lines).toContain('Chat');
-  });
-
-  it('adds a Lua pane by its plugin, id and title', async () => {
-    holdPanes();
-    const m = await open(tree());
-    await m.pick('Worth');
-    expect(m.onAddPane).toHaveBeenCalledWith({
-      pane: 'lua',
-      props: { plugin: 'worth_pane', id: 'worth', title: 'Worth' },
-    });
-    const n = await open(tree());
-    await n.pick('Map');
-    expect(n.onAddPane).toHaveBeenCalledWith({ pane: 'map', props: {} });
+    const layout = () => {
+      const [button] = findAll(
+        container,
+        (el) => el.getAttribute('aria-label') === 'Arrange panes',
+      );
+      if (!button) throw new Error('no Arrange panes button');
+      return button;
+    };
+    await draw(false);
+    expect(layout().getAttribute('aria-pressed')).toBe('false');
+    await act(async () => on(layout()).onClick());
+    expect(onArrange).toHaveBeenCalledTimes(1);
+    await draw(true);
+    expect(layout().getAttribute('aria-pressed')).toBe('true');
   });
 });

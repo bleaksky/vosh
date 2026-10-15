@@ -65,7 +65,7 @@ export function markerApplies(display: AffectsDisplay): boolean {
 /** The submenus of a pane's more menu. The chat pane's Channel colors
  *  opens a list of channels, and each channel its own list of colors,
  *  which opens and closes by the same rule with the channel as `which`. */
-export type PaneSubmenu = 'show' | 'style' | 'marker' | 'colors';
+export type PaneSubmenu = 'style' | 'marker' | 'colors';
 
 /** The open submenu, and whether it opened from the keyboard and so
  *  takes focus. */

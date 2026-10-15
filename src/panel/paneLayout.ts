@@ -715,24 +715,33 @@ export function otherTree(which: PaneTree): PaneTree {
   return which === 'panel' ? 'sidebar' : 'panel';
 }
 
+/** The side of a pane another lands against: above it or below it,
+ *  or to its left or right. */
+export type DropEdge = 'before' | 'after' | 'left' | 'right';
+
 /** Where a dragged pane lands: next to the pane `at` in tree `tree`,
- *  above it or below it, or alone in an empty tree when `at` is null. */
+ *  on the side `edge` names, or alone in an empty tree when `at` is
+ *  null. */
 export interface PaneDrop {
   tree: PaneTree;
   at: string | null;
-  edge: 'before' | 'after';
+  edge: DropEdge;
 }
 
-/** Put `leaf` above or below the pane `id` in `tree`. In a column the
- *  two halve the old share. In a row the pane becomes a column of the
- *  two. With `id` null or not found, `leaf` goes at the foot. */
+/** Put `leaf` against the pane `id` in `tree` on the side `edge` names.
+ *  In a split of the edge's direction, a column for above and below and
+ *  a row for left and right, the two halve the old share. In the other
+ *  direction the pane becomes a split of the two. With `id` null or not
+ *  found, `leaf` goes at the foot. */
 export function insertBeside(
   tree: PaneSplit,
   id: string | null,
   leaf: PaneLeaf,
-  edge: 'before' | 'after',
+  edge: DropEdge,
 ): PaneSplit {
   if (id === null || id === tree.id || findNode(tree, id) === null) return appendLeaf(tree, leaf);
+  const dir: SplitDir = edge === 'left' || edge === 'right' ? 'row' : 'column';
+  const first = edge === 'before' || edge === 'left';
   const insert = (node: PaneSplit): PaneSplit => {
     const at = node.children.findIndex((c) => c.id === id);
     if (at < 0) {
@@ -740,34 +749,58 @@ export function insertBeside(
     }
     const hit = node.children[at];
     const children = node.children.slice();
-    if (node.split === 'column') {
+    if (node.split === dir) {
       const half = hit.weight / 2;
       const pair = [
         { ...hit, weight: half },
         { ...leaf, weight: half },
       ];
-      children.splice(at, 1, ...(edge === 'before' ? pair.reverse() : pair));
+      children.splice(at, 1, ...(first ? pair.reverse() : pair));
     } else {
-      const both =
-        edge === 'before'
-          ? [
-              { ...leaf, weight: 1 },
-              { ...hit, weight: 1 },
-            ]
-          : [
-              { ...hit, weight: 1 },
-              { ...leaf, weight: 1 },
-            ];
+      const pair = [
+        { ...hit, weight: 1 },
+        { ...leaf, weight: 1 },
+      ];
       children[at] = {
         id: freshId(tree, 'split'),
-        split: 'column',
+        split: dir,
         weight: hit.weight,
-        children: both,
+        children: first ? pair.reverse() : pair,
       };
     }
     return { ...node, children };
   };
   return sanitize(insert(tree));
+}
+
+/** A new leaf showing `ref`, with an id neither tree of `layout` uses
+ *  yet, such as chat-2 beside a chat. */
+export function newLeaf(layout: Pick<PaneLayout, 'root' | 'sidebar'>, ref: PaneRef): PaneLeaf {
+  return freshLeaf(bothTrees(layout), ref);
+}
+
+/** Take the pane `id` out of `layout`, wherever it shows, and hand back
+ *  the layout without it, the leaf with its id and props, and the tree
+ *  it left. Null when no tree holds it. */
+export function liftLeaf(
+  layout: PaneLayout,
+  id: string,
+): { layout: PaneLayout; leaf: PaneLeaf; from: PaneTree } | null {
+  const from = treeOf(layout, id);
+  if (from === null) return null;
+  const leaf = findNode(treeIn(layout, from), id);
+  if (leaf === null || !isLeaf(leaf)) return null;
+  return { layout: withTree(layout, from, closePane(treeIn(layout, from), id)), leaf, from };
+}
+
+/** Put `leaf`, which no tree of `layout` holds, where `drop` says. */
+export function placeLeaf(layout: PaneLayout, leaf: PaneLeaf, drop: PaneDrop): PaneLayout {
+  const placed = withTree(
+    layout,
+    drop.tree,
+    insertBeside(treeIn(layout, drop.tree), drop.at, leaf, drop.edge),
+  );
+  return { ...placed, ...sanitizeTrees(placed.root, placed.sidebar) };
 }
 
 /** Move the pane `id` to where `drop` says, from either tree to either

@@ -18,16 +18,21 @@ import { SessionsToggle } from './SessionsToggle';
 import { SnoopSplit } from './SnoopSplit';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
-import { PaneDragLayer } from '../panel/PaneDragLayer';
 import { PanelHost, SidebarPanes } from '../panel/PanelHost';
 import {
   panelWidthOf,
-  setPanelOpen,
   setPanelWidth,
   togglePanelOpen,
   usePanelLayout,
 } from '../panel/panelLayoutStore';
-import { addPaneAtBottom, addPaneToSidebar } from '../panel/paneActions';
+import { useArranging } from '../panel/arrange/arrange';
+import {
+  cancelArranging,
+  enterArrangeMode,
+  finishArranging,
+} from '../panel/arrange/arrangeActions';
+import { ArrangeCard } from '../panel/arrange/ArrangeCard';
+import { ArrangeGhost } from '../panel/arrange/ArrangeGhost';
 import { disconnectSession } from '../ipc/session';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
 import { listenForQuitFlush } from '../lib/pendingWrites';
@@ -36,7 +41,7 @@ import { CommandPalette } from './overlays/CommandPalette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CoachRing } from '../ui/CoachRing';
 import { requestSessionMenu } from '../lib/appMenu';
-import { allPanes, bothTrees } from '../panel/paneLayout';
+import { allPanes } from '../panel/paneLayout';
 import {
   getSelected,
   move,
@@ -107,7 +112,10 @@ function MainWindow() {
   // this window or the window grows too narrow to hold it, where the
   // toggle slides it over the terminal instead.
   const sessions = useSessions();
-  const panelOpen = panelLayout?.panel_open ?? true;
+  // While you arrange, the panel and the sidebar both show, so a pane
+  // can land in either.
+  const arranging = useArranging() !== null;
+  const panelOpen = arranging || (panelLayout?.panel_open ?? true);
   // The status line carries your vitals with the panel hidden, or with
   // Show your vitals in on Status line.
   const vitalsPlace = useVitalsOptions().place;
@@ -122,6 +130,7 @@ function MainWindow() {
     panelOpen,
     () => inputRef.current?.focus(),
     sidebarHolds,
+    arranging,
   );
   const sessionsShown = sessionsSidebar.shown;
   // The panes the sidebar shows now, for the View menu's checks and the
@@ -332,10 +341,17 @@ function MainWindow() {
       readerOn,
     });
 
-  // Show me opens the panel or the terminal menu here (showMe.ts).
+  // Another session in front may play another profile, so arranging
+  // stops without saving.
+  useEffect(() => {
+    cancelArranging();
+  }, [selected]);
+
+  // Show me arranges the panes or opens the terminal menu here
+  // (showMe.ts).
   const showMeHere = (step: StepId) =>
     showMe(step, {
-      openPanel: () => setPanelOpen(true),
+      arrange: () => void enterArrangeMode(),
       openTerminalMenu: () => {
         const area = terminalAreaRef.current?.getBoundingClientRect();
         const term = termRef.current;
@@ -544,14 +560,15 @@ function MainWindow() {
           onTogglePanel={() => togglePanelKeepingCaret(focusInput)}
           onTogglePalette={() => (paletteOpen ? closePalette() : setPaletteOpen(true))}
           onOpenSettings={() => runCommand('settings')}
-          paneTree={panelLayout ? bothTrees(panelLayout) : null}
-          onAddPane={addPaneAtBottom}
-          onAddPaneToSidebar={addPaneToSidebar}
+          arranging={arranging}
+          onArrange={() => {
+            if (arranging) void finishArranging();
+            else void enterArrangeMode();
+          }}
           onMenuClosed={focusInput}
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
           onCloseSession={closing.closeSession}
-          panelSide={panelSide}
         />
       }
       snoop={
@@ -565,6 +582,7 @@ function MainWindow() {
         />
       }
       terminal={terminalAreaElement}
+      arrange={arranging ? <ArrangeCard sidebarFits={sessionsSidebar.fits} /> : null}
       reader={<ScreenReaderFeed />}
       input={inputElement}
       statusStyle={statusStyle}
@@ -579,7 +597,7 @@ function MainWindow() {
       }
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
-      <PaneDragLayer />
+      <ArrangeGhost />
       <CornerNotices
         reconnect={
           <ReconnectNotice

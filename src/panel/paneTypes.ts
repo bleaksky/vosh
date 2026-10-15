@@ -10,7 +10,6 @@ import {
   paneCap,
   paneKey,
   paneRef,
-  type PaneLeaf,
   type PaneRef,
   type OfferedPaneType,
   type PaneSplit,
@@ -100,25 +99,4 @@ export function luaPanesToAdd(
 ): LuaPaneOffer[] {
   const shown = new Set(tree ? allPanes(tree) : []);
   return offered.filter((o) => !shown.has(paneKey(luaPaneRef(o))));
-}
-
-/** What Show here instead offers in place of a pane. */
-export interface PanesToShowInstead {
-  builtIns: OfferedPaneType[];
-  lua: PaneRef[];
-}
-
-/** The offered panes other than `leaf`, built-in and then Lua, in menu
- *  order. A pane the tree holds once moves here from where it shows,
- *  and Chat joins the Chat panes shown while fewer than four show. */
-export function panesToShowInstead(leaf: PaneLeaf, tree: PaneSplit | null): PanesToShowInstead {
-  const key = paneKey(leaf);
-  return {
-    builtIns: offeredPaneTypes().filter(
-      (t) => t !== leaf.pane && (t !== 'chat' || hasRoomFor(tree, t)),
-    ),
-    lua: offeredLuaPanes()
-      .map(luaPaneRef)
-      .filter((ref) => paneKey(ref) !== key),
-  };
 }

@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ADD_PANE_MENU_EVENT } from '../../lib/appMenu';
 
 // Show me on each step opens what the step is about and rings the
 // right thing, with the shell's openers stood in for.
@@ -44,7 +43,7 @@ afterEach(() => {
 });
 
 function shell() {
-  return { openPanel: vi.fn(), openTerminalMenu: vi.fn() };
+  return { arrange: vi.fn(), openTerminalMenu: vi.fn() };
 }
 
 /** The line the ring shows, or null when nothing rings. */
@@ -52,14 +51,14 @@ const ringLine = () =>
   (spy.showCoach.mock.calls.at(-1)?.[0] as { line: string } | undefined)?.line ?? null;
 
 describe('Show me', () => {
-  it('opens the panel and Add a pane on Add Chat and Group, and rings Chat and Group', () => {
+  it('arranges the panes on Add Chat and Group, and rings Chat and Group on the shelf', () => {
     const s = shell();
     showMe('panes', s);
     expect(spy.fold).toHaveBeenCalledTimes(1);
-    expect(s.openPanel).toHaveBeenCalledTimes(1);
+    expect(s.arrange).toHaveBeenCalledTimes(1);
     expect(s.openTerminalMenu).not.toHaveBeenCalled();
-    expect(dispatched).toEqual([ADD_PANE_MENU_EVENT]);
-    expect(ringLine()).toBe('Pick Chat or Group.');
+    expect(dispatched).toEqual([]);
+    expect(ringLine()).toBe('Drag Chat or Group onto the panel, then press Done.');
   });
 
   it('opens the terminal menu on Customize your prompt, and rings Customize prompt…', () => {
@@ -67,7 +66,7 @@ describe('Show me', () => {
     showMe('prompt', s);
     expect(spy.fold).toHaveBeenCalledTimes(1);
     expect(s.openTerminalMenu).toHaveBeenCalledTimes(1);
-    expect(s.openPanel).not.toHaveBeenCalled();
+    expect(s.arrange).not.toHaveBeenCalled();
     expect(dispatched).toEqual([]);
     expect(ringLine()).toBe('Pick Customize prompt…');
   });

@@ -1,4 +1,5 @@
 import { resetPanelLayout } from '../../panel/panelReset';
+import { enterArrangeMode } from '../../panel/arrange/arrangeActions';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { appShortcut, type SettingsShortcutId } from '../../lib/appMenu';
 import { compareAliasGroups, normalizeAlias } from '../../automation/automationRecords';
@@ -417,6 +418,14 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       run: deps.readPrompt,
     });
   }
+  entries.push({
+    id: 'panel-arrange',
+    section: 'view',
+    title: 'Arrange panes',
+    keywords: 'layout move add show hide put away panes panel sidebar shelf',
+    searchOnly: true,
+    run: () => void enterArrangeMode(),
+  });
   entries.push({
     id: 'panel-reset',
     section: 'view',

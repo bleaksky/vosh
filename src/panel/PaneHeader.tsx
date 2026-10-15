@@ -1,14 +1,13 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { usePaneLeaf } from './paneActions';
-import { headerDrag } from './paneDrag';
 import { MoreIcon } from '../ui/icons';
 import { PaneMenu } from './PaneMenu';
 import { paneLabel } from './paneTypes';
 
 // The 28 px header every pane opens with: the caps label at
 // x 18, an optional meta 8 px after it, and the more button 8 px from
-// the pane's right edge. No fill and no line under it. Drag it to move
-// the pane (paneDrag.ts).
+// the pane's right edge. No fill and no line under it. A pane moves in
+// arrange mode (arrange/arrange.ts), never from its header.
 
 interface Props {
   /** Short state beside the label, like the area name or a count. */
@@ -27,7 +26,7 @@ export function PaneHeader({ meta, title }: Props) {
   const anchor = moreRef.current;
 
   return (
-    <div className="pane-header" {...headerDrag(leaf)}>
+    <div className="pane-header">
       <h2 className="pane-label">{label}</h2>
       {meta}
       <button

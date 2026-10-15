@@ -1,19 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { allPanes, isLeaf, paneRef, type PaneLayout, type PaneType } from './paneLayout';
+import { allPanes, isLeaf, type PaneLayout, type PaneType } from './paneLayout';
 import type { ToastInput } from '../stores/toasts';
 import {
-  addPaneAtBottom,
-  addPaneToSidebar,
   chatRefToAdd,
   closeHere,
+  closeWithUndo,
   dropPane,
-  movePaneAcross,
-  paneToSplitIn,
-  showHereInstead,
-  splitHere,
+  readyForChat,
   togglePane,
 } from './paneActions';
-import { paneTypesToAdd, panesToShowInstead } from './paneTypes';
+import { paneTypesToAdd } from './paneTypes';
 
 // The layout a split reads, whether the plugin that draws the
 // Weather pane runs, and the toasts the actions raise.
@@ -86,40 +82,6 @@ describe('the Writing pane', () => {
     lay('map', 'affects', 'group', 'stats', 'chat');
     expect(paneTypesToAdd(state.layout?.root ?? null)).not.toContain('writing');
     expect(paneTypesToAdd(null)).toEqual(['map', 'affects', 'group', 'stats', 'chat']);
-    const map = state.layout?.root.children[0];
-    if (!map || !isLeaf(map)) throw new Error('no map');
-    expect(panesToShowInstead(map, state.layout?.root ?? null).builtIns).not.toContain('writing');
-  });
-});
-
-describe('paneToSplitIn', () => {
-  it('splits in the first built-in pane the panel does not show', () => {
-    lay('map', 'affects');
-    expect(paneToSplitIn('map')).toEqual({ pane: 'group', props: {} });
-  });
-
-  it('splits in a pane the panel does not show before another Chat', () => {
-    state.on = true;
-    lay('map', 'affects', 'group', 'stats', 'chat');
-    expect(paneToSplitIn('map')).toEqual({
-      pane: 'lua',
-      props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
-    });
-  });
-
-  it('splits in another Chat on a Chat pane', () => {
-    lay('map', 'affects', 'chat');
-    expect(paneToSplitIn('chat')).toEqual({ pane: 'chat', props: {} });
-  });
-
-  it('splits in another Chat once the panel shows every pane', () => {
-    state.on = false;
-    lay('map', 'affects', 'group', 'stats', 'chat');
-    expect(paneToSplitIn('map')).toEqual({ pane: 'chat', props: {} });
-    lay('map', 'affects', 'group', 'stats', 'chat', 'chat', 'chat', 'chat');
-    expect(paneToSplitIn('map')).toBeNull();
-    expect(paneToSplitIn('chat')).toBeNull();
-    state.on = true;
   });
 });
 
@@ -143,57 +105,6 @@ describe('togglePane', () => {
 });
 
 describe('the sidebar', () => {
-  it('takes a new pane at its foot, and a pane the panel shows moves there', () => {
-    layBoth(['map', 'stats'], ['group']);
-    addPaneToSidebar(paneRef('affects'));
-    expect(trees()).toEqual([
-      ['map', 'stats'],
-      ['group', 'affects'],
-    ]);
-    addPaneToSidebar(paneRef('stats'));
-    expect(trees()).toEqual([['map'], ['group', 'affects', 'stats']]);
-  });
-
-  it('counts Chat panes across both trees', () => {
-    layBoth(['chat', 'chat'], ['chat', 'chat']);
-    addPaneToSidebar(paneRef('chat'));
-    addPaneAtBottom(paneRef('chat'));
-    expect(trees()).toEqual([
-      ['chat', 'chat-2'],
-      ['chat-3', 'chat-4'],
-    ]);
-  });
-
-  it('turns the panel Chat pane to Everything else as one joins the sidebar', () => {
-    state.toasts = [];
-    layBoth(['map', 'chat'], []);
-    addPaneToSidebar(paneRef('chat'));
-    expect(leaves()).toEqual(['map {}', 'chat {"rest":"1"}']);
-    expect(state.layout?.sidebar.children).toMatchObject([{ props: { channel: 'tell' } }]);
-    expect(state.toasts).toHaveLength(1);
-  });
-
-  it('splits a pane in the sidebar with one neither tree shows', () => {
-    layBoth(['map', 'affects', 'chat'], ['group']);
-    expect(paneToSplitIn('group')).toEqual(paneRef('stats'));
-    splitHere('group', 'column');
-    expect(trees()).toEqual([
-      ['map', 'affects', 'chat'],
-      ['group', 'stats'],
-    ]);
-  });
-
-  it('moves a pane across with Move to sidebar and Move to panel', () => {
-    layBoth(['map', 'stats'], []);
-    state.layout = { ...state.layout!, panel_open: false };
-    movePaneAcross('stats');
-    expect(trees()).toEqual([['map'], ['stats']]);
-    expect(state.layout?.panel_open).toBe(false);
-    movePaneAcross('stats');
-    expect(trees()).toEqual([['map', 'stats'], []]);
-    expect(state.layout?.panel_open).toBe(true);
-  });
-
   it('moves a dropped pane where it lands, and opens the panel for it', () => {
     layBoth(['map', 'affects'], ['stats']);
     state.layout = { ...state.layout!, panel_open: false };
@@ -244,29 +155,6 @@ describe('a new Chat pane', () => {
     expect(chatRefToAdd(state.layout!.root)).toEqual({ pane: 'chat', props: {} });
   });
 
-  it('turns the pane on All to Everything else and says so', () => {
-    state.toasts = [];
-    lay('map', 'chat');
-    addPaneAtBottom(paneRef('chat'));
-    expect(leaves()).toEqual(['map {}', 'chat {"rest":"1"}', 'chat-2 {"channel":"tell"}']);
-    expect(state.toasts.map((t) => [t.message, t.action?.label])).toEqual([
-      ['Your other Chat pane now shows Everything else.', undefined],
-    ]);
-  });
-
-  it('keeps Everything else on its pane as a third pane joins', () => {
-    state.toasts = [];
-    lay('chat', 'chat');
-    state.layout!.root.children[1] = {
-      ...state.layout!.root.children[1],
-      props: { channel: 'tell' },
-    };
-    showHereInstead('chat-2', paneRef('chat'));
-    addPaneAtBottom(paneRef('chat'));
-    expect(leaves()).toEqual(['chat {"rest":"1"}', 'chat-2 {"channel":"tell"}', 'chat-3 {}']);
-    expect(state.toasts).toEqual([]);
-  });
-
   it('returns the last Chat pane to All as the others close', () => {
     lay('map', 'chat', 'chat');
     state.layout!.root.children[1] = {
@@ -284,9 +172,8 @@ describe('a new Chat pane', () => {
       ...state.layout!.root.children[1],
       props: { channel: 'tell' },
     };
-    showHereInstead('chat-2', paneRef('group'));
-    // The leaf keeps its id as it turns to Group.
-    expect(leaves()).toEqual(['map {}', 'chat {}', 'chat-2 {}']);
+    togglePane('chat');
+    expect(leaves()).toEqual(['map {}', 'chat-2 {}']);
     lay('map', 'chat');
     state.layout!.root.children[1] = {
       ...state.layout!.root.children[1],
@@ -295,35 +182,37 @@ describe('a new Chat pane', () => {
     closeHere('map');
     expect(leaves()).toEqual(['chat {"channel":"tell"}']);
   });
+});
 
-  it('leaves a pane on a channel alone and raises no toast', () => {
-    state.toasts = [];
+describe('a Chat pane joining another', () => {
+  it('turns the pane on All to Everything else, and says it was alone there', () => {
+    lay('map', 'chat');
+    const { layout, turned } = readyForChat(state.layout!);
+    state.layout = layout;
+    expect(leaves()).toEqual(['map {}', 'chat {"rest":"1"}']);
+    expect(turned).toBe(true);
+  });
+
+  it('leaves a pane on a channel alone', () => {
     lay('chat');
     state.layout!.root.children[0] = {
       ...state.layout!.root.children[0],
       props: { channel: 'say' },
     };
-    addPaneAtBottom(paneRef('chat'));
-    expect(leaves()).toEqual(['chat {"channel":"say"}', 'chat-2 {"channel":"tell"}']);
-    expect(state.toasts).toEqual([]);
+    const before = state.layout!;
+    expect(readyForChat(before)).toEqual({ layout: before, turned: false });
   });
+});
 
-  it('starts on tell from Split and Show here instead too', () => {
+describe('Close pane', () => {
+  it('closes the pane and offers it back where it was', () => {
     state.toasts = [];
-    lay('map', 'affects', 'group', 'chat');
-    splitHere('chat', 'column');
-    expect(leaves().slice(3)).toEqual(['chat {"rest":"1"}', 'chat-2 {"channel":"tell"}']);
-    lay('map', 'chat');
-    showHereInstead('map', paneRef('chat'));
-    expect(leaves()).toEqual(['map {"channel":"tell"}', 'chat {"rest":"1"}']);
-    expect(state.toasts).toHaveLength(2);
-  });
-
-  it('changes nothing when no room is left for another Chat', () => {
-    state.toasts = [];
-    lay('chat', 'chat', 'chat', 'chat');
-    addPaneAtBottom(paneRef('chat'));
-    expect(leaves()).toEqual(['chat {}', 'chat-2 {}', 'chat-3 {}', 'chat-4 {}']);
-    expect(state.toasts).toEqual([]);
+    layBoth(['map', 'affects'], ['stats']);
+    closeWithUndo('affects', 'Affects');
+    expect(trees()).toEqual([['map'], ['stats']]);
+    const toast = state.toasts.at(-1);
+    expect(toast?.message).toBe('Closed Affects');
+    toast?.action?.run();
+    expect(trees()).toEqual([['map', 'affects'], ['stats']]);
   });
 });

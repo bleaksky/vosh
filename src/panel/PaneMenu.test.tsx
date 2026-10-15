@@ -2,14 +2,12 @@ import { Fragment, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from './chat/chatColors';
-import type { PaneLayout, PaneLeaf, PaneSplit, PaneType } from './paneLayout';
+import type { PaneLayout, PaneLeaf, PaneType } from './paneLayout';
 import { resetChatColors, setChatColor } from '../ipc/uiConfig';
 import { openSettingsTab } from '../lib/settingsLink';
 import { findTheme } from '../theme/themes';
 import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
-import { ChannelColorItems, ChannelColorRows, PaneMenu, ShowHereRows } from './PaneMenu';
-import { panesToShowInstead } from './paneTypes';
-import { PaneTextSizeContext } from './paneTextSize';
+import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
 
 // The stores behind the menu reach the Tauri bridge when they start.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -217,7 +215,7 @@ describe('PaneMenu', () => {
     }
   });
 
-  it('offers to edit the plugin of a Lua pane between Show here instead and Close pane', () => {
+  it('offers to edit the plugin of a Lua pane before Close pane', () => {
     const leaf: PaneLeaf = {
       id: 'leaf-weather',
       pane: 'lua',
@@ -227,8 +225,8 @@ describe('PaneMenu', () => {
     renderToStaticMarkup(<PaneMenu leaf={leaf} anchor={anchor} onClose={() => {}} />);
     const node = drawn.rows as ReactNode;
     const list = rows(node).map((row) => (row === '---' ? row : label(row)));
-    expect(list.slice(-5)).toEqual([
-      'Show here instead',
+    expect(list).toEqual([
+      'Arrange panes',
       '---',
       'Edit weather_pane in Scripts…',
       '---',
@@ -245,62 +243,16 @@ describe('PaneMenu', () => {
     }
   });
 
-  it('offers Move to sidebar in the panel and Move to panel in the sidebar', () => {
-    const leaf = (pane: PaneType): PaneLeaf => ({ id: `leaf-${pane}`, pane, weight: 1, props: {} });
-    laid.layout = {
-      version: 1,
-      panel_open: true,
-      panel_width: null,
-      root: { id: 'root', split: 'column', weight: 1, children: [leaf('map'), leaf('writing')] },
-      sidebar: { id: 'sidebar', split: 'column', weight: 1, children: [leaf('stats')] },
-    };
-    const after = (pane: PaneType) => {
+  it('opens on Arrange panes and ends on Close pane, with nothing else that moves a pane', () => {
+    for (const pane of ['map', 'affects', 'group', 'stats', 'chat'] as const) {
       const rows = menuRows(menu(pane));
-      return rows[rows.indexOf('Show here instead') + 1];
-    };
-    expect(after('map')).toBe('Move to sidebar');
-    expect(after('stats')).toBe('Move to panel');
-    // The writing card stays in the panel.
-    expect(menuRows(menu('writing')).some((row) => row.startsWith('Move'))).toBe(false);
-  });
-
-  it('offers a split only when every pane keeps its minimum at your panel size', () => {
-    // Map, Affects and Chat in a 300 by 650 panel, so a split adds Group.
-    laid.layout = {
-      version: 1,
-      panel_open: true,
-      panel_width: 300,
-      sidebar: { id: 'sidebar', split: 'column', weight: 1, children: [] },
-      root: {
-        id: 'root',
-        split: 'column',
-        weight: 1,
-        children: [
-          { id: 'map', pane: 'map', weight: 0.4, props: {} },
-          { id: 'affects', pane: 'affects', weight: 0.35, props: {} },
-          { id: 'leaf-chat', pane: 'chat', weight: 0.25, props: {} },
-        ],
-      },
-    };
-    const area = { clientWidth: 300, clientHeight: 650 };
-    const inPanel = {
-      getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0 }),
-      closest: (selector: string) => (selector === '.panel-panes' ? area : null),
-    } as unknown as HTMLButtonElement;
-    const leaf: PaneLeaf = { id: 'leaf-chat', pane: 'chat', weight: 1, props: {} };
-    const splits = (size: number) =>
-      menuRows(
-        renderToStaticMarkup(
-          <PaneTextSizeContext.Provider value={size}>
-            <PaneMenu leaf={leaf} anchor={inPanel} onClose={() => {}} />
-          </PaneTextSizeContext.Provider>,
-        ),
-      ).filter((row) => row.startsWith('Split'));
-    // Splitting Chat down needs 557 px at 12 px and 738 px at 16 px.
-    // Side by side, the panes keep the heights they have now, 462 px
-    // and 613 px.
-    expect(splits(12)).toEqual(['Split right', 'Split down']);
-    expect(splits(16)).toEqual(['Split right', 'Split down (off)']);
+      expect(rows[0], pane).toBe('Arrange panes');
+      expect(rows.at(-1), pane).toBe('Close pane');
+      expect(
+        rows.filter((row) => /^(Split|Show here|Move to)/.test(row)),
+        pane,
+      ).toEqual([]);
+    }
   });
 });
 
@@ -365,96 +317,5 @@ describe('ChannelColorItems', () => {
     all[0].props.onSelect?.();
     expect(setChatColor).toHaveBeenLastCalledWith('tell', null);
     expect(done).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe('Show here instead', () => {
-  const weather: PaneLeaf = {
-    id: 'leaf-weather',
-    pane: 'lua',
-    weight: 1,
-    props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
-  };
-
-  const listed = (leaf: PaneLeaf, tree: PaneSplit | null = null) => {
-    const pick = vi.fn();
-    const list = rows(ShowHereRows({ ...panesToShowInstead(leaf, tree), pick }));
-    const text = list.map((row) => {
-      if (row === '---') return row;
-      const plugin = row.props.trailing as ReactElement<{ children: string }> | null;
-      return plugin ? `${label(row)} | ${plugin.props.children}` : label(row);
-    });
-    return { text, all: list.filter((r): r is Item => r !== '---'), pick };
-  };
-
-  it('lists the other panes, then a rule and the Lua panes in title order', () => {
-    lua.on = true;
-    const leaf: PaneLeaf = { id: 'leaf-chat', pane: 'chat', weight: 1, props: {} };
-    expect(listed(leaf).text).toEqual([
-      'Map',
-      'Affects',
-      'Group',
-      'Stats',
-      '---',
-      'Weather | weather_pane',
-      'Worth | worth_pane',
-    ]);
-  });
-
-  it('leaves out the Lua pane it is and those whose plugin is off', () => {
-    lua.on = true;
-    expect(listed(weather).text).toEqual([
-      'Map',
-      'Affects',
-      'Group',
-      'Stats',
-      'Chat',
-      '---',
-      'Worth | worth_pane',
-    ]);
-    lua.on = false;
-    expect(listed(weather).text).toEqual(['Map', 'Affects', 'Group', 'Stats', 'Chat']);
-  });
-
-  it('offers Chat in place of another pane while fewer than four show', () => {
-    lua.on = false;
-    const leaf = (id: string, pane: PaneLeaf['pane']): PaneLeaf => ({
-      id,
-      pane,
-      weight: 1,
-      props: {},
-    });
-    const chats = (n: number): PaneSplit => ({
-      id: 'root',
-      split: 'column',
-      weight: 1,
-      children: [
-        leaf('map', 'map'),
-        ...Array.from({ length: n }, (_, i) => leaf(i === 0 ? 'chat' : `chat-${i + 1}`, 'chat')),
-      ],
-    });
-    expect(listed(leaf('map', 'map'), chats(3)).text).toEqual([
-      'Affects',
-      'Group',
-      'Stats',
-      'Chat',
-    ]);
-    expect(listed(leaf('map', 'map'), chats(4)).text).toEqual(['Affects', 'Group', 'Stats']);
-    expect(listed(leaf('chat', 'chat'), chats(1)).text).toEqual([
-      'Map',
-      'Affects',
-      'Group',
-      'Stats',
-    ]);
-  });
-
-  it('shows the Lua pane picked in place of the pane', () => {
-    lua.on = true;
-    const { all, pick } = listed(weather);
-    all.find((row) => label(row) === 'Worth')?.props.onSelect?.();
-    expect(pick).toHaveBeenCalledWith({
-      pane: 'lua',
-      props: { plugin: 'worth_pane', id: 'worth', title: 'Worth' },
-    });
   });
 });

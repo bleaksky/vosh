@@ -1,4 +1,3 @@
-import { ADD_PANE_MENU_EVENT } from '../../lib/appMenu';
 import { openSettingsTab } from '../../lib/settingsLink';
 import { PANE_LABELS } from '../../panel/paneTypes';
 import { profileInFront } from '../../stores/session/sessionsStore';
@@ -13,8 +12,8 @@ import type { StepId } from './steps';
 
 /** What Show me opens in the main window. */
 export interface ShowMeShell {
-  /** Show the panel, which Add a pane sits over. */
-  openPanel: () => void;
+  /** Turn arrange mode on, whose shelf holds the panes to add. */
+  arrange: () => void;
   /** Open the terminal menu at the terminal's last row. */
   openTerminalMenu: () => void;
 }
@@ -22,12 +21,15 @@ export interface ShowMeShell {
 export function showMe(step: StepId, shell: ShowMeShell): void {
   fold();
   if (step === 'panes') {
-    shell.openPanel();
-    // TitleBand opens Add a pane once the panel has drawn its button.
-    requestAnimationFrame(() => window.dispatchEvent(new Event(ADD_PANE_MENU_EVENT)));
+    shell.arrange();
     showCoach({
-      find: () => menuRows('Add a pane', [PANE_LABELS.chat, PANE_LABELS.group]),
-      line: 'Pick Chat or Group.',
+      find: () =>
+        Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '[data-shelf-pane="chat"], [data-shelf-pane="group"]',
+          ),
+        ),
+      line: `Drag ${PANE_LABELS.chat} or ${PANE_LABELS.group} onto the panel, then press Done.`,
     });
   } else if (step === 'affects') {
     const profile = profileInFront();
