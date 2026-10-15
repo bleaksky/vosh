@@ -35,6 +35,11 @@ Full app, Rust backend plus web view.
 npm run tauri dev
 ```
 
+A dev build keeps its own app data folder, `com.aabahran.vosh.dev`,
+which its first launch copies from the installed app's. Your installed
+Vosh never sees what the dev build saves. Delete the dev folder to copy
+it again. `docs/data-files.md` says what the copy leaves out.
+
 Frontend only.
 
 ```

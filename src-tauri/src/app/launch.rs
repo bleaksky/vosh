@@ -7,7 +7,7 @@
 //! session opens its own on its first selection, see [`open_restored`].
 //! Tests run [`load`] to relaunch over a folder of their own.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -18,6 +18,7 @@ use vosh_log::LogStore;
 use crate::app::events::{broadcast, broadcast_profile_ui, PROFILE_SWITCHED};
 use crate::app::screen_reader;
 use crate::app::state::SharedState;
+use crate::disk::dev_folder;
 use crate::disk::paths;
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts;
@@ -37,10 +38,13 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
     crate::app::system_fonts::warm_font_cache();
     // The data folder and the scripts folder in it, where
     // `#script load` finds Lua files.
-    if let Err(e) = create_scripts_dir(app) {
-        error!(error = %e, "scripts folder could not be created");
+    let data = data_folder(app);
+    if let Ok(path) = &data {
+        if let Err(e) = create_scripts_dir(path) {
+            error!(error = %e, "scripts folder could not be created");
+        }
     }
-    if let Ok(path) = app.path().app_data_dir() {
+    if let Ok(path) = data {
         // How full each affect was cast, per character, for the
         // Affects pane's gauges. Read when the game names you.
         state.affect_file.set_path(paths::affect_full_path(&path));
@@ -411,14 +415,33 @@ async fn read_scrollback(session: &Session, app_data: &Path) {
     }
 }
 
+/// The app data folder: the installed app's, or in a debug build the
+/// dev build's own beside it, which its first launch fills with a copy of
+/// the installed one. See [`dev_folder`].
+fn data_folder(app: &tauri::App) -> tauri::Result<PathBuf> {
+    let installed = app.path().app_data_dir()?;
+    if !cfg!(debug_assertions) {
+        return Ok(installed);
+    }
+    let dev = dev_folder::dev_folder(&installed);
+    match dev_folder::seed(&installed, &dev) {
+        Ok(true) => info!(
+            from = %installed.display(),
+            to = %dev.display(),
+            "dev build: copied the installed app's data folder"
+        ),
+        Ok(false) => {}
+        Err(e) => error!(error = %e, "dev build: could not copy the installed app's data folder"),
+    }
+    Ok(dev)
+}
+
 /// Create the app data folder and the `scripts` folder in it, where
 /// `#script load` finds Lua files. The map store's opener did this until
 /// the store retired, since nothing read it back. maps.sqlite stays on
 /// disk as it is, and nothing reads or writes it.
-fn create_scripts_dir(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let dir = app.path().app_data_dir()?;
-    std::fs::create_dir_all(paths::scripts_dir(&dir))?;
-    Ok(())
+fn create_scripts_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(paths::scripts_dir(dir))
 }
 
 fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error::Error>> {
