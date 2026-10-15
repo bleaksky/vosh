@@ -23,6 +23,13 @@ Vosh keeps its data in one app data folder named `com.aabahran.vosh`.
 Exports go to your Downloads folder instead. The page keeps a few small
 choices in the webview's browser storage.
 
+A debug build, the one `npm run tauri dev` runs, keeps a folder of its
+own beside that one, named `com.aabahran.vosh.dev`. Its first launch
+copies the installed app's folder into it, without `logs.sqlite`,
+`maps.sqlite` and the backups, and from then on the two never touch each
+other's files. `src-tauri/src/disk/dev_folder.rs` does this. Delete the
+dev folder to start again from a fresh copy.
+
 ## How a TOML save works
 
 Profile files, profiles.toml, global.toml, catalog.toml, loadouts.toml,
@@ -35,6 +42,12 @@ write leaves the old file in place.
 A file Vosh could not read goes on the unread list, and every save to it
 fails until it reads again. So a save never writes the defaults over
 settings Vosh could not parse.
+
+A profile file, its `[ui]` and `[ui.panes]` tables, and global.toml keep
+the keys this build does not know in an `extra` map and write them back
+as they were. So a build older than the one that wrote a key saves the
+file without losing it. A profile file reads past `[connection]`, which
+builds before 0.9 wrote, and `[vosh_export]`, which an export adds.
 
 `writing.toml` and the files in a plugin folder go through `swap_in`,
 which swaps the text in whole and keeps no backup. A backup inside a
