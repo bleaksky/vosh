@@ -2,6 +2,18 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.95.5 - 2026-10-14
+
+Put panes in the sidebar, read your stats in a new pane, and copy a trigger, alias, or macro.
+
+- The sidebar across from the panel holds panes too, under your sessions, or on its own with one session. Drag a pane by its header to move it, or choose Move to sidebar in its menu. Add a pane has Add to the sidebar at the bottom.
+- Settings › Characters › Panel layout draws the sidebar beside the panel. Drag panes there to arrange any character, even one you aren't playing.
+- A new Stats pane shows your stats, luck, hitroll, damroll, armor, and saves as the game sends them. Pick Score sheet, Rows, or Ledger from its menu or in Settings › Layout › Stats.
+- Duplicate alias, Duplicate trigger, and Duplicate macro make a copy you can change and save. The copy's name ends in copy, so it never clashes, and a copied macro waits for its own key.
+- The status bar styles no longer run off the edge in a narrow window. Parts drop out whole before any name gets cut, and the Dashboard captions line up.
+- A profile that never picked a status bar style shows Compact again, the quiet line from before 0.95.3.
+- Find says No matches when the text isn't in the scrollback, instead of Found.
+
 ## v0.95.4 - 2026-10-12
 
 Letters hold still when you switch sessions.
