@@ -69,6 +69,7 @@ it the same way.
 | `catalog.journal.toml`                      | TOML                | `src-tauri/src/loadouts/wizard/journal.rs`                     |
 | `affect_full.toml`                          | TOML, `version = 1` | `src-tauri/src/affects/full.rs`                                |
 | `writing.toml`                              | TOML, `version = 1` | `src-tauri/src/writing.rs`                                     |
+| `layouts/<name>.toml`, `layouts/seen.toml`  | TOML                | `src-tauri/src/profile/layout_history.rs`                      |
 | `logs.sqlite`                               | SQLite in WAL mode  | `crates/log/src/sqlite.rs`                                     |
 | `scrollback.txt`, `scrollback-<n>.txt`      | Raw bytes, CRLF     | `src-tauri/src/logs.rs`                                        |
 | `scripts/`                                  | A folder            | `create_scripts_dir` in `src-tauri/src/app/launch.rs`          |
@@ -101,6 +102,10 @@ aliases, triggers and macros live in catalog.toml instead, and the
 profile file keeps the rest. Room triggers sit in `[[room_triggers]]`,
 apart from `[[triggers]]`, since 0.8.0 fails a whole file on a trigger
 target it does not know.
+
+A pane in `[ui.panes]` writes `folded = true` while it is folded down
+to its header, and nothing while it is open. Builds before 0.95.6 drop
+the key and open the pane.
 
 The first save that adds `[prompt]` to a file without one first copies
 the file to `<name>.toml.before-prompt-editor`. The prompt capture
@@ -173,6 +178,18 @@ The most hours Vosh has seen for each affect since it was cast, so the
 Affects pane can drain a gauge. `[characters]` keys each character by
 `{host}:{port} {name}`. A store writes only when it changes what the
 file holds, a moment after a burst settles.
+
+### layouts/
+
+`layouts/<name>.toml` holds up to 20 pane layouts the profile `name` had
+before, newest first, each in an `[[earlier]]` entry with `until`, the
+Unix milliseconds it gave way, `why` (`change`, `arrange`, `reset`,
+`restore` or `update`), `version` for an update, and the `[ui.panes]`
+table it had as `panes`. A rename takes the file along and a delete
+drops it. `layouts/seen.toml` names in `version` the last version whose
+first launch kept every profile's layout, so each version does that
+once, before any profile opens. Both go through `swap_in` with no
+backup, and a file that does not read counts as empty.
 
 ### writing.toml
 

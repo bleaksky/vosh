@@ -206,7 +206,7 @@ A new install starts with every preset off. The list suggests the presets for th
 | ----------------------------- | ------------------------------------------- |
 | Connect to The Forsaken Lands | The session button, or `Cmd+R`              |
 | Color what the game prints    | Settings, Automation, Presets               |
-| Add Chat and Group            | Add a pane, the plus in the title band      |
+| Add Chat and Group            | Arrange mode, the layout button in the band |
 | Track the affects you keep up | Settings, Characters, Tracked affects       |
 | Customize your prompt         | The first row when you right click the text |
 | Read back while you play      | Scroll up, `Cmd+\` or a middle click        |
@@ -610,7 +610,7 @@ A route effect sends matching lines to a named pane. Add one to a trigger in Set
 
 Route is an effect, so you can use it with anything else on the trigger. Use it with the `Highlight` style to color the line. Or put a command in `Then send` beside it.
 
-Matching lines go to the Chat pane, tagged with the pane name you gave. To show the Chat pane, use `Add a pane` in the title band or `Show chat` in the View menu. To read only those lines, choose that name in the channel select of the pane.
+Matching lines go to the Chat pane, tagged with the pane name you gave. To show the Chat pane, use arrange mode or `Show chat` in the View menu. To read only those lines, choose that name in the channel select of the pane.
 
 Example. A trigger named `chat-feed` with the patterns `tells you '` and `gossips '` and a route to `chat` collects tells and gossip in the chat pane.
 
@@ -825,15 +825,15 @@ mud.on_gmcp("Room.Weather", function(data) weather = data; draw() end)
 mud.on_gmcp("Char.State", function(data) state = data; draw() end)
 ```
 
-| Call                                | What it does                                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `mud.pane(id, title)`               | A pane this plugin owns, listed in Add a pane by its title. The id keeps your layout when the title changes. |
-| `pane:set(blocks)`                  | Replaces what the pane shows.                                                                                |
-| `{ row = { label, value } }`        | A row with a label and a value.                                                                              |
-| `{ gauge = { label, value, max } }` | A row with a meter, like the Group pane.                                                                     |
-| `{ line = text }`                   | Terminal font text. `{red}` and `{reset}` color it.                                                          |
-| `{ rule = true }`                   | A thin line across the pane that sets the blocks apart.                                                      |
-| `pane:meta(text)`                   | The words beside the pane's name.                                                                            |
+| Call                                | What it does                                                                                                         |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `mud.pane(id, title)`               | A pane this plugin owns, on the shelf in arrange mode by its title. The id keeps your layout when the title changes. |
+| `pane:set(blocks)`                  | Replaces what the pane shows.                                                                                        |
+| `{ row = { label, value } }`        | A row with a label and a value.                                                                                      |
+| `{ gauge = { label, value, max } }` | A row with a meter, like the Group pane.                                                                             |
+| `{ line = text }`                   | Terminal font text. `{red}` and `{reset}` color it.                                                                  |
+| `{ rule = true }`                   | A thin line across the pane that sets the blocks apart.                                                              |
+| `pane:meta(text)`                   | The words beside the pane's name.                                                                                    |
 
 ### 3.11 Use one alias or trigger name for each character
 
@@ -859,27 +859,37 @@ Triggers work differently. Two groups can each have a trigger with the same name
 
 <!-- id: shape.arrange-panels -->
 
-The panel holds your panes. At first it is on the right side of the window. At first it shows the map over your affects. Your vitals are pinned at its foot. You arrange the panel in the window itself, and Vosh keeps the arrangement for each character.
+The panel holds your panes. At first it is on the right side of the window. At first it shows the map over your affects. Your vitals are pinned at its foot. The sidebar on the other side of the window can hold panes too. With one session, the sidebar shows while it holds a pane. With two or more sessions, its panes go below the list of sessions. Vosh keeps the panes of each character.
 
 - To show or hide the panel, click the panel button at the right end of the title band. You can also press `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` on Windows and Linux. Or choose `Show panel` in the View menu or the command palette. While the panel is hidden, your vitals move to the status line.
-- To add a pane, click `Add a pane`, the plus button in the title band. It lists the panes that the panel doesn't show yet. The pane you choose goes to the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Stats, Chat, and Staff queues. Staff queues joins the list when the game sends it.
-- To open the menu of a pane, click the more button in its header. `Split right` and `Split down` put the first pane that the panel doesn't show beside it or under it. When the panel shows all the panes, they put in another Chat pane. On a Chat pane they put in another Chat pane.
-- In the same menu, `Show here instead` puts another pane in its place. `Close pane` removes it. When you close a pane, you lose nothing.
 - To share the space between two panes, drag the line between them. You can also press `Tab` to get to a line. The arrow keys then move it 8 points, or 32 points with `Shift`.
 - To change the width of the panel, drag its inner edge, the edge next to the terminal. The width goes from 200 to 800 points. Double click the edge to go back to 300. You can also press `Tab` to get to the edge. The arrow keys then move it 8 points. Settings has the same `Width` under Layout, then Panel.
 - To show or hide one pane, use its row in the View menu or the command palette, such as `Show map`. When that pane is in the sidebar and the sidebar is hidden, the sidebar shows again.
+- To fold a pane, click its header. The pane gets as small as its header, and the other panes get its space. The header keeps its counts, such as the number of affects. Click the header again to open the pane. `Fold pane` and `Unfold pane` in the menu of the pane do the same.
+- To remove a pane, choose `Close pane` in the menu of the pane. A message then shows with `Undo`, which puts the pane back.
 - To put the panel on the left side, go to Settings under Layout, then Panel, and set `Side` to `Left`. The sessions sidebar moves to the right side. The panel buttons in the title band move to the left end with the panel, and the sessions button moves to the right end. On macOS the window buttons stay at the top left. On Windows and Linux, minimize, maximize, and close stay at the top right. Each profile keeps its own side.
 
-The sidebar on the other side of the window can hold panes too. With one session, the sidebar shows while it holds a pane. With two or more sessions, its panes go below the list of sessions.
+To add, move, or remove panes, use arrange mode.
 
-- To move a pane, drag its header onto a different pane, in the panel or in the sidebar. An accent shows the half of that pane where it goes, with a line along that edge. Release the pointer to put the pane there. Press `Escape` to stop.
-- In the menu of a pane in the panel, `Move to sidebar` puts the pane at the bottom of the sidebar. In the sidebar, `Move to panel` puts it at the bottom of the panel.
-- To add a pane to the sidebar, click `Add a pane` and point at `Add to the sidebar` at the bottom. Then choose the pane.
+- To start arrange mode, click the layout button in the title band, the first button over the panel. Or choose `Arrange panes` in the menu of a pane, in the View menu, or in the command palette.
+- In arrange mode, the panel and the sidebar both show, and each pane becomes a tile. The terminal becomes a card with the shelf. The shelf holds the panes that do not show and the panes that you can add.
+- To move a pane, drag its tile onto a different pane. Drop it on the top half or the bottom half to put it above or below that pane. Drop it on the left or right quarter to put the two panes side by side, when the panel is wide enough for two. Drop it in an empty sidebar to put it there. While you drag, the panes move to show the result. Release the pointer to put the pane there. Press `Escape` to stop.
+- To add a pane, drag it from the shelf. Or click `Show` on its tile, which puts it at the bottom of the panel. The panes are Map, Affects, Group, Stats, Chat, and Staff queues. Staff queues comes on the shelf when the game sends it. The panes of your plugins are there too.
+- Chat stays on the shelf while fewer than four Chat panes show. A new Chat pane shows `tell` at first, and the Chat pane that showed `All` changes to `Everything else`.
+- To remove a pane, drag its tile onto the shelf, or click the X at the right of its tile.
+- With the keyboard, press `Tab` to get to a tile. `Up` and `Down` move it past the pane before or after it. The arrow toward the other side moves it to the bottom of that side. `Delete` puts it on the shelf. On the shelf, `Enter` shows a pane again.
+- `Undo` goes back one step. `Start from the default` puts the map over your affects again. `Earlier layouts` lists the layouts that this character had before, and you can start from one of them.
+- Click `Done` to keep the layout. Vosh saves it for the character and tells you. Click `Cancel` or press `Escape` to go back to the layout that you had. When you go to a different session, arrange mode stops and does not save.
 - Each pane shows one time across the panel and the sidebar. Up to four Chat panes show in the two together. The writing card and your vitals stay in the panel.
+
 - The sidebar button at the top left hides and shows the full sidebar. While the sidebar holds a pane, the button, the View menu, and the command palette say `Hide sidebar` and `Show sidebar`.
-- When the window is too narrow for the sidebar, its panes hide until the window gets wider. With two or more sessions, the sidebar button then slides in the list of sessions alone.
+- When the window is too narrow for the sidebar, its panes hide until the window gets wider. With two or more sessions, the sidebar button then slides in the list of sessions alone. In arrange mode, the card then tells you to make the window wider.
 
 Vosh keeps the panes of the sidebar for each character. The width of the sidebar is the same for all characters.
+
+Vosh also keeps the layouts that each character had before, up to 20 of them. When you change which panes show, or where, the layout before the change goes on the list. All the changes in 10 minutes count as one. Arrange mode, a reset, and a restore always add the layout before them. A change of size or a fold does not count. When you open a new version of Vosh, it first adds the layout of each character, marked with that version.
+
+- To put an earlier layout back, click `Earlier layouts` in arrange mode, or in Settings under Characters, then Panel layout. Each row tells until when you had that layout. A row marked `Before 0.95.6` is the layout that you had before that update.
 
 To start again, choose `Reset panel layout` in the View menu or the command palette. Or choose `Reset to default` in Settings under Characters, then Panel layout. The panes go back to the map over your affects, and the sidebar loses its panes. The panel keeps its width, and it stays shown or hidden.
 
@@ -897,7 +907,7 @@ To open Settings, click the gear at the right end of the title band, after the p
 
 The Map pane draws the map that the game sends. At first it is at the top of the panel. Its header names the area you are in.
 
-- To show or hide the map, choose `Show map` in the View menu or the command palette. Or add it with `Add a pane` in the title band.
+- To show or hide the map, choose `Show map` in the View menu or the command palette. Or add it in arrange mode.
 - Read the rows under the drawing. The first row names the room you stand in. The name takes the color that the terminal shows it in, from the colors of your theme. Examples are gray for a room inside, yellow for a field, and blue for a lake you can't swim.
 - When the panel would make that color hard to see, the pane draws it a little lighter or darker. A few rooms take a color of their own from their area. The game leaves that color out of `Room.Info`, so the pane shows the usual color for their terrain.
 - The second row names the terrain and the region, such as `Inside` and `Coastal North`. The exits show at its right. The other rows list the people here. A name that more than one person shares has a count beside it. When more people are here than fit, the last row counts the others.
@@ -915,7 +925,7 @@ Vosh remembers the style, the zoom, the 3D view, and the tileset. Until the game
 
 <!-- id: shape.chat-pane -->
 
-The chat pane collects channel talk in its own buffer, with one line for each message. To add it, use `Add a pane` in the title band. Or choose `Show here instead` in the menu of any pane.
+The chat pane collects channel talk in its own buffer, with one line for each message. To add it, use arrange mode, or choose `Show chat` in the View menu.
 
 - Lines come in on their own. `Comm.Channel` GMCP fills the pane automatically.
 - A line reads like `[tell] Tolliver: meet at the bank`. The tag names the channel, and the speaker is bold. This is also true for a name of more than one word, such as `a Blackwatch villager`. Wrapped lines start two cells in, so the tags make a column at the left edge.
@@ -986,7 +996,7 @@ When the game hides your vitals, as it does under lamented tears, every value re
 
 <!-- id: shape.group-affects -->
 
-The Group pane shows the health of each member of your group. The Affects pane shows what affects you and the hours each affect has left. To add either one, use `Add a pane` in the title band.
+The Group pane shows the health of each member of your group. The Affects pane shows what affects you and the hours each affect has left. To add either one, use arrange mode.
 
 - Read the Group rows. Each member gets a row with the name, a `lead` tag on the leader, a thin health meter, and the percent. The meter and the percent stay quiet at 67% and up. They turn yellow down to 34%, and red below that. The header counts the members.
 - To choose the affects you track, go to Settings under Characters, then Tracked affects. Choose `Add affect…`, and choose one of the affects on you now or type its name. Matching ignores case and extra spaces.
@@ -1018,8 +1028,8 @@ When the game hides your affects or your group, as it does under lamented tears,
 
 The Staff queues pane lists the staff queues that need you, with the worst first. The game sends them only to immortals.
 
-- Log in on an immortal. The game sends `Imm.Queues` at login. `Show staff queues` then shows in the View menu, the command palette, and `Add a pane`.
-- To add the pane, use `Add a pane` in the title band, or choose `Show staff queues`. Until the queues come in, the pane says that they show when you log in as an immortal.
+- Log in on an immortal. The game sends `Imm.Queues` at login. `Show staff queues` then shows in the View menu and the command palette, and the pane shows on the shelf in arrange mode.
+- To add the pane, use arrange mode, or choose `Show staff queues`. Until the queues come in, the pane says that they show when you log in as an immortal.
 - Read from the top down. Only queues with work show. Items past their deadline come first. Then come items in the last quarter before the deadline. Then come the rest, with the bigger backlog first.
 - The queues are Description checks, Applications, Journals, Votes, Notes, Bugs, Penalties, Ideas, and Typos.
 - Read the asides. A row tells how many items are overdue or near their deadline. Applications adds how many are unread. Journals adds how many have no award. Point at a row to read what it counts and its deadline.
@@ -1074,7 +1084,7 @@ While a snoop is open, type `snoop` in the command palette. You then get `Go to 
 
 <!-- id: shape.stats -->
 
-The Stats pane shows the numbers on your score sheet. These are your five stats, your luck, your hitroll and damroll, your armor class, and your saves. To add the pane, use `Add a pane` in the title band.
+The Stats pane shows the numbers on your score sheet. These are your five stats, your luck, your hitroll and damroll, your armor class, and your saves. To add the pane, use arrange mode.
 
 - To choose how the pane draws, go to Settings under Layout, then Stats. Or use `Style` in the menu of the pane. Each character keeps its own choice.
 - `Score sheet` is the default. It puts the numbers in two columns, as `score` does. Each stat shows the value that you trained, and then the value now in brackets.
