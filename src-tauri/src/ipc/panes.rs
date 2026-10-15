@@ -60,6 +60,11 @@ pub(crate) async fn pane_layout_set(
         if generation.is_some_and(|g| g != current) {
             return Ok(false);
         }
+        // The page sends only the keys it knows, so the stored layout's
+        // others stay.
+        if let Some(stored) = &p.ui.panes {
+            layout.extra = stored.extra.clone();
+        }
         p.ui.panes = Some(layout.clone());
         (p.open().clone(), current)
     };

@@ -301,6 +301,7 @@ fn full_panes() -> PaneLayoutPersist {
             children: vec![leaf("stats", 1.0, &[])],
             props: BTreeMap::new(),
         },
+        extra: BTreeMap::new(),
     }
 }
 
@@ -482,6 +483,7 @@ fn full_ui() -> UiConfig {
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),
         ]),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -709,6 +711,7 @@ fn full_profile() -> ProfileConfig {
         preset_edits: full_preset_edits(),
         // Reconnect when the link drops, turned off.
         reconnect: OnSwitch(false),
+        extra: BTreeMap::new(),
     };
     config.set_prompt(full_prompt());
     config
@@ -817,6 +820,7 @@ fn full_global() -> GlobalConfig {
             align: Some("bottom".into()),
         }]),
         custom_themes: Some(vec![full_theme()]),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -1397,6 +1401,7 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
                 children: Vec::new(),
                 props: BTreeMap::new(),
             },
+            extra: BTreeMap::new(),
         }
     );
 }

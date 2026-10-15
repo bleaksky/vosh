@@ -4,6 +4,7 @@
 //! categories the scope map in profiles.toml shares live in one
 //! global.toml instead, which every load lays over the profile file.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -160,6 +161,10 @@ pub(crate) struct GlobalConfig {
     pub dock_layout: Option<Vec<DockEntryPersist>>,
     #[serde(default)]
     pub custom_themes: Option<Vec<CustomTheme>>,
+    /// Keys this build does not know, which a newer build wrote. They
+    /// ride along as they are, so a save never drops them.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, toml::Value>,
 }
 
 impl GlobalConfig {
@@ -203,6 +208,7 @@ impl GlobalConfig {
                 .filter(|size| *size != DEFAULT_PANEL_FONT_SIZE),
             dock_layout: matches!(scope.dock_layout, Scope::Global)
                 .then(|| profile.ui.dock_layout.clone()),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -318,8 +324,17 @@ impl GlobalConfig {
             .map(|_| self.panel_font_size.unwrap_or(DEFAULT_PANEL_FONT_SIZE))
     }
 
+    /// Write global.toml. A copy built from a profile knows nothing of
+    /// the keys this build does not, so it keeps the ones the file on
+    /// disk holds, which a newer build wrote.
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
-        let toml_str = toml::to_string_pretty(self)?;
+        let mut out = self.clone();
+        if out.extra.is_empty() {
+            if let Ok(on_disk) = Self::load(path) {
+                out.extra = on_disk.extra;
+            }
+        }
+        let toml_str = toml::to_string_pretty(&out)?;
         write_with_backup(path, &toml_str)?;
         Ok(())
     }
@@ -747,6 +762,19 @@ mod tests {
     use crate::profile::panes::tests::custom_layout;
     use crate::profile::tests::{persist_live, shared_profile, styled_profile, theme_ids};
     use crate::profile::ui::{TrackedAffect, RETIRED_DEFAULT_FONT_FAMILY};
+
+    #[test]
+    fn a_global_save_keeps_the_keys_a_newer_build_wrote() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("global.toml");
+        std::fs::write(&path, "theme = \"triad\"\nlater_switch = true\n").unwrap();
+        let profile = Profile::default();
+        GlobalConfig::from_profile(&profile, &ScopeConfig::default())
+            .save(&path)
+            .unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.lines().any(|l| l == "later_switch = true"), "{text}");
+    }
 
     #[test]
     fn global_split_round_trip() {

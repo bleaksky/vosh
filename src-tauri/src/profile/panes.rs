@@ -84,6 +84,10 @@ pub(crate) struct PaneLayoutPersist {
         skip_serializing_if = "PaneNode::is_empty_split"
     )]
     pub sidebar: PaneNode,
+    /// Keys this build does not know, which a newer build wrote. They
+    /// ride along as they are, so a save never drops them.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, toml::Value>,
 }
 
 /// One node of the pane tree. A leaf sets `pane`; a split sets
@@ -214,6 +218,7 @@ impl PaneLayoutPersist {
             panel_width: None,
             root: default_pane_root(),
             sidebar: empty_sidebar(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -227,6 +232,7 @@ impl PaneLayoutPersist {
             panel_width: self.panel_width,
             root: default_pane_root(),
             sidebar: empty_sidebar(),
+            extra: self.extra.clone(),
         }
     }
 
@@ -240,6 +246,7 @@ impl PaneLayoutPersist {
             panel_width: self.panel_width,
             root: trees.root.clone(),
             sidebar: trees.sidebar.clone(),
+            extra: self.extra.clone(),
         };
         out.sanitize();
         out
@@ -311,6 +318,7 @@ impl PaneLayoutPersist {
             panel_width: None,
             root: PaneNode::split("root", "column", children),
             sidebar: empty_sidebar(),
+            extra: BTreeMap::new(),
         };
         layout.sanitize();
         layout
@@ -670,6 +678,7 @@ pub(crate) mod tests {
             panel_width: Some(360),
             root: PaneNode::split("root", "column", vec![PaneNode::leaf("map", 0.6), row]),
             sidebar: PaneNode::split("sidebar", "column", vec![PaneNode::leaf("stats", 1.0)]),
+            extra: BTreeMap::new(),
         };
         layout.sanitize();
         layout
