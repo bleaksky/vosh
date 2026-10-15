@@ -2,6 +2,19 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.95.6 - 2026-10-15
+
+Arrange your panes in a mode of their own, fold a pane down to its header, and bring back an earlier layout.
+
+- Arrange mode turns each pane into a tile you drag, and the other panes make room as you go. Drop a tile on the top or bottom half of a pane to stack them, or near its left or right edge to put them side by side. Done saves the layout for that character, and Cancel leaves it as it was.
+- Start arrange mode with the layout button over the panel, or choose Arrange panes in a pane's menu, the View menu, or the command palette.
+- In arrange mode a shelf covers the game text. It holds the panes you put away and the panes you can add, another Chat pane and your plugin panes among them.
+- Click a pane's header to fold it down to its name. The other panes take its space, and the header still shows its counts. Click it again to open the pane.
+- Vosh keeps the last 20 layouts of each character. Earlier layouts in arrange mode or in Settings › Characters › Panel layout puts one back. The first time a new version opens, it saves every character's layout before anything changes.
+- Panes you change just before an update are saved before Vosh restarts, so they're still there afterward.
+- Close pane offers Undo.
+- Split right, Split down, Move to sidebar, and Add a pane are gone from the pane menu, and headers no longer drag. Arrange mode does all of that now.
+
 ## v0.95.5 - 2026-10-14
 
 Put panes in the sidebar, read your stats in a new pane, and copy a trigger, alias, or macro.
