@@ -83,6 +83,21 @@ pub(crate) fn writing_path(app_data: &Path) -> PathBuf {
     app_data.join("writing.toml")
 }
 
+/// The folder of the pane layouts each profile had before.
+pub(crate) fn layouts_dir(app_data: &Path) -> PathBuf {
+    app_data.join("layouts")
+}
+
+/// The earlier pane layouts of the profile `name`.
+pub(crate) fn layout_history_path(app_data: &Path, name: &str) -> PathBuf {
+    layouts_dir(app_data).join(format!("{name}.toml"))
+}
+
+/// The last version that kept every profile's layout at its first launch.
+pub(crate) fn layouts_seen_path(app_data: &Path) -> PathBuf {
+    layouts_dir(app_data).join("seen.toml")
+}
+
 /// The folder `#script load` reads Lua files from.
 pub(crate) fn scripts_dir(app_data: &Path) -> PathBuf {
     app_data.join("scripts")

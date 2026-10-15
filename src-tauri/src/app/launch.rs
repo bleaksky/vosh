@@ -141,6 +141,14 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) {
         Ok(mut set) => {
             let notices = crate::disk::upgrades::run(&mut set, app_data, wizard_settled).await;
             state.add_launch_notices(notices);
+            // Before anything opens a profile, keep each one's panes as
+            // the last version left them.
+            crate::profile::layout_history::note_update(
+                &set,
+                app_data,
+                env!("CARGO_PKG_VERSION"),
+                crate::profile::layout_history::now_ms(),
+            );
             load_profiles(state, set).await;
         }
         Err(e) => {

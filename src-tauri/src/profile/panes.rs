@@ -181,7 +181,7 @@ fn old_zone_rank(zone: &str, align: &str) -> Option<u8> {
 }
 
 impl PaneNode {
-    fn leaf(pane: &str, weight: f64) -> Self {
+    pub(crate) fn leaf(pane: &str, weight: f64) -> Self {
         Self {
             id: pane.to_string(),
             pane: Some(pane.to_string()),
@@ -197,7 +197,7 @@ impl PaneNode {
         self.pane.is_none() && self.children.is_empty()
     }
 
-    fn split(id: &str, dir: &str, children: Vec<PaneNode>) -> Self {
+    pub(crate) fn split(id: &str, dir: &str, children: Vec<PaneNode>) -> Self {
         Self {
             id: id.to_string(),
             pane: None,

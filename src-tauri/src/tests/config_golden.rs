@@ -1114,7 +1114,12 @@ async fn a_fresh_install_writes_these_files_on_its_first_save() {
     }
     assert_eq!(
         written_files(root),
-        ["global.toml", "profiles.toml", "profiles/default.toml"],
+        [
+            "global.toml",
+            "layouts/seen.toml",
+            "profiles.toml",
+            "profiles/default.toml"
+        ],
         "a first save writes these files and no others"
     );
     for (golden, file) in [
