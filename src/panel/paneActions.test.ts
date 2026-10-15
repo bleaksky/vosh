@@ -1,14 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { allPanes, isLeaf, type PaneLayout, type PaneType } from './paneLayout';
 import type { ToastInput } from '../stores/toasts';
-import {
-  chatRefToAdd,
-  closeHere,
-  closeWithUndo,
-  dropPane,
-  readyForChat,
-  togglePane,
-} from './paneActions';
+import { chatRefToAdd, closeHere, closeWithUndo, readyForChat, togglePane } from './paneActions';
 import { paneTypesToAdd } from './paneTypes';
 
 // The layout a split reads, whether the plugin that draws the
@@ -111,17 +104,6 @@ describe('togglePane', () => {
 });
 
 describe('the sidebar', () => {
-  it('moves a dropped pane where it lands, and opens the panel for it', () => {
-    layBoth(['map', 'affects'], ['stats']);
-    state.layout = { ...state.layout!, panel_open: false };
-    dropPane('affects', { tree: 'sidebar', at: 'stats', edge: 'before' });
-    expect(trees()).toEqual([['map'], ['affects', 'stats']]);
-    expect(state.layout?.panel_open).toBe(false);
-    dropPane('stats', { tree: 'panel', at: 'map', edge: 'before' });
-    expect(trees()).toEqual([['stats', 'map'], ['affects']]);
-    expect(state.layout?.panel_open).toBe(true);
-  });
-
   it('returns the last Chat pane to All as its partner leaves the sidebar', () => {
     layBoth(['chat'], ['chat']);
     state.layout!.root.children[0] = { ...state.layout!.root.children[0], props: { rest: '1' } };

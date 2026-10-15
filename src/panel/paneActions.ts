@@ -8,7 +8,6 @@ import {
   findNode,
   isLeaf,
   leafIdFor,
-  moveLeaf,
   moveToOtherTree,
   otherTree,
   paneCap,
@@ -18,7 +17,6 @@ import {
   treeIn,
   treeOf,
   withTree,
-  type PaneDrop,
   type PaneLayout,
   type PaneLeaf,
   type PaneNode,
@@ -194,14 +192,6 @@ export function togglePane(pane: PaneType, sidebarShows = true): void {
     }
     const shown = leaf !== null ? l : placeIn(l, 'panel', ref, addPane);
     return { ...shown, panel_open: true };
-  });
-}
-
-/** Move the pane `id` where a drag dropped it. */
-export function dropPane(id: string, drop: PaneDrop): void {
-  updatePanelLayout((l) => {
-    const next = moveLeaf(l, id, drop);
-    return next !== l && drop.tree === 'panel' ? { ...next, panel_open: true } : next;
   });
 }
 
