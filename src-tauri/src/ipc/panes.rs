@@ -14,6 +14,7 @@ use crate::disk::save::{save_by, save_then_broadcast, SavePolicy};
 use crate::profile::inactive::{
     broadcast_profile_changed, edit_inactive_panes, edit_open_panes, Stored,
 };
+use crate::profile::layout_history::{self, Earlier, Why};
 use crate::profile::panes::PaneLayoutPersist;
 use crate::script::panes::LuaPane;
 use crate::sessions::SessionId;
@@ -60,6 +61,19 @@ pub(crate) async fn pane_layout_set(
         if generation.is_some_and(|g| g != current) {
             return Ok(false);
         }
+        // The keys this build does not know are the stored layout's, never
+        // the page's, whose own such as `generation` must not reach the
+        // file.
+        layout.extra =
+            p.ui.panes
+                .as_ref()
+                .map(|stored| stored.extra.clone())
+                .unwrap_or_default();
+        if let (Some(app_data), Some(name)) = (state.app_data.get(), p.open().name()) {
+            let before = p.ui.pane_layout();
+            let now = layout_history::now_ms();
+            layout_history::note(app_data, &name, &before, &layout, Why::Change, now);
+        }
         p.ui.panes = Some(layout.clone());
         (p.open().clone(), current)
     };
@@ -101,6 +115,7 @@ pub(crate) async fn pane_layout_reset(
         &app,
         state.inner(),
         profile,
+        Why::Reset,
         PaneLayoutPersist::with_default_tree,
     )
     .await
@@ -109,40 +124,114 @@ pub(crate) async fn pane_layout_reset(
 /// Give the profile `profile` names the panel and sidebar trees of
 /// `layout`, keeping whether its panel shows and how wide it is. A move in
 /// Settings > Characters lands here, for a profile a session plays or
-/// not, and saves and broadcasts as [`pane_layout_reset`] does.
+/// not, and saves and broadcasts as [`pane_layout_reset`] does. So does
+/// Done in arrange mode, with `arranged` set, which always keeps the
+/// layout it replaces among the earlier ones.
 #[tauri::command]
 pub(crate) async fn pane_trees_set(
     app: AppHandle,
     state: State<'_, SharedState>,
     profile: String,
     layout: PaneLayoutPersist,
+    arranged: Option<bool>,
 ) -> Result<PaneLayoutEnvelope, String> {
-    edit_panes(&app, state.inner(), Some(profile), |current| {
+    let why = if arranged == Some(true) {
+        Why::Arrange
+    } else {
+        Why::Change
+    };
+    edit_panes(&app, state.inner(), Some(profile), why, |current| {
         current.with_trees(&layout)
+    })
+    .await
+}
+
+/// The name of the profile `profile` names, or of the selected session's.
+fn profile_name(state: &SharedState, profile: Option<String>) -> Result<String, String> {
+    profile
+        .or_else(|| state.selected_session().profile().name())
+        .ok_or_else(|| "No profile to read the earlier layouts of.".to_string())
+}
+
+/// The layouts the profile `profile` names had before, or the selected
+/// session's, newest first. Settings > Characters > Panel layout and
+/// arrange mode list them.
+#[tauri::command]
+pub(crate) async fn pane_history_get(
+    state: State<'_, SharedState>,
+    profile: Option<String>,
+) -> Result<Vec<Earlier>, String> {
+    let name = profile_name(&state, profile)?;
+    let Some(app_data) = state.app_data.get() else {
+        return Ok(Vec::new());
+    };
+    Ok(layout_history::read(app_data, &name))
+}
+
+/// Put back the earlier layout `until` names on the profile `profile`
+/// names, or the selected session's, keeping whether its panel shows and
+/// how wide it is. The layout it replaces joins the earlier ones, so a
+/// restore can be undone the same way. Saves and broadcasts as
+/// [`pane_layout_reset`] does.
+#[tauri::command]
+pub(crate) async fn pane_history_restore(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    profile: Option<String>,
+    until: i64,
+) -> Result<PaneLayoutEnvelope, String> {
+    let name = profile_name(&state, profile.clone())?;
+    let app_data = state
+        .app_data
+        .get()
+        .ok_or_else(|| "Vosh has no data folder to read.".to_string())?;
+    let earlier = layout_history::read(app_data, &name)
+        .into_iter()
+        .find(|e| e.until == until)
+        .ok_or_else(|| "That earlier layout is gone.".to_string())?;
+    edit_panes(&app, state.inner(), profile, Why::Restore, |current| {
+        current.with_trees(&earlier.panes)
     })
     .await
 }
 
 /// Edit the panes of the profile `profile` names, or of the selected
 /// session's, with `edit`, then save and tell the windows, see
-/// [`pane_layout_reset`].
+/// [`pane_layout_reset`]. The layout `edit` replaces joins the earlier
+/// ones as `why` says.
 async fn edit_panes(
     app: &AppHandle,
     shared: &SharedState,
     profile: Option<String>,
+    why: Why,
     edit: impl Fn(&PaneLayoutPersist) -> PaneLayoutPersist + Send + Sync,
 ) -> Result<PaneLayoutEnvelope, String> {
-    let named = match profile.as_deref() {
-        Some(name) => match edit_inactive_panes(shared, name, |l| edit(l)).await? {
-            Stored::File(layout) => {
-                broadcast_profile_changed(app, name);
-                return Ok(PaneLayoutEnvelope {
-                    layout,
-                    generation: None,
-                });
+    let app_data = shared.app_data.get().cloned();
+    let keeping = |name: Option<String>| {
+        let app_data = app_data.clone();
+        let edit = &edit;
+        move |before: &PaneLayoutPersist| {
+            let after = edit(before);
+            if let (Some(app_data), Some(name)) = (&app_data, &name) {
+                let now = layout_history::now_ms();
+                layout_history::note(app_data, name, before, &after, why, now);
             }
-            Stored::Open(open) => Some(open),
-        },
+            after
+        }
+    };
+    let named = match profile.as_deref() {
+        Some(name) => {
+            match edit_inactive_panes(shared, name, keeping(Some(name.to_string()))).await? {
+                Stored::File(layout) => {
+                    broadcast_profile_changed(app, name);
+                    return Ok(PaneLayoutEnvelope {
+                        layout,
+                        generation: None,
+                    });
+                }
+                Stored::Open(open) => Some(open),
+            }
+        }
         None => None,
     };
     let selected = shared.selected_session();
@@ -152,7 +241,8 @@ async fn edit_panes(
             None => selected.lock_profile().await,
         };
         let shown = Arc::ptr_eq(p.open(), &selected.profile());
-        let envelope = edit_open_panes(shared, &mut p, shown, &edit);
+        let name = p.open().name();
+        let envelope = edit_open_panes(shared, &mut p, shown, keeping(name));
         (p.open().clone(), shown, envelope)
     };
     if shown {

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   affectsMarkerChoices,
   affectsStyleChoices,
@@ -24,43 +24,21 @@ import { useChatColors } from '../stores/config/chatColorsStore';
 import { useStatsStyle } from '../stores/config/statsStyleStore';
 import { usePlayPalette } from '../theme/fitGameColors';
 import type { XtermPalette } from '../theme/themes';
-import {
-  LUA_PANE,
-  WRITING_PANE,
-  bothTrees,
-  paneKey,
-  paneRef,
-  splitPane,
-  treeIn,
-  treeOf,
-  type PaneLeaf,
-  type PaneRef,
-  type SplitDir,
-} from './paneLayout';
+import { LUA_PANE, type PaneLeaf } from './paneLayout';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
-import {
-  closeHere,
-  movePaneAcross,
-  paneToSplitIn,
-  returnToCommandLine,
-  showHereInstead,
-  splitHere,
-} from './paneActions';
+import { closeWithUndo, returnToCommandLine, toggleFold } from './paneActions';
 import { submenuAt } from '../ui/menuPlacement';
-import { fitsPanel } from './paneGeometry';
-import { PaneTextSizeContext } from './paneTextSize';
 import { CheckIcon, ChevronRightIcon } from '../ui/icons';
-import { getPanelLayout } from './panelLayoutStore';
 import { statsStyleChoices } from './stats/statsView';
-import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } from './paneTypes';
+import { paneLabel } from './paneTypes';
+import { enterArrangeMode } from './arrange/arrangeActions';
 
-// The more menu on every pane header: Split right, Split
-// down, Show here instead with a submenu of pane types and then, after
-// a rule, the Lua panes on offer, Move to sidebar in the panel or Move
-// to panel in the sidebar, and Close pane. The writing card stays in
-// the panel, so its menu has no Move.
+// The more menu on every pane header: Fold pane or Unfold pane, then
+// Arrange panes, which turns on arrange mode to move, add and put away
+// panes, then what the pane itself offers, and Close pane, which a
+// toast can undo.
 // The Affects pane adds Style and Marker, each a submenu with a check
 // on the current pick, Change when affects warn, which opens Settings
 // on the hours under Layout, Affects, and Edit tracked affects, which
@@ -74,9 +52,7 @@ import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } f
 // adds Edit with its plugin's name, which opens that plugin under
 // Scripts in Settings. A pick saves
 // alone for the profile and the pane follows at once. Closing a pane
-// loses nothing, so it carries no destructive color. A split the panel
-// has no room for, with every pane at its minimum at your panel size,
-// stays unavailable.
+// loses nothing, so it carries no destructive color.
 
 interface Props {
   leaf: PaneLeaf;
@@ -99,7 +75,6 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const statsStyle = useStatsStyle();
   const chatColors = useChatColors();
   const palette = usePlayPalette();
-  const textSize = useContext(PaneTextSizeContext);
   const menuId = `pane-menu-${leaf.id}`;
   const subId = (which: PaneSubmenu) => `${menuId}-${which}`;
   const chanId = (channel: string) => `${menuId}-colors-${channel}`;
@@ -140,23 +115,6 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     action();
   };
 
-  const splitIn = paneToSplitIn(leaf.id);
-  const layout = getPanelLayout();
-  const showHere = panesToShowInstead(leaf, layout ? bothTrees(layout) : null);
-  const where = layout ? treeOf(layout, leaf.id) : null;
-  const area = anchor.closest('.panel-panes');
-  const canSplit = (dir: SplitDir) => {
-    const root = layout && where ? treeIn(layout, where) : null;
-    if (!root || splitIn === null) return false;
-    if (!area) return true;
-    return fitsPanel(
-      splitPane(root, leaf.id, dir, splitIn),
-      area.clientWidth,
-      area.clientHeight,
-      textSize,
-    );
-  };
-
   // Each choice list checks the current pick. A pick saves it alone,
   // so the pane and Settings follow at once.
   const choices = <T extends string>(list: MenuChoice<T>[], pick: (value: T) => void) =>
@@ -173,12 +131,6 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     void setAffectsDisplay(patch).catch(() => undefined);
   };
   const submenus: Record<PaneSubmenu, { label: string; items: () => ReactNode }> = {
-    show: {
-      label: 'Show here instead',
-      items: () => (
-        <ShowHereRows {...showHere} pick={(ref) => run(() => showHereInstead(leaf.id, ref))()} />
-      ),
-    },
     style: {
       label: 'Style',
       items: () =>
@@ -316,33 +268,19 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         at={at}
         onClose={close}
       >
-        <MenuItem
-          disabled={!canSplit('row')}
-          onHover={closeSub}
-          onFocus={closeSub}
-          onSelect={run(() => splitHere(leaf.id, 'row'))}
-        >
-          Split right
+        <MenuItem onHover={closeSub} onFocus={closeSub} onSelect={run(() => toggleFold(leaf.id))}>
+          {leaf.folded ? 'Unfold pane' : 'Fold pane'}
         </MenuItem>
         <MenuItem
-          disabled={!canSplit('column')}
           onHover={closeSub}
           onFocus={closeSub}
-          onSelect={run(() => splitHere(leaf.id, 'column'))}
+          onSelect={() => {
+            onClose();
+            void enterArrangeMode();
+          }}
         >
-          Split down
+          Arrange panes
         </MenuItem>
-        <MenuSeparator />
-        {submenuRow('show', showHere.builtIns.length === 0 && showHere.lua.length === 0)}
-        {where !== null && leaf.pane !== WRITING_PANE && (
-          <MenuItem
-            onHover={closeSub}
-            onFocus={closeSub}
-            onSelect={run(() => movePaneAcross(leaf.id))}
-          >
-            {where === 'panel' ? 'Move to sidebar' : 'Move to panel'}
-          </MenuItem>
-        )}
         {leaf.pane === 'stats' && (
           <>
             <MenuSeparator />
@@ -409,40 +347,16 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
           </>
         )}
         <MenuSeparator />
-        <MenuItem onHover={closeSub} onFocus={closeSub} onSelect={run(() => closeHere(leaf.id))}>
+        <MenuItem
+          onHover={closeSub}
+          onFocus={closeSub}
+          onSelect={run(() => closeWithUndo(leaf.id, paneLabel(leaf)))}
+        >
           Close pane
         </MenuItem>
       </MenuSurface>
       {sub}
       {chanSub}
-    </>
-  );
-}
-
-/** The rows of Show here instead: the built-in panes, then a rule and
- *  the Lua panes, each with the plugin that draws it. */
-export function ShowHereRows({
-  builtIns,
-  lua,
-  pick,
-}: PanesToShowInstead & { pick: (ref: PaneRef) => void }) {
-  return (
-    <>
-      {builtIns.map((t) => (
-        <MenuItem key={t} onSelect={() => pick(paneRef(t))}>
-          {PANE_LABELS[t]}
-        </MenuItem>
-      ))}
-      {builtIns.length > 0 && lua.length > 0 && <MenuSeparator />}
-      {lua.map((ref) => (
-        <MenuItem
-          key={paneKey(ref)}
-          trailing={<span className="menu-hint">{ref.props.plugin}</span>}
-          onSelect={() => pick(ref)}
-        >
-          {paneLabel(ref)}
-        </MenuItem>
-      ))}
     </>
   );
 }

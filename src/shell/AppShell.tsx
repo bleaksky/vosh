@@ -101,6 +101,10 @@ interface Props {
   reader?: ReactNode;
   input: ReactNode;
   statusLine: ReactNode;
+  /** Arrange mode's card, over the terminal's column from under the
+   *  band to the window's foot, or null. The terminal, the command line
+   *  and the status line stay mounted under it. */
+  arrange?: ReactNode;
   /** The status bar style, which sets the bar's height. */
   statusStyle?: StatusStyle;
   /** The side the panel sits on. The sessions sidebar takes the other. */
@@ -141,6 +145,7 @@ export function AppShell({
   reader = null,
   input,
   statusLine,
+  arrange = null,
   statusStyle = 'compact',
   panelSide = 'right',
   panel,
@@ -307,6 +312,7 @@ export function AppShell({
         {input}
       </section>
       <div className="shell-slot-status">{statusLine}</div>
+      {arrange !== null && <div className="shell-slot-arrange">{arrange}</div>}
       <aside ref={panelRef} className="shell-slot-panel" aria-label="Panel">
         {panel}
       </aside>

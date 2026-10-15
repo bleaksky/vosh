@@ -88,12 +88,14 @@ function caretStranded(): boolean {
 
 /** The sidebar for `count` sessions beside a panel open or hidden,
  *  holding panes of its own or not. `focusInput` puts the caret back on
- *  the command line. */
+ *  the command line. While `arranging`, it shows whenever the window has
+ *  room, so a pane can land in it. */
 export function useSessionsSidebar(
   count: number,
   panelOpen: boolean,
   focusInput: () => void = () => {},
   holdsPanes = false,
+  arranging = false,
 ): SessionsSidebar {
   const [hidden, setHidden] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -123,7 +125,7 @@ export function useSessionsSidebar(
     focusInput();
   });
 
-  const shown = toggleable && !hidden && !narrow;
+  const shown = !narrow && (arranging || (toggleable && !hidden));
   return {
     shown,
     overlay,

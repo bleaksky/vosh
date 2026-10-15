@@ -759,6 +759,10 @@ pub(crate) struct UiConfig {
     /// copy.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub chat_colors: BTreeMap<String, String>,
+    /// Keys this build does not know, which a newer build wrote. They
+    /// ride along as they are, so a save never drops them.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, toml::Value>,
 }
 
 /// Vitals row appearance. Each `show_*` toggle controls whether the
@@ -1660,6 +1664,7 @@ impl Default for UiConfig {
             snoop_window_width: None,
             snoop_window_height: None,
             chat_colors: BTreeMap::new(),
+            extra: BTreeMap::new(),
         }
     }
 }

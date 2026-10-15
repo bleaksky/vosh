@@ -95,6 +95,20 @@
   min-width: 0;
 }
 
+/* Arrange mode's card takes the terminal's column under the band, over
+   the terminal, the command line and the status line, which stay
+   mounted under it. Its ground is the window's, so it covers the
+   native terminal under the page on macOS too. */
+.shell-slot-arrange {
+  grid-row: 2 / -1;
+  grid-column: 2;
+  z-index: var(--z-in-pane);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
 /* The panel spans every row. Its ground runs to the top edge under the
    band, and its panes start just below the band. */
 .shell-slot-panel {
@@ -1313,4 +1327,195 @@
   to {
     transform: none;
   }
+}
+
+/* ── Arrange mode ────────────────────────────────────────────────── */
+
+/* The tile under the pointer while a drag runs in arrange mode, on the
+   raised ground with the floating shadow. */
+.arrange-ghost {
+  position: fixed;
+  z-index: var(--z-card);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 180px;
+  height: 32px;
+  padding: 0 10px 0 6px;
+  border-radius: var(--r-row);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+}
+
+/* The card over the terminal's column. Its lines sit at the left, the
+   shelf under them, and the buttons at its foot. */
+.arrange-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 28px 28px 22px;
+  font-family: var(--font-ui);
+}
+
+.arrange-card > * {
+  max-width: 600px;
+}
+
+.arrange-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.arrange-line {
+  margin: 6px 0 0;
+  max-width: 46ch;
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--secondary);
+}
+
+.arrange-shelf-head {
+  display: flex;
+  gap: 6px;
+  margin-top: 22px;
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.arrange-shelf-head > span {
+  color: var(--tertiary);
+}
+
+.arrange-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  min-height: 104px;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  outline: 1.5px dashed var(--sep);
+  outline-offset: -1.5px;
+}
+
+.arrange-shelf.is-over {
+  outline-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.arrange-shelf-empty {
+  margin: auto;
+  font-size: 12px;
+  color: var(--tertiary);
+}
+
+.arrange-shelf-tile {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 180px;
+  height: 36px;
+  padding: 0 6px;
+  border-radius: var(--r-row);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  cursor: grab;
+  outline: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.arrange-shelf-tile .arrange-tile-name {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.arrange-shelf-tile.is-slot {
+  justify-content: center;
+  background: var(--accent-soft);
+  box-shadow: none;
+  outline: 1.5px dashed var(--accent);
+  outline-offset: -1.5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.arrange-shelf-tile:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.arrange-shelf-show {
+  flex: none;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  font: 500 11px/14px var(--font-ui);
+  color: var(--secondary);
+}
+
+.arrange-shelf-show:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.arrange-shelf-show:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.arrange-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+.arrange-actions-gap {
+  flex: 1;
+}
+
+.arrange-plain {
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: none;
+  font: 500 12px/16px var(--font-ui);
+  color: var(--tertiary);
+}
+
+.arrange-plain:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.arrange-plain:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.arrange-keys {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
+.arrange-ghost .arrange-tile-name {
+  font-size: 12px;
+  line-height: 16px;
 }

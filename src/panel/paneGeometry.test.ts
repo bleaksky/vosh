@@ -34,6 +34,8 @@ import {
   paneFloorH,
   paneMinH,
   paneWidth,
+  unfolded,
+  weightsAfterDrag,
 } from './paneGeometry';
 
 const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -577,5 +579,63 @@ describe('at your panel size', () => {
     expect(affectsMinIn(tree, 494, rows(thirty), 'countdown', FIXED_MEASURE, 16)).toBe(
       countdownMinH(rows(thirty), 1, 16),
     );
+  });
+});
+
+describe('a folded pane', () => {
+  const tree = (folded: string[], split: 'column' | 'row' = 'column'): PaneSplit =>
+    sanitize({
+      id: 'root',
+      split,
+      weight: 1,
+      children: ['map', 'affects', 'chat'].map((pane) => ({
+        id: pane,
+        pane,
+        weight: 1,
+        props: {},
+        ...(folded.includes(pane) ? { folded: true } : {}),
+      })),
+    });
+  const heights = (root: PaneSplit) =>
+    layoutPanes(root, 300, 600).leaves.map(({ leaf, rect }) => [leaf.id, rect.h]);
+
+  it('keeps its header down a column, and the open panes share the rest', () => {
+    const geometry = layoutPanes(tree(['map']), 300, 600);
+    expect(heights(tree(['map']))).toEqual([
+      ['map', 28],
+      ['affects', 285],
+      ['chat', 285],
+    ]);
+    // The lines on each side of it rest, and the one between the open
+    // panes still drags.
+    expect(geometry.handles.map((h) => h.inert === true)).toEqual([true, false]);
+  });
+
+  it('leaves the space under the last header empty with every pane folded', () => {
+    expect(heights(tree(['map', 'affects', 'chat']))).toEqual([
+      ['map', 28],
+      ['affects', 28],
+      ['chat', 28],
+    ]);
+  });
+
+  it('keeps its share of a row, and its header grows with your panel size', () => {
+    const row = layoutPanes(tree(['map'], 'row'), 360, 600).leaves.map(({ rect }) => rect.w);
+    expect(row).toEqual([119, 120, 119]);
+    expect(minExtent(tree(['map']).children[0], 'column', false, {}, 16)).toBe(37);
+  });
+
+  it('keeps its share when you drag the line between the open panes', () => {
+    const root = tree(['chat']);
+    // Map and Affects share 570 px evenly, and Chat holds a third.
+    const weights = weightsAfterDrag(root, [370, 200, 28]);
+    expect(weights[0] / weights[1]).toBeCloseTo(370 / 200);
+    expect(weights[2] / (weights[0] + weights[1])).toBeCloseTo(
+      root.children[2].weight / (root.children[0].weight + root.children[1].weight),
+    );
+  });
+
+  it('opens again for arrange mode, which lays every pane out open', () => {
+    expect(heights(unfolded(tree(['map'])))).toEqual(heights(tree([])));
   });
 });
