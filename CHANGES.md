@@ -13,6 +13,7 @@ Put panes in the sidebar, read your stats in a new pane, and copy a trigger, ali
 - The status bar styles no longer run off the edge in a narrow window. Parts drop out whole before any name gets cut, and the Dashboard captions line up.
 - A profile that never picked a status bar style shows Compact again, the quiet line from before 0.95.3.
 - Find says No matches when the text isn't in the scrollback, instead of Found.
+- Stop on a snoop tab closes it when the game says you aren't snooping anyone by that name, with your prompt off too. A tab for a player who left the game no longer stays open for good.
 
 ## v0.95.4 - 2026-10-12
 
