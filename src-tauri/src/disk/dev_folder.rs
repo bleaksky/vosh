@@ -1,11 +1,13 @@
 //! A debug build, the one `npm run tauri dev` runs, keeps its data in a
 //! folder of its own beside the installed app's, `com.aabahran.vosh.dev`
 //! next to `com.aabahran.vosh`. Its first launch fills that folder with a
-//! copy of the installed app's, without the logs and the backups. From
-//! then on neither touches the other's files, so an installed Vosh older
-//! than the dev build never reads a setting the dev build added and saves
-//! the file back without it. Delete the dev folder to start again from a
-//! fresh copy.
+//! copy of the installed app's, without the logs and the backups, and
+//! marks it with `.copied`. From then on neither touches the other's
+//! files, so an installed Vosh older than the dev build never reads a
+//! setting the dev build added and saves the file back without it. A dev
+//! folder without the mark, which a launch whose copy failed ran on, is
+//! set aside and copied again. Delete the dev folder to start again from
+//! a fresh copy.
 
 use std::fs;
 use std::io;
@@ -21,18 +23,25 @@ pub(crate) fn dev_folder(installed: &Path) -> PathBuf {
     installed.with_file_name(name)
 }
 
-/// Fill `dev` with a copy of `installed` when `dev` does not exist yet,
-/// and say whether it did. The copy goes to a sibling first and then
-/// takes the dev folder's name, so a launch that stops partway leaves no
-/// half copy behind. Without an installed folder the dev folder starts
-/// empty.
+/// The mark a whole copy leaves in the dev folder.
+const COPIED: &str = ".copied";
+
+/// Fill `dev` with a copy of `installed` unless it holds a whole copy
+/// already, and say whether it did. The copy goes to a sibling first and
+/// takes the dev folder's name once whole and marked, so a launch that
+/// stops partway leaves no half copy behind. A dev folder with no mark
+/// moves aside to `<dev>.unmarked-<unix ms>` first. Without an installed
+/// folder the dev folder starts empty.
 pub(crate) fn seed(installed: &Path, dev: &Path) -> io::Result<bool> {
-    if dev.exists() {
+    if dev.join(COPIED).is_file() {
         return Ok(false);
     }
-    let mut partial = dev.as_os_str().to_os_string();
-    partial.push(".partial");
-    let partial = PathBuf::from(partial);
+    let sibling = |suffix: &str| {
+        let mut name = dev.as_os_str().to_os_string();
+        name.push(suffix);
+        PathBuf::from(name)
+    };
+    let partial = sibling(".partial");
     if partial.exists() {
         fs::remove_dir_all(&partial)?;
     }
@@ -40,6 +49,13 @@ pub(crate) fn seed(installed: &Path, dev: &Path) -> io::Result<bool> {
         copy_tree(installed, &partial)?;
     } else {
         fs::create_dir_all(&partial)?;
+    }
+    fs::write(partial.join(COPIED), "")?;
+    if dev.exists() {
+        let when = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis());
+        fs::rename(dev, sibling(&format!(".unmarked-{when}")))?;
     }
     fs::rename(&partial, dev)?;
     Ok(true)
@@ -127,11 +143,12 @@ mod tests {
     }
 
     #[test]
-    fn a_dev_folder_that_exists_is_left_alone() {
+    fn a_dev_folder_with_a_whole_copy_is_left_alone() {
         let root = tempfile::tempdir().unwrap();
         let installed = root.path().join("com.aabahran.vosh");
         write(&installed.join("profiles/Tolliver.toml"), "installed");
         let dev = dev_folder(&installed);
+        assert!(seed(&installed, &dev).unwrap());
         write(&dev.join("profiles/Tolliver.toml"), "dev");
 
         assert!(!seed(&installed, &dev).unwrap());
@@ -143,6 +160,29 @@ mod tests {
     }
 
     #[test]
+    fn a_dev_folder_a_failed_copy_left_is_set_aside_and_copied_again() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = root.path().join("com.aabahran.vosh");
+        write(&installed.join("profiles/Tolliver.toml"), "installed");
+        let dev = dev_folder(&installed);
+        // A launch whose copy failed ran on an empty folder.
+        write(&dev.join("scripts/.keep"), "");
+
+        assert!(seed(&installed, &dev).unwrap());
+
+        assert_eq!(
+            fs::read_to_string(dev.join("profiles/Tolliver.toml")).unwrap(),
+            "installed"
+        );
+        let aside = fs::read_dir(root.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains(".dev.unmarked-"))
+            .count();
+        assert_eq!(aside, 1);
+    }
+
+    #[test]
     fn without_an_installed_folder_the_dev_folder_starts_empty() {
         let root = tempfile::tempdir().unwrap();
         let installed = root.path().join("com.aabahran.vosh");
@@ -151,7 +191,12 @@ mod tests {
         assert!(seed(&installed, &dev).unwrap());
 
         assert!(dev.is_dir());
-        assert_eq!(fs::read_dir(&dev).unwrap().count(), 0);
+        let names: Vec<_> = fs::read_dir(&dev)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .collect();
+        assert_eq!(names, [COPIED]);
     }
 
     #[test]

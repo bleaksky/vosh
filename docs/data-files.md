@@ -27,8 +27,9 @@ A debug build, the one `npm run tauri dev` runs, keeps a folder of its
 own beside that one, named `com.aabahran.vosh.dev`. Its first launch
 copies the installed app's folder into it, without `logs.sqlite`,
 `maps.sqlite` and the backups, and from then on the two never touch each
-other's files. `src-tauri/src/disk/dev_folder.rs` does this. Delete the
-dev folder to start again from a fresh copy.
+other's files. `src-tauri/src/disk/dev_folder.rs` does this. A dev folder
+without its `.copied` mark, which a failed copy leaves, moves aside and
+is copied again. Delete the dev folder to start again from a fresh copy.
 
 ## How a TOML save works
 
@@ -69,7 +70,7 @@ it the same way.
 | `catalog.journal.toml`                      | TOML                | `src-tauri/src/loadouts/wizard/journal.rs`                     |
 | `affect_full.toml`                          | TOML, `version = 1` | `src-tauri/src/affects/full.rs`                                |
 | `writing.toml`                              | TOML, `version = 1` | `src-tauri/src/writing.rs`                                     |
-| `layouts/<name>.toml`, `layouts/seen.toml`  | TOML                | `src-tauri/src/profile/layout_history.rs`                      |
+| `layouts/<name>.toml`, `layouts/.seen.toml` | TOML                | `src-tauri/src/profile/layout_history.rs`                      |
 | `logs.sqlite`                               | SQLite in WAL mode  | `crates/log/src/sqlite.rs`                                     |
 | `scrollback.txt`, `scrollback-<n>.txt`      | Raw bytes, CRLF     | `src-tauri/src/logs.rs`                                        |
 | `scripts/`                                  | A folder            | `create_scripts_dir` in `src-tauri/src/app/launch.rs`          |
@@ -186,7 +187,7 @@ before, newest first, each in an `[[earlier]]` entry with `until`, the
 Unix milliseconds it gave way, `why` (`change`, `arrange`, `reset`,
 `restore` or `update`), `version` for an update, and the `[ui.panes]`
 table it had as `panes`. A rename takes the file along and a delete
-drops it. `layouts/seen.toml` names in `version` the last version whose
+drops it. `layouts/.seen.toml` names in `version` the last version whose
 first launch kept every profile's layout, so each version does that
 once, before any profile opens. Both go through `swap_in` with no
 backup, and a file that does not read counts as empty.
