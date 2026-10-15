@@ -152,6 +152,7 @@ async fn handle_event<R: tauri::Runtime>(
                     .watching()
                     .then(|| walk::answer(&plain, ended.as_deref()).to_string());
                 conn.writer.heard(&plain);
+                end_refused_stops(conn, &plain, batch);
                 if conn.writer.watching() {
                     let out = conn.stream.lines_out();
                     conn.writer.line(&GameLine::new(&plain, &line.bytes), out);
@@ -269,6 +270,18 @@ async fn handle_event<R: tauri::Runtime>(
 /// (see [`super::snoop::Snoops::prompted`]) and the tab list goes out.
 fn end_unanswered_stops<R: tauri::Runtime>(conn: &Conn<R>, batch: &mut ReadBatch) {
     if conn.session.connection.lock().snoops.prompted() {
+        batch.snoop = true;
+    }
+}
+
+/// The game answered a snoop stop with no snoop to end, so the tab you
+/// pressed Stop on goes (see [`super::snoop::Snoops::refused`]). It
+/// answers so with your prompt off too, when no prompt ever comes.
+fn end_refused_stops<R: tauri::Runtime>(conn: &Conn<R>, plain: &str, batch: &mut ReadBatch) {
+    let Some(every) = super::snoop::refusal(plain) else {
+        return;
+    };
+    if conn.session.connection.lock().snoops.refused(every) {
         batch.snoop = true;
     }
 }

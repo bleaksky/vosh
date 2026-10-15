@@ -69,8 +69,14 @@ fn state(on: bool, name: &str) -> Vec<u8> {
 
 /// A connected Orla with Tolliver's snoop started, its tab listed.
 async fn snooping() -> Harness {
+    snooping_with(true).await
+}
+
+/// [`snooping`], with `telnetga` on or off.
+async fn snooping_with(ga: bool) -> Harness {
     let h = Harness::new(Options {
         name: "Orla".into(),
+        ga,
         ..Options::new(Build::New)
     })
     .await;
@@ -250,6 +256,41 @@ async fn stop_asks_the_game_and_an_end_you_did_not_ask_for_keeps_the_tab() {
     both.extend(state(false, "Orla"));
     h.servers[0].push(&both);
     h.until("no tabs", |h| tabs(h).is_empty()).await;
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn with_your_prompt_off_the_game_saying_you_snoop_nobody_closes_the_tab() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    // Orla plays with `telnetga` off, so with her prompt off no prompt
+    // and no GA ever comes.
+    let h = snooping_with(false).await;
+    h.type_line("prompt off").await;
+    h.until_shown("You will no longer see prompts.").await;
+    // The player left under a name the game lost, so its last text came
+    // as someone's and its Snoop.Stop as Your target's.
+    h.servers[0].push(&packet(
+        r#"Snoop.Output {"name":"someone","text":"You have escaped from the Forsaken Lands.\n\r"}"#,
+    ));
+    h.servers[0].push(&state(false, "Your target"));
+    h.until("the phantom tab", |h| {
+        tabs(h) == [tab("Tolliver", true), tab("someone", true)]
+    })
+    .await;
+
+    stop(&h, Some("someone")).await;
+    h.until("snoop stop someone", |h| {
+        sent(h).contains("snoop stop someone\r\n")
+    })
+    .await;
+    // No prompt comes, so the tab waits on the game's answer.
+    read_on(&h, "An antelope enters the room.").await;
+    assert_eq!(tabs(&h), [tab("Tolliver", true), tab("someone", true)]);
+    h.servers[0].push(b"You aren't snooping anyone by that name.\n\r");
+    h.until("the answer", |h| tabs(h) == [tab("Tolliver", true)])
+        .await;
     h.finish(grid).await;
 }
 

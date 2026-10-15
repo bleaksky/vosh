@@ -33,6 +33,26 @@ use crate::sessions::Session;
 /// The lines a tab keeps, as the snoop terminal's scrollback does.
 pub(crate) const MAX_LINES: usize = 5_000;
 
+/// What the game answers `snoop stop <name>` with when it snoops nobody
+/// by that name, and `snoop stop` when it snoops nobody (`do_snoop` in
+/// `act_wiz.c`).
+const NONE_BY_THAT_NAME: &str = "You aren't snooping anyone by that name.";
+const NONE_AT_ALL: &str = "You aren't snooping anyone.";
+
+/// Whether the game line `plain` answers a stop with no snoop to end:
+/// Some(false) for one player, Some(true) for every snoop, None for any
+/// other line. A line can start with the prompt it follows.
+pub(crate) fn refusal(plain: &str) -> Option<bool> {
+    let line = plain.trim_end();
+    if line.ends_with(NONE_BY_THAT_NAME) {
+        Some(false)
+    } else if line.ends_with(NONE_AT_ALL) {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 /// Where a snoop stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -330,6 +350,23 @@ impl Snoops {
     /// text stays out until the game starts or ends the snoop. Returns
     /// whether a tab went.
     pub(crate) fn prompted(&mut self) -> bool {
+        self.drop_stopping(true)
+    }
+
+    /// The game answered a stop with no snoop to end, which it does with
+    /// your prompt off as well as on. It forgot the snoop in a hot reboot,
+    /// or the player left under a name it no longer knew, or the tab was
+    /// never a snoop of its own. `snoop stop` and a name answers for one,
+    /// so the first tab waiting on Stop goes, and `snoop stop` alone
+    /// answers for `every` one. Their text stays out as after
+    /// [`Self::prompted`]. Returns whether a tab went.
+    pub(crate) fn refused(&mut self, every: bool) -> bool {
+        self.drop_stopping(every)
+    }
+
+    /// Close the first tab waiting on Stop, or `every` one, keeping its
+    /// player's text out until the game starts or ends the snoop.
+    fn drop_stopping(&mut self, every: bool) -> bool {
         let mut changed = false;
         while let Some(at) = self
             .tabs
@@ -340,6 +377,9 @@ impl Snoops {
             self.dropped.push(self.tabs[at].name.clone());
             self.remove(at);
             changed = true;
+            if !every {
+                break;
+            }
         }
         self.list_changed |= changed;
         changed
@@ -561,6 +601,45 @@ mod tests {
         output(&mut s, "Tolliver", "again\n\r", 6);
         assert_eq!(tabs(&s)[1], tab("Tolliver", true, None));
         assert_eq!(s.all()[1].text, "again\n\r");
+    }
+
+    #[test]
+    fn the_game_saying_it_snoops_nobody_closes_a_stop() {
+        use super::refusal;
+        assert_eq!(
+            refusal("You aren't snooping anyone by that name."),
+            Some(false)
+        );
+        assert_eq!(
+            refusal("<329hp 9999m> You aren't snooping anyone by that name.\r"),
+            Some(false)
+        );
+        assert_eq!(refusal("You aren't snooping anyone."), Some(true));
+        assert_eq!(refusal("You stop snooping Maren."), None);
+
+        // Two phantom tabs, as when a player left under a name the game
+        // lost. Nothing waits on Stop, so the answer closes nothing.
+        let mut s = Snoops::default();
+        output(&mut s, "Tolliver", "seen\n\r", 1);
+        output(&mut s, "someone", "last\n\r", 2);
+        assert!(!s.refused(false));
+        // Stop on each, with your prompt off, and each answer closes one.
+        s.stopping(Some("someone"));
+        assert!(s.refused(false));
+        assert_eq!(tabs(&s), [tab("Tolliver", true, None)]);
+        s.stopping(Some("Tolliver"));
+        assert!(s.refused(false));
+        assert_eq!(tabs(&s), Vec::new());
+        // The text that was on its way opens no tab.
+        output(&mut s, "Tolliver", "late\n\r", 3);
+        assert_eq!(tabs(&s), Vec::new());
+
+        // Stop every snoop, and the bare answer closes them all.
+        start(&mut s, "Orla");
+        start(&mut s, "Maren");
+        s.stopping(None);
+        assert!(s.refused(true));
+        assert_eq!(tabs(&s), Vec::new());
     }
 
     #[test]
