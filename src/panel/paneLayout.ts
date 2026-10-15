@@ -1,5 +1,6 @@
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import {
+  paneHistoryRestore,
   paneLayoutGet,
   paneLayoutReset,
   paneTreesSet,
@@ -896,9 +897,25 @@ export async function resetPaneLayout(profile?: string | null): Promise<PaneLayo
 }
 
 /** Give the profile `profile` the trees of `layout`, as a move in
- *  Settings > Characters does, and return its layout as saved. */
-export async function setProfileTrees(profile: string, layout: PaneLayout): Promise<PaneLayout> {
-  return sanitizeLayout(await paneTreesSet(profile, layout));
+ *  Settings > Characters does, and return its layout as saved. Done in
+ *  arrange mode sets `arranged`, so the layout it replaces always joins
+ *  the earlier ones. */
+export async function setProfileTrees(
+  profile: string,
+  layout: PaneLayout,
+  arranged = false,
+): Promise<PaneLayout> {
+  return sanitizeLayout(await paneTreesSet(profile, layout, arranged));
+}
+
+/** Put back the earlier layout `until` names on the profile `profile`,
+ *  or the live profile when you name none, and return the layout as
+ *  saved (paneHistoryRestore). */
+export async function restoreEarlierLayout(
+  profile: string | null,
+  until: number,
+): Promise<PaneLayout> {
+  return sanitizeLayout(await paneHistoryRestore(profile, until));
 }
 
 /** Save the active profile's pane layout. Calls within 250 ms coalesce

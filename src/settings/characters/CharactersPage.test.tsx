@@ -66,6 +66,13 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
         login_on: false,
       };
     }
+    case 'pane_history_get':
+      return [
+        { until: 1_760_000_000_000, why: 'update', version: '0.95.6', panes: defaultLayout() },
+        { until: 1_759_900_000_000, why: 'change', panes: defaultLayout() },
+      ];
+    case 'pane_history_restore':
+      return defaultLayout();
     case 'profile_import_read':
       if (args?.fileName === 'catalog.toml') throw NOT_AN_EXPORT;
       return PREVIEW;
@@ -305,5 +312,35 @@ describe('Panel layout under Characters', () => {
     const layout = saved?.args?.layout as ReturnType<typeof defaultLayout>;
     expect(layout.sidebar.children.map((c) => c.id)).toEqual(['map']);
     expect(layout.root.children.map((c) => c.id)).toEqual(['affects']);
+  });
+});
+
+describe('Earlier layouts under Panel layout', () => {
+  it('lists what the profile had before and puts one back', async () => {
+    let rows: string[] = [];
+    await run(
+      (root) => {
+        const button = findAll(
+          root,
+          (el) => el.nodeName === 'BUTTON' && el.textContent === 'Earlier layouts',
+        )[0];
+        props<{ onClick: (e: unknown) => void }>(button).onClick({
+          currentTarget: {
+            getBoundingClientRect: () => ({ left: 0, top: 0, right: 120, bottom: 28 }),
+            focus: () => undefined,
+          },
+        });
+      },
+      (root) => {
+        const items = findAll(root, (el) => el.getAttribute('role') === 'menuitem');
+        rows = items.map((el) => el.textContent);
+        props<{ onClick: () => void }>(items[1]).onClick();
+      },
+    );
+    expect(state.invoked.find((c) => c.cmd === 'pane_history_get')?.args?.profile).toBe('Healer');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatch(/^Until .*Before 0\.95\.6$/);
+    const restored = state.invoked.find((c) => c.cmd === 'pane_history_restore');
+    expect(restored?.args).toEqual({ profile: 'Healer', until: 1_759_900_000_000 });
   });
 });
