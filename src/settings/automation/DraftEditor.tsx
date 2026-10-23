@@ -33,13 +33,29 @@ import {
   type ListEntry,
 } from '../../automation/automationList';
 import { automationSaveError } from '../../automation/automationRecords';
+import { moveClashes, moveClashNote, sharedGroup } from '../../automation/groupMoves';
+import {
+  allPick,
+  groupPick,
+  NO_PICK,
+  prunePick,
+  rangePick,
+  startPick,
+  togglePick,
+  type ListPick,
+} from '../../automation/listPick';
+import { useEscape } from '../../lib/escapeStack';
 import { scrollWithin } from '../../lib/scrollWithin';
 import { Button } from '../../ui';
+import type { MenuPlacement } from '../../ui/MenuSurface';
 import { getShownProfile, isShownHeld, subscribeShownMoves, useProfileHold } from '../shownProfile';
-import { ItemList, type PinnedEntry } from './ItemList';
+import { BatchCard } from './BatchCard';
+import { ItemList, type ListPicking, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';
+import { RowMenu } from './RowMenu';
 import { SaveBar, type SaveStatus } from './SaveBar';
 import type { DirtyReport, KindSpec } from './types';
+import { useGroupChoices } from './useGroupChoices';
 import { useGroupSwitches } from './useGroupSwitches';
 import { useListFolds } from './useListFolds';
 
@@ -92,6 +108,25 @@ interface SaveError {
 
 const NO_UIDS: readonly string[] = [];
 
+/** `pick` over a draft loaded again: each checked row by its key, so a
+ *  Save keeps what you checked. */
+function remapPick<T>(
+  pick: ListPick,
+  before: Draft<T> | null,
+  after: Draft<T>,
+  keyOf: (value: T) => string,
+): ListPick {
+  if (!pick.on || !before) return pick;
+  const byKey = new Map(after.items.map((item) => [keyOf(item.value), item.uid]));
+  const follow = (uid: string): string | undefined => {
+    const item = findDraftItem(before, uid);
+    return item ? byKey.get(keyOf(item.value)) : undefined;
+  };
+  const uids = pick.uids.flatMap((uid) => follow(uid) ?? []);
+  const anchor = (pick.anchor !== null ? follow(pick.anchor) : undefined) ?? uids[0] ?? null;
+  return { on: true, uids, anchor };
+}
+
 /** `problem` about the draft values, with the uids of the items it
  *  names, in list order. */
 function errorOf<T>(problem: SaveProblem, draft: Draft<T>): SaveError {
@@ -134,6 +169,14 @@ export function DraftEditor<T>({
   const [jsonText, setJsonText] = useState('');
   const [jsonBad, setJsonBad] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
+  /** The rows checked for one change to them all, while picking is on. */
+  const [pick, setPick] = useState<ListPick>(NO_PICK);
+  /** A row's menu, on the row it opened on. */
+  const [menu, setMenu] = useState<{ uid: string; at: MenuPlacement } | null>(null);
+  /** Goes up when a row's menu asks for New group…, so the Group field
+   *  of the card takes focus once it shows. */
+  const [groupFocusSeq, setGroupFocusSeq] = useState(0);
+  const canPick = spec.regroup !== undefined;
   const errorId = useId();
   const draftRef = useRef<Draft<T> | null>(null);
   const selectedRef = useRef<string | null>(null);
@@ -185,8 +228,10 @@ export function DraftEditor<T>({
       const values = await spec.load(profile);
       if (mine !== loadsRef.current) return;
       const next = createDraft(values);
+      const before = draftRef.current;
       staleRef.current = false;
       setDraft(next);
+      setPick((p) => remapPick(p, before, next, spec.keyOf));
       if (spec.json) setJsonText(spec.json.toText(values));
       setJsonBad(false);
       setSelected((prev) => {
@@ -213,6 +258,8 @@ export function DraftEditor<T>({
   useEffect(
     () =>
       subscribeShownMoves(() => {
+        // What you checked was another profile's.
+        setPick(NO_PICK);
         void load(selectedKey()).catch((e) => onError(automationSaveError(e)));
       }),
     [load, selectedKey, onError],
@@ -387,7 +434,58 @@ export function DraftEditor<T>({
 
   useEffect(() => () => window.clearTimeout(jsonTimer.current), []);
 
-  const onSelect = useCallback((uid: string) => setSelected(uid), []);
+  // The pinned block never picks, so moving to it stops picking.
+  const onSelect = useCallback((uid: string) => {
+    setSelected(uid);
+    if (uid === pinnedUidRef.current) setPick(NO_PICK);
+  }, []);
+
+  // A row that left the draft leaves what you checked.
+  useEffect(() => {
+    if (!draft) return;
+    setPick((p) => prunePick(p, (uid) => findDraftItem(draft, uid) !== undefined));
+  }, [draft]);
+
+  useEscape(
+    pick.on,
+    () => setPick(NO_PICK),
+    // An open list of groups closes before picking stops.
+    () => document.querySelector('.st-combo-input[aria-expanded="true"]'),
+  );
+
+  // The rows you can check: the ones you can see, less the pinned block.
+  const rowOrder = useMemo(() => order.filter((uid) => uid !== pinnedUid), [order, pinnedUid]);
+  const checked = useMemo(() => new Set(pick.uids), [pick.uids]);
+  /** The row you were on, unless that is the pinned block. */
+  const leadRow = (): string | null =>
+    selectedRef.current !== pinnedUidRef.current ? selectedRef.current : null;
+  const picking = useMemo<ListPicking | null>(
+    () =>
+      canPick
+        ? {
+            on: pick.on,
+            checked,
+            row: (uid, how) => {
+              const lead = leadRow();
+              setPick((p) =>
+                how === 'range' ? rangePick(p, uid, rowOrder, lead) : togglePick(p, uid, lead),
+              );
+              setSelected(uid);
+            },
+            group: (uids, check) => setPick((p) => groupPick(p, uids, check)),
+            all: () => setPick(allPick(rowOrder)),
+            start: () => setPick(startPick(leadRow())),
+            end: () => setPick(NO_PICK),
+          }
+        : null,
+    [canPick, pick.on, checked, rowOrder],
+  );
+
+  // The Group field of the card, once New group… asks for it.
+  useEffect(() => {
+    if (groupFocusSeq === 0) return;
+    bodyRef.current?.querySelector<HTMLElement>('.st-auto-detail [data-group-field]')?.focus();
+  }, [groupFocusSeq]);
 
   const update = (uid: string) => (fn: (value: T) => T) => {
     const d = draftRef.current;
@@ -461,6 +559,115 @@ export function DraftEditor<T>({
     setDeleteSeq((n) => n + 1);
   };
 
+  /** `uids` in the order the list keeps them. */
+  const inListOrder = (uids: readonly string[]): string[] => {
+    const d = draftRef.current;
+    if (!d) return [];
+    const want = new Set(uids);
+    return d.items.filter((item) => want.has(item.uid)).map((item) => item.uid);
+  };
+
+  /** Apply `fn` to each of `uids` that `can` allows, as one draft change. */
+  const updateEach = (
+    uids: readonly string[],
+    fn: (value: T) => T,
+    can?: (value: T) => boolean,
+  ) => {
+    const d = draftRef.current;
+    if (!d) return;
+    let next = d;
+    for (const uid of uids) {
+      next = updateDraftItem(next, uid, (v) => (can && !can(v) ? v : fn(v)));
+    }
+    setDraft(next);
+  };
+
+  // A move opens the group the items went to and shows the row you
+  // were on, or the first that moved.
+  const moveItems = (uids: readonly string[], group: string) => {
+    const regroup = spec.regroup;
+    if (!regroup || uids.length === 0) return;
+    updateEach(uids, (v) => regroup(v, group));
+    const lead = selectedRef.current;
+    reveal(lead !== null && uids.includes(lead) ? lead : uids[0]);
+  };
+
+  const turnItems = (uids: readonly string[], on: boolean) => {
+    const turn = spec.turn;
+    if (turn) updateEach(uids, (v) => turn(v, on), spec.canTurn);
+  };
+
+  // Each copy lands right below its original, and the copies are what
+  // you have picked after, or the one copy opens.
+  const duplicateItems = (uids: readonly string[]) => {
+    const d = draftRef.current;
+    if (!d || !spec.duplicate) return;
+    let next = d;
+    const copies: string[] = [];
+    for (const uid of inListOrder(uids)) {
+      const item = findDraftItem(next, uid);
+      if (!item) continue;
+      const copy = spec.duplicate(
+        item.value,
+        next.items.map((i) => i.value),
+      );
+      const copyUid = nextDraftUid();
+      next = insertDraftItemAfter(next, uid, copy, copyUid);
+      copies.push(copyUid);
+    }
+    if (copies.length === 0) return;
+    setDraft(next);
+    setFilter('');
+    if (pick.on) setPick({ on: true, uids: copies, anchor: copies[0] });
+    else setFresh(copies[0]);
+    setSelected(copies[0]);
+    reveal(copies[0]);
+  };
+
+  // Delete stops picking, and the row after the last one deleted opens.
+  const deleteItems = (uids: readonly string[]) => {
+    const d = draftRef.current;
+    if (!d) return;
+    const gone = inListOrder(uids).filter((uid) => {
+      const item = findDraftItem(d, uid);
+      return (
+        item !== undefined &&
+        spec.deleteLabel !== undefined &&
+        (spec.canDelete?.(item.value) ?? true)
+      );
+    });
+    if (gone.length === 0) return;
+    const goneSet = new Set(gone);
+    const last = Math.max(...gone.map((uid) => rowOrder.indexOf(uid)));
+    const after = rowOrder.slice(last + 1).find((uid) => !goneSet.has(uid));
+    const before = [...rowOrder.slice(0, Math.max(0, last))]
+      .reverse()
+      .find((uid) => !goneSet.has(uid));
+    const next = after ?? before ?? pinned?.uid ?? null;
+    let draftAfter = d;
+    for (const uid of gone) draftAfter = removeDraftItem(draftAfter, uid);
+    setPick(NO_PICK);
+    setSelected(next);
+    setDraft(draftAfter);
+    afterDeleteRef.current = next;
+    setDeleteSeq((n) => n + 1);
+  };
+
+  /** The rows a menu or the card acts on: what you checked, when the
+   *  row is one of them, else the row alone. */
+  const targetsOf = (uid: string): string[] =>
+    pick.on && checked.has(uid) ? inListOrder(pick.uids) : [uid];
+
+  const onRowMenu = useCallback(
+    (uid: string, at: MenuPlacement) => {
+      // A right click on a row you did not pick opens it, as a plain
+      // click would, so its card shows what the menu acts on.
+      if (!pick.on) setSelected(uid);
+      setMenu({ uid, at });
+    },
+    [pick.on],
+  );
+
   // Delete removes the card that held focus, the button included. Put
   // focus on the row that took the deleted one's place, else the row
   // that is selected, else the filter, so it never drops to the page.
@@ -525,6 +732,7 @@ export function DraftEditor<T>({
       const first = error.uids[0];
       if (first !== undefined) {
         setFilter('');
+        setPick(NO_PICK);
         setSelected(first);
         reveal(first);
       }
@@ -587,8 +795,70 @@ export function DraftEditor<T>({
   const showingPinned = pinned !== null && selected === pinned.uid;
   const jsonOpen = json && spec.json !== undefined;
 
+  const entryByUid = useMemo(() => new Map(entries.map((e) => [e.uid, e])), [entries]);
+  const draftGroups = useMemo(() => entries.map((e) => e.group), [entries]);
+  const groups = useGroupChoices(draft?.saved, draftGroups);
+
+  /** What the card and the menu say and can do for `uids`. */
+  const facts = (uids: readonly string[]) => {
+    const items = draft ? draft.items.filter((item) => uids.includes(item.uid)) : [];
+    const turnable = items.filter((i) => spec.turn && (spec.canTurn?.(i.value) ?? true));
+    const isOn = (uid: string) => entryByUid.get(uid)?.enabled ?? false;
+    return {
+      count: items.length,
+      on: items.filter((i) => isOn(i.uid)).length,
+      turnable: turnable.length,
+      turnableOn: turnable.filter((i) => isOn(i.uid)).length,
+      deletable:
+        spec.deleteLabel === undefined
+          ? 0
+          : items.filter((i) => spec.canDelete?.(i.value) ?? true).length,
+      shared: sharedGroup(items.map((i) => entryByUid.get(i.uid)?.group ?? '')),
+    };
+  };
+
+  /** What a move of `uids` to `group` would leave two of in one group. */
+  const clashNoteFor = (uids: readonly string[]) => (group: string) => {
+    const regroup = spec.regroup;
+    if (!draft || !regroup) return null;
+    const moved = new Set<number>();
+    draft.items.forEach((item, i) => {
+      if (uids.includes(item.uid)) moved.add(i);
+    });
+    const clashes = moveClashes(
+      draftValues(draft),
+      moved,
+      group,
+      regroup,
+      spec.keyOf,
+      (v) => spec.entry(v).name || `Untitled ${spec.noun.one}`,
+    );
+    return moveClashNote(spec.noun, clashes, group);
+  };
+
   let detail: ReactNode = null;
-  if (showingPinned) {
+  if (canPick && pick.on) {
+    const uids = inListOrder(pick.uids);
+    const f = facts(uids);
+    detail = (
+      <BatchCard
+        noun={spec.noun}
+        count={f.count}
+        on={f.on}
+        turnable={f.turnable}
+        turnableOn={f.turnableOn}
+        deletable={f.deletable}
+        shared={f.shared}
+        groups={groups}
+        clashNote={clashNoteFor(uids)}
+        onMove={(group) => moveItems(uids, group)}
+        onTurn={(on) => turnItems(uids, on)}
+        onDuplicate={spec.duplicate ? () => duplicateItems(uids) : null}
+        onDelete={() => deleteItems(uids)}
+        onDone={() => setPick(NO_PICK)}
+      />
+    );
+  } else if (showingPinned) {
     detail = pinned.render();
   } else if (selectedItem) {
     const uid = selectedItem.uid;
@@ -604,6 +874,7 @@ export function DraftEditor<T>({
           fresh: fresh === uid,
           revealInList: () => reveal(uid),
           note: rowNotes.get(uid),
+          groups,
         })}
         {(canDelete || canDuplicate) && (
           <div className="st-auto-detail-actions">
@@ -660,6 +931,8 @@ export function DraftEditor<T>({
               folded={folds.folded}
               onFold={folds.setFold}
               groupSwitches={groupSwitches}
+              picking={picking}
+              onRowMenu={canPick ? onRowMenu : undefined}
               footer={
                 spec.json ? (
                   <Button
@@ -689,6 +962,53 @@ export function DraftEditor<T>({
         onDiscard={onDiscard}
         onSave={() => void onSave()}
       />
+      {menu && draft && findDraftItem(draft, menu.uid) && rowMenu(menu)}
     </>
   );
+
+  function rowMenu(open: { uid: string; at: MenuPlacement }) {
+    const uids = targetsOf(open.uid);
+    const f = facts(uids);
+    return (
+      <RowMenu
+        noun={spec.noun}
+        at={open.at}
+        count={f.count}
+        groups={groups}
+        shared={f.shared}
+        rowGroup={entryByUid.get(open.uid)?.group ?? ''}
+        canTurnOn={f.turnableOn < f.turnable}
+        canTurnOff={f.turnableOn > 0}
+        canDuplicate={spec.duplicate !== undefined}
+        deletable={f.deletable}
+        picking={pick.on}
+        onMove={(group) => moveItems(uids, group)}
+        onNewGroup={() => {
+          if (uids.length > 1) setPick((p) => (p.on ? p : startPick(open.uid)));
+          else setSelected(open.uid);
+          setGroupFocusSeq((n) => n + 1);
+        }}
+        onTurn={(on) => turnItems(uids, on)}
+        onDuplicate={() => duplicateItems(uids)}
+        onDelete={() => deleteItems(uids)}
+        onSelectGroup={() => {
+          const group = entryByUid.get(open.uid)?.group ?? '';
+          const section = sections.find((sec) => sec.heading === group);
+          if (section)
+            setPick((p) =>
+              groupPick(
+                p,
+                section.entries.map((e) => e.uid),
+                true,
+              ),
+            );
+        }}
+        onSelectSeveral={() => {
+          setSelected(open.uid);
+          setPick(startPick(open.uid));
+        }}
+        onClose={() => setMenu(null)}
+      />
+    );
+  }
 }

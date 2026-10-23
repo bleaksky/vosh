@@ -117,6 +117,7 @@ async function mount(start: TriggerRecord) {
         update={(fn) => setValue(fn)}
         fresh={false}
         revealInList={() => {}}
+        groups={[]}
       />
     );
   }

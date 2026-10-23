@@ -1,31 +1,53 @@
 import { forwardRef, useId, useState, type ReactNode } from 'react';
 import { CodeEditor } from '../../ui/CodeEditor';
 import { canonicalKeyFromEvent, labelForKey } from '../../automation/macroKeys';
-import { CheckIcon, ChipButton, Field, PencilIcon, useRowIds, type FieldProps } from '../../ui';
+import {
+  CheckIcon,
+  ChipButton,
+  ComboField,
+  Field,
+  PencilIcon,
+  useRowIds,
+  type FieldProps,
+} from '../../ui';
 
 // Controls the Automation detail cards share. Each one wraps a
 // primitive from ui/ with the editing rule its field needs.
 
 type PassThrough = Omit<FieldProps, 'value' | 'onChange' | 'onBlur' | 'onKeyDown'>;
 
-/** The Group field. Typing leaves the item where it is. Enter or
- *  leaving the field files it under the group you typed, and Esc puts
- *  the old group back. Blank means no group. */
+/** The Group field. It lists `groups`, the groups you have in every
+ *  list, and takes a new name too. Typing leaves the item where it is.
+ *  Enter, a group picked from the list, or leaving the field files it
+ *  under that group, and Esc puts the old group back. Blank means no
+ *  group. A row's menu finds the field by `data-group-field` to put
+ *  you in it. */
 export function GroupField({
   value,
   onCommit,
+  groups,
   ...rest
-}: PassThrough & { value: string; onCommit: (group: string) => void }) {
+}: PassThrough & {
+  value: string;
+  onCommit: (group: string) => void;
+  groups: readonly string[];
+}) {
   const [draft, setDraft] = useState<string | null>(null);
-  const commit = () => {
-    if (draft === null) return;
-    const next = draft.trim();
+  const commitText = (text: string) => {
+    const next = text.trim();
     setDraft(null);
     if (next !== value) onCommit(next);
   };
+  const commit = () => {
+    if (draft !== null) commitText(draft);
+  };
   return (
-    <Field
+    <ComboField
       {...rest}
+      data-group-field=""
+      options={groups}
+      listLabel="Groups"
+      onPick={commitText}
       value={draft ?? value}
       onChange={setDraft}
       onBlur={commit}

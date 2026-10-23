@@ -2218,6 +2218,137 @@
   margin-left: 0;
 }
 
+/* The filter, then Select, which turns picking on and off. Pressed, it
+   wears the selected row fill and ring, as a glyph toggle does. */
+.st-auto-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.st-auto-tools .st-auto-filter {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.st-icon-button.st-auto-select {
+  height: 28px;
+}
+
+.st-icon-button.st-auto-select[aria-pressed='true'] {
+  background: var(--selrow);
+  color: var(--text);
+  box-shadow: var(--st-selrow-ring);
+}
+
+.st-icon-button.st-auto-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* While picking, each row starts with a 14 px checkbox: a track ring
+   while clear, the accent filled with the check while checked. A
+   checked row wears the selected fill. */
+.st-auto-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--tertiary);
+  color: var(--on-accent);
+}
+
+.st-auto-check.is-checked,
+.st-auto-check.is-some {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+/* Some of a group checked draws a dash. */
+.st-auto-check.is-some::before {
+  content: '';
+  width: 8px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--on-accent);
+}
+
+.st-auto-row[aria-pressed='true'] {
+  background: var(--selrow);
+  color: var(--text);
+}
+
+/* A group's checkbox sits over its heading, under the group's name,
+   level with the checkboxes of its rows, and the name moves past it. */
+.st-auto-headrow {
+  position: relative;
+}
+
+.st-auto-headcheck {
+  position: absolute;
+  left: 18px;
+  bottom: 5px;
+  z-index: 1;
+}
+
+.st-auto-list.is-picking .st-auto-fold-name {
+  margin-left: 22px;
+}
+
+/* The card for the rows you picked: how many over the card, with Done
+   at the right, then a quiet hint while none is checked. */
+.st-auto-batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  margin-bottom: 8px;
+}
+
+.st-auto-batch-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.st-auto-batch-hint {
+  margin: 12px 0 0;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-auto-batch-head + .st-auto-batch-hint {
+  margin-top: 0;
+}
+
+.st-auto-batch-move,
+.st-auto-batch-turn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.st-auto-batch-move {
+  flex: 1 1 auto;
+}
+
+.st-auto-batch-move .st-combo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* MUD text in the list and cards: alias names, macro keys, commands. */
 .st-auto-mono {
   font-family: var(--font-mud);
@@ -2276,9 +2407,16 @@
   min-width: 0;
 }
 
-.st-auto-card .st-row-control:has(> .st-field, > .st-field-wrap, > .st-select) {
+.st-auto-card .st-row-control:has(> .st-field, > .st-field-wrap, > .st-select, > .st-combo) {
   flex: 0 1 240px;
   min-width: 96px;
+}
+
+/* The Move row of the card for picked rows: the Group field and Move
+   share the control, which gives up width as a field's does. */
+.st-auto-card .st-row-control:has(> .st-auto-batch-move) {
+  flex: 0 1 320px;
+  min-width: 180px;
 }
 
 /* A field with a remove button after it, like an Also send row, shares
@@ -2290,7 +2428,12 @@
 }
 
 .st-auto-card
-  .st-row:has(> .st-row-control > .st-field, > .st-row-control > .st-select)
+  .st-row:has(
+    > .st-row-control > .st-field,
+    > .st-row-control > .st-select,
+    > .st-row-control > .st-combo,
+    > .st-row-control > .st-auto-batch-move
+  )
   .st-row-label {
   white-space: nowrap;
 }
@@ -2299,7 +2442,12 @@
    few pixels beside a wide field and lost its last letters. Its column
    keeps the label whole, and a description under it still wraps. */
 .st-auto-card
-  .st-row:has(> .st-row-control > .st-field, > .st-row-control > .st-select)
+  .st-row:has(
+    > .st-row-control > .st-field,
+    > .st-row-control > .st-select,
+    > .st-row-control > .st-combo,
+    > .st-row-control > .st-auto-batch-move
+  )
   .st-row-text {
   min-width: min-content;
 }

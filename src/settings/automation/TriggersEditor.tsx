@@ -129,6 +129,8 @@ function triggersSpec(): KindSpec<TriggerCard> {
   return {
     id: 'triggers',
     groups: 'triggers',
+    regroup: withGroup,
+    turn: (t, enabled) => ({ ...t, enabled }),
     noun: { one: 'trigger', many: 'triggers' },
     filterLabel: 'Filter triggers',
     newLabel: 'New trigger',
@@ -296,6 +298,7 @@ export function TriggerDetail({
   update,
   fresh,
   revealInList,
+  groups,
   swatches,
   held,
 }: DetailProps<TriggerCard> & {
@@ -407,6 +410,7 @@ export function TriggerDetail({
         <Row label="Group">
           <UnderField changed={changed('group', (g) => (g ? presetText(g) : 'no group'))}>
             <GroupField
+              groups={groups}
               width="100%"
               value={t.group ?? ''}
               onCommit={(group) => {

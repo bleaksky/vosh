@@ -24,6 +24,8 @@ import type { DetailProps, EditorProps, KindSpec } from './types';
 const ALIASES_SPEC: KindSpec<AliasRecord> = {
   id: 'aliases',
   groups: 'aliases',
+  regroup: withGroup,
+  turn: (a, enabled) => ({ ...a, enabled }),
   noun: { one: 'alias', many: 'aliases' },
   filterLabel: 'Filter aliases',
   newLabel: 'New alias',
@@ -59,7 +61,14 @@ export function AliasesEditor(props: EditorProps) {
   return <DraftEditor spec={ALIASES_SPEC} {...props} />;
 }
 
-function AliasDetail({ value: a, update, fresh, revealInList, note }: DetailProps<AliasRecord>) {
+function AliasDetail({
+  value: a,
+  update,
+  fresh,
+  revealInList,
+  note,
+  groups,
+}: DetailProps<AliasRecord>) {
   const [advanced, setAdvanced] = useState(a.script !== undefined);
   const advancedId = useId();
   const nameRef = useRef<HTMLInputElement | null>(null);
@@ -79,6 +88,7 @@ function AliasDetail({ value: a, update, fresh, revealInList, note }: DetailProp
       </Row>
       <Row label="Group">
         <GroupField
+          groups={groups}
           width="100%"
           value={a.group ?? ''}
           onCommit={(group) => {
