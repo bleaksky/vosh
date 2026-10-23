@@ -66,6 +66,13 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `width` in px or any CSS length, 160 by default.
 - `pickerLabel` names the swatch's picker, like `Choose the divider color`. Inside a `Row` the row label names the text. Outside one, pass `id` for a `<label>` or `aria-label`.
 
+`ComboField` is a `Field` that also offers choices, like the Group field, which lists the groups you have and still takes a new name. It draws as `Field` with the `Select` chevron at its end. ArrowDown or the chevron opens the list, typing narrows it to the choices that hold the text, Enter or a click takes the lit choice, and Esc closes the list before the field's own keys hear it. The list draws on the menu recipe under the field, seven rows high before it scrolls.
+
+- `options` are the choices in the order the list shows them.
+- `onPick(option)` runs for a choice taken from the list. Text you type and keep goes through the field's own `onKeyDown` and `onBlur`.
+- `listLabel` names the chevron and the list, like `Groups`.
+- Every `Field` prop passes through.
+
 `NumberField` is a whole number setting with its unit inside the field, like `Wait between pasted lines` in ms and the panel `Width` in pt. What you type stays a draft until Enter or leaving the field saves it, clamped to the bounds. Up and Down step it, and Escape puts the saved value back.
 
 - `value`, `onChange(value)`, `min`, and `max`.

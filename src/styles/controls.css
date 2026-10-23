@@ -199,6 +199,57 @@
   pointer-events: none;
 }
 
+/* A field that also offers choices, like the Group field: the field
+   with the select chevron at its end, which opens the list. */
+.st-combo {
+  position: relative;
+  display: block;
+  flex: none;
+  height: 28px;
+}
+
+.st-combo .st-combo-input {
+  padding-right: 28px;
+}
+
+.st-combo-open {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tertiary);
+}
+
+.st-combo-open:hover {
+  color: var(--text);
+}
+
+/* With nothing to offer the field is a plain field. */
+.st-combo-open:disabled {
+  visibility: hidden;
+}
+
+/* The list draws on the menu recipe at the field's width, seven rows
+   high before it scrolls. */
+.menu.st-combo-list {
+  min-width: 0;
+  max-width: none;
+  max-height: 222px;
+  overflow-y: auto;
+}
+
+.st-combo-option[aria-selected='true'] {
+  background: var(--hover);
+}
+
 .st-field {
   display: block;
   flex: none;
