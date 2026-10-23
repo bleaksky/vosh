@@ -2295,6 +2295,15 @@
   white-space: nowrap;
 }
 
+/* Flex takes width from each side by its size, so the label gave up a
+   few pixels beside a wide field and lost its last letters. Its column
+   keeps the label whole, and a description under it still wraps. */
+.st-auto-card
+  .st-row:has(> .st-row-control > .st-field, > .st-row-control > .st-select)
+  .st-row-text {
+  min-width: min-content;
+}
+
 /* The detail column scrolls, so rings on full width rows sit inside. */
 .st-auto-card .st-disclosure:focus-visible {
   outline-offset: -2px;
