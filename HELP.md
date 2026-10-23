@@ -494,7 +494,7 @@ To make an item like one you have, select it and click `Duplicate alias`, `Dupli
 
 Captures take words from the line you typed. `%1` through `%9` take the first through ninth word after the alias name. `%0` takes all the words after the name. `%1-` takes word one through the end, with the spaces kept. A missing word expands to nothing. `%%` gives a literal percent.
 
-To turn related aliases on and off together, give them the same name in `Group`. Two groups can each have an alias with the same name, as 3.11 tells you. Then use the switch on the heading of their group, or `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion. The words you typed are in its captures table.
+To turn related aliases on and off together, give them the same name in `Group`. The field lists the groups you already have in triggers, aliases, macros, and timers. Choose one, or type a new name. Two groups can each have an alias with the same name, as 3.11 tells you. Then use the switch on the heading of their group, or `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion. The words you typed are in its captures table.
 
 Triggers, Aliases, Macros, and Timers each list your items under a heading for each group. Presets lists them under a heading for each category. The items with no group are at the top, under no heading. Click a heading to fold its group, and click it again to open it. The chevron points down while the group is open. A folded heading shows how many items it holds.
 
@@ -536,7 +536,7 @@ A trigger watches the lines that come in and runs actions when a pattern matches
 
 When Vosh can't save the list, it tells you why beside `Save`. It puts a red ring on each trigger to fix and selects the first one. The message goes away when you fix the triggers.
 
-To turn related triggers on and off together, give them the same name in `Group`. Two groups can each have a trigger with the same name. When both groups are on, both triggers run, as 3.11 tells you. One group can have only one trigger with a given name.
+To turn related triggers on and off together, give them the same name in `Group`. The field lists your groups, as for aliases. Two groups can each have a trigger with the same name. When both groups are on, both triggers run, as 3.11 tells you. One group can have only one trigger with a given name.
 
 `Text` and `Starts with` ignore spaces at the start of the line. `Text` also ignores them at the end. So a line you copy from a look matches with or without the five spaces before it. Neither mode needs escapes, and neither fills `$1`. A `Regex` pattern needs escapes for literal punctuation. Its groups fill `$1` and on.
 
@@ -852,6 +852,27 @@ You can also turn the groups on and off yourself with the switch on each heading
 An alias that a plugin makes is in no group. While it lasts, it runs in place of all your aliases with that name.
 
 Triggers work differently. Two groups can each have a trigger with the same name, such as a `greet` trigger for each character. When both groups are on, both triggers run on a line that they match. No trigger stops another trigger. They run by priority, the highest first. The group of a trigger doesn't change when it runs. The list doesn't put a ring on either trigger. To make each trigger run only for its own character, use loadouts in the same way.
+
+### 3.12 Change many items at once
+
+<!-- id: automate.change-many -->
+
+In Triggers, Aliases, Macros, and Timers, you can select many items and change them in one step. To start, click the select button after the filter. Or hold `Cmd` and click an item. On Windows and Linux, hold `Ctrl`. You can also hold `Shift` and click an item. Then each item and each group heading shows a checkbox.
+
+Click an item to select it or to clear it. Hold `Shift` and click to select all the items from the last one you clicked to this one. `Cmd+A` selects all the items that show. The checkbox on a group heading selects all the items in that group, or clears them.
+
+The card on the right tells how many items you selected. It changes all of them together.
+
+- `Group` and `Move` put the items in a group. Choose a group from the list, or type a new name.
+- `Turn on` and `Turn off` set `Enabled` for each item. A macro from a preset keeps its state.
+- `Duplicate` puts a copy of each item below it. Then the copies are selected.
+- `Delete` deletes the items. Items from a preset stay. To remove them, turn their preset off under Presets.
+
+These changes are edits, as on the card of one item. `Save` keeps them, and `Discard` undoes them. One group can have only one alias or trigger with a given name. If a move puts two items with the same name in one group, the card tells you before you move. Then rename one before you save.
+
+To stop, click `Done`, click the select button again, or press `Escape`.
+
+Right click an item for its menu. `Move to group` lists your groups, then `No group` and `New group…`. The menu also turns the items on or off, duplicates them, deletes them, and selects all the items in their group. If you right click an item that you selected, the menu changes all the selected items. On another item, it changes only that item. With the keyboard, press the menu key or `Shift+F10`.
 
 ## Shape the window
 
@@ -1627,7 +1648,7 @@ In the right click menu. `ArrowUp` and `ArrowDown` move through the items, and `
 
 In Settings and Help. `Cmd+F` puts the caret in the search. `ArrowUp` and `ArrowDown` move through the results. `Escape` clears the search. In Help, `Enter` goes to the next match in the topic you read, and `Shift+Enter` goes to the previous match.
 
-In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items. `Home` and `End` go to the first and the last item. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it. `Tab` from a heading goes to its group switch, and `Space` turns the switch on or off.
+In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items. `Home` and `End` go to the first and the last item. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it. `Tab` from a heading goes to its group switch, and `Space` turns the switch on or off. Hold `Shift` with `ArrowUp` or `ArrowDown` to select many items. While you select items, `Space` selects or clears the item with the focus, `Cmd+A` selects all the items that show, and `Escape` stops. The menu key or `Shift+F10` opens the menu of an item.
 
 Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and goes back to the live tail. Right click opens the right click menu.
 
