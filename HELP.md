@@ -874,6 +874,24 @@ To stop, click `Done`, click the select button again, or press `Escape`.
 
 Right click an item for its menu. `Move to group` lists your groups, then `No group` and `New group…`. The menu also turns the items on or off, duplicates them, deletes them, and selects all the items in their group. If you right click an item that you selected, the menu changes all the selected items. On another item, it changes only that item. With the keyboard, press the menu key or `Shift+F10`.
 
+### 3.13 Rename a group
+
+<!-- id: automate.rename-group -->
+
+A group has one name in Triggers, Aliases, Macros, and Timers. When you rename a group, Vosh renames it in all four lists.
+
+To rename a group, right click its heading, or click the button that shows when you point at the heading. Then choose `Rename group…`. The heading becomes a field. Type the new name and press `Return`. `Escape` keeps the old name. With the keyboard, go to the heading and press the menu key or `Shift+F10`.
+
+The rename takes effect at once, as the switch on a heading does. You don't save it. Before you rename a group, save or discard the changes that you made to the list.
+
+The group stays on or off as it was. The loadouts that list the group list the new name. In loadout mode, all of your profiles get the new name too.
+
+If you type the name of a group that you have, Vosh asks you before it merges the two groups. The group that you merge into stays on or off as it was. If both groups have an alias or a trigger with the same name, Vosh doesn't merge them. It tells you which names to change.
+
+A rename doesn't change text that names the old group, such as `#group Maren off` in an alias or `mud.set_group_enabled` in a script. A note under the renamed heading tells you how many items in that list still name the old group. Click `Show them` to find them.
+
+The menu of a heading also has `Select all in` and the name of the group, which selects all the items in the group. `Move all to no group` takes all the items out of the group. `Save` keeps that change, as it keeps other edits.
+
 ## Shape the window
 
 ### 4.1 Arrange the panels
@@ -1648,7 +1666,7 @@ In the right click menu. `ArrowUp` and `ArrowDown` move through the items, and `
 
 In Settings and Help. `Cmd+F` puts the caret in the search. `ArrowUp` and `ArrowDown` move through the results. `Escape` clears the search. In Help, `Enter` goes to the next match in the topic you read, and `Shift+Enter` goes to the previous match.
 
-In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items. `Home` and `End` go to the first and the last item. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it. `Tab` from a heading goes to its group switch, and `Space` turns the switch on or off. Hold `Shift` with `ArrowUp` or `ArrowDown` to select many items. While you select items, `Space` selects or clears the item with the focus, `Cmd+A` selects all the items that show, and `Escape` stops. The menu key or `Shift+F10` opens the menu of an item.
+In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items. `Home` and `End` go to the first and the last item. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it. `Tab` from a heading goes to its group switch, and `Space` turns the switch on or off. Hold `Shift` with `ArrowUp` or `ArrowDown` to select many items. While you select items, `Space` selects or clears the item with the focus, `Cmd+A` selects all the items that show, and `Escape` stops. The menu key or `Shift+F10` opens the menu of an item. On a heading, they open the menu of its group.
 
 Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and goes back to the live tail. Right click opens the right click menu.
 

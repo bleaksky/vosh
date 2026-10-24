@@ -2113,6 +2113,17 @@ A player kept 20 triggers in one group and wanted to move them to another withou
 
 Help 3.12 Change many items at once is new, 3.1 and 3.2 say the Group field lists your groups, and the keyboard list gives the keys.
 
+#### October 23. Renaming a group
+
+The second item you approved on October 23, after mockups. You chose that a rename reaches all four lists and that a rename onto a group you have merges the two after a confirm. The build follows picking on feat/group-batch.
+
+- The command. `groups_rename` in `src-tauri/src/ipc/automation.rs` renames `from` to `to` in the profile Settings shows and answers `renamed` with how many items moved, or `exists` while `to` is a group and `merge` is unset. A name both groups hold in Triggers or Aliases refuses with what to fix, through `clash_message`. Macros are known by their key and timers by their id, so they never clash.
+- The stores. `rename_group` on `TriggerStore` and `AliasStore` changes the group where each item stands, so the order triggers run in stays the same, moves the Lua stops, and carries the group's state through `GroupSwitch::rename`. The new name takes the old group's state unless it held items already, which keep theirs, and an off entry the new name kept from before goes when the old group was on.
+- What follows. `src-tauri/src/profile/group_rename.rs` moves macros and timers with their off sets, the preset edit rows that name the group and the folder map. In loadout mode the loadouts that list the group list the new name, or drop the old one in a merge, so the group joined keeps its own. Every other open profile carries the state and its folders live, and each closed profile file is read and saved when it named the group. Timers stay in each profile file, so another profile's timers keep theirs.
+- The page. A right click on a heading, the button that shows on it, the menu key or Shift F10 opens `HeadingMenu.tsx`, with Rename group…, Select all in the group and Move all to no group. Rename waits while the list holds unsaved changes. `GroupNameField.tsx` takes the heading's place, Return or leaving it renames, and Esc backs out. A new name that is a group asks through `ConfirmDialog` before the merge. The list loads again keeping the row you were on, the folds follow in all four lists, and a note under the heading says how many items in the list still name the old group, with Show them filling the filter.
+
+Help 3.13 Rename a group is new, and the keyboard list says the menu key opens a heading's menu.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
