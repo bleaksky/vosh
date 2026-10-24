@@ -58,6 +58,9 @@ export function GroupNameField({ group, onCommit, onCancel }: GroupNameFieldProp
         aria-label={`New name for ${group}`}
         placeholder="Group name"
         onKeyDown={(e) => {
+          // The keys edit the name. The list around the field moves its
+          // rows on the arrows and picks on Cmd A, so keep them here.
+          e.stopPropagation();
           if (e.key === 'Enter') {
             e.preventDefault();
             commit();

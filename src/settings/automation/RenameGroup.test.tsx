@@ -274,7 +274,7 @@ async function mount() {
       // Typing lands before Return reads it, as it does between keys.
       await act(async () => on(field()).onChange({ target: { value: to } }));
       await act(async () => {
-        on(field()).onKeyDown({ key: 'Enter', preventDefault() {} });
+        on(field()).onKeyDown({ key: 'Enter', preventDefault() {}, stopPropagation() {} });
         await settle();
         await settle();
       });
@@ -288,6 +288,14 @@ async function mount() {
         await settle();
         await settle();
       }),
+    /** What the name field of `group` holds, or null while it is closed. */
+    fieldValue: (group: string) => {
+      const el = findAll(
+        container,
+        (n) => n.getAttribute('aria-label') === `New name for ${group}`,
+      )[0];
+      return el ? (on(el) as unknown as { value: string }).value : null;
+    },
     /** The title of the open dialog, or null. */
     dialog: () =>
       findAll(
@@ -376,6 +384,8 @@ describe('renaming a group', () => {
       'Maren and Tolliver both have an alias named ds. Rename one of them first.',
     );
     expect(storedAliases().filter((a) => a.group === 'Maren')).toHaveLength(2);
+    // The field stays open with the name you typed, to change it.
+    expect(page.fieldValue('Maren')).toBe('Tolliver');
   });
 
   it('waits for Save or Discard before a rename', async () => {

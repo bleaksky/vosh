@@ -199,6 +199,8 @@ export function DraftEditor<T>({
   const [mergeAsk, setMergeAsk] = useState<{ from: string; to: string } | null>(null);
   /** The last rename, which leaves a note under the group's heading. */
   const [renamed, setRenamed] = useState<{ from: string; to: string } | null>(null);
+  /** The heading a rename just named, which takes focus once it shows. */
+  const [focusHeading, setFocusHeading] = useState<{ group: string; seq: number } | null>(null);
   const canPick = spec.regroup !== undefined;
   const errorId = useId();
   const draftRef = useRef<Draft<T> | null>(null);
@@ -721,14 +723,17 @@ export function DraftEditor<T>({
     try {
       const done = await renameGroup(from, to, merge, getShownProfile());
       if (done.outcome === 'exists') {
+        // The field keeps the name you typed while the dialog asks.
         setMergeAsk({ from, to });
-        return true;
+        return false;
       }
       const others = GROUP_LISTS.filter((list) => list !== spec.id);
       folds.rename(sectionKeyOf({ group: from }), sectionKeyOf({ group: to }), merge, others);
       onError(null);
       setRenamed(done.items > 0 ? { from, to } : null);
       await load(keep);
+      setRenaming(null);
+      setFocusHeading((prev) => ({ group: to, seq: (prev?.seq ?? 0) + 1 }));
       return true;
     } catch (e) {
       onError(automationSaveError(e));
@@ -739,6 +744,15 @@ export function DraftEditor<T>({
   const onHeadingMenu = useCallback((group: string, at: MenuPlacement) => {
     setHeadingMenu({ group, at });
   }, []);
+
+  // The renamed heading takes the focus the field had.
+  useEffect(() => {
+    if (!focusHeading) return;
+    const key = sectionKeyOf({ group: focusHeading.group });
+    const el = bodyRef.current?.querySelector<HTMLElement>(`[data-fold="${CSS.escape(key)}"]`);
+    el?.focus({ preventScroll: true });
+    scrollWithin(el, { block: 'nearest' });
+  }, [focusHeading]);
 
   // An edit ends the note a rename left, since the list it counted moved on.
   useEffect(() => {
@@ -1020,11 +1034,11 @@ export function DraftEditor<T>({
                       field: (
                         <GroupNameField
                           group={renaming}
-                          onCommit={async (to) => {
-                            const closed = await renameTo(renaming, to, false);
-                            if (closed) setRenaming(null);
-                            return closed;
-                          }}
+                          // While the merge dialog asks, the field
+                          // losing focus to it renames nothing.
+                          onCommit={async (to) =>
+                            mergeAsk ? false : renameTo(renaming, to, false)
+                          }
                           onCancel={() => setRenaming(null)}
                         />
                       ),
