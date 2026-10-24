@@ -77,6 +77,21 @@ impl GroupSwitch {
         self.off.iter().cloned().collect()
     }
 
+    /// Carry the state of `from` to `to`, as a rename of the group does.
+    /// `to` takes the state of `from`, unless `kept` says `to` already
+    /// held items, which keep the state they had. `from` leaves the set.
+    pub(crate) fn rename(&mut self, from: &str, to: &str, kept: bool) {
+        let from_off = self.off.remove(from);
+        if kept || to.is_empty() {
+            return;
+        }
+        if from_off {
+            self.off.insert(to.to_string());
+        } else {
+            self.off.remove(to);
+        }
+    }
+
     pub(crate) fn set_disabled<I, S>(&mut self, groups: I)
     where
         I: IntoIterator<Item = S>,
@@ -95,6 +110,20 @@ mod tests {
     use std::cmp::Ordering;
 
     use super::{compare_groups, GroupSwitch};
+
+    #[test]
+    fn a_rename_carries_the_state_unless_the_new_group_kept_its_own() {
+        let mut switch = GroupSwitch::default();
+        switch.set_disabled(["Maren", "Orla"]);
+        switch.rename("Maren", "Healer", false);
+        assert_eq!(switch.disabled(), ["Healer", "Orla"]);
+        // An on group takes the place of a name left off from before.
+        switch.rename("Tolliver", "Orla", false);
+        assert_eq!(switch.disabled(), ["Healer"]);
+        // A merge keeps the state of the group it joins.
+        switch.rename("Healer", "Tolliver", true);
+        assert_eq!(switch.disabled(), Vec::<String>::new());
+    }
 
     #[test]
     fn groups_sort_as_settings_lists_them() {

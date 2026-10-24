@@ -662,6 +662,72 @@ impl TriggerStore {
             .list(self.items.iter().filter_map(|t| t.trigger.group.as_deref()))
     }
 
+    /// The names of the triggers that both `from` and `to` hold, sorted
+    /// and once each, which a rename of `from` to `to` would leave twice in
+    /// one group.
+    pub fn group_clashes(&self, from: &str, to: &str) -> Vec<String> {
+        let (from, to) = (from.trim(), to.trim());
+        let in_group = |group: &str| -> std::collections::BTreeSet<&str> {
+            self.items
+                .iter()
+                .filter(|t| t.trigger.group.as_deref() == Some(group))
+                .map(|t| t.trigger.name.as_str())
+                .collect()
+        };
+        let to_names = in_group(to);
+        in_group(from)
+            .into_iter()
+            .filter(|name| to_names.contains(name))
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Whether any trigger is in `group`.
+    pub fn holds_group(&self, group: &str) -> bool {
+        let group = group.trim();
+        self.items
+            .iter()
+            .any(|t| t.trigger.group.as_deref() == Some(group))
+    }
+
+    /// Put every trigger of `from` in `to` where it stands, as a rename of
+    /// the group does, so the order they run in stays the same, and carry
+    /// the group's state, see [`TriggerStore::rename_group_state`]. A
+    /// stopped trigger stays stopped. Refuses with the names
+    /// [`TriggerStore::group_clashes`] finds and changes nothing then.
+    /// Returns how many triggers moved.
+    pub fn rename_group(&mut self, from: &str, to: &str) -> Result<usize, Vec<String>> {
+        let (from, to) = (from.trim(), to.trim());
+        if from.is_empty() || to.is_empty() || from == to {
+            return Ok(0);
+        }
+        let clashes = self.group_clashes(from, to);
+        if !clashes.is_empty() {
+            return Err(clashes);
+        }
+        let kept = self.holds_group(to);
+        let mut moved = 0;
+        for item in &mut self.items {
+            if item.trigger.group.as_deref() == Some(from) {
+                item.trigger.group = Some(to.to_string());
+                moved += 1;
+            }
+        }
+        if moved > 0 {
+            self.stopped.rename_group(from, to);
+            self.groups.rename(from, to, kept);
+            self.revision = next_revision();
+        }
+        Ok(moved)
+    }
+
+    /// Carry the state of the group `from` to `to` alone, for a profile
+    /// whose triggers a rename in the shared catalog moves. `kept` says
+    /// `to` held triggers before, which keep their state.
+    pub fn rename_group_state(&mut self, from: &str, to: &str, kept: bool) {
+        self.groups.rename(from.trim(), to.trim(), kept);
+    }
+
     /// Persistence accessor — returns the disabled group names.
     pub fn disabled_groups(&self) -> Vec<String> {
         self.groups.disabled()
@@ -729,6 +795,52 @@ mod tests {
             group: Some("combat".into()),
             ..Trigger::new(name, pattern, TriggerAction::Gag)
         }
+    }
+
+    fn in_group(group: &str, name: &str) -> Trigger {
+        Trigger {
+            group: Some(group.into()),
+            ..Trigger::new(name, "^x$", TriggerAction::Gag)
+        }
+    }
+
+    /// Each trigger as `group/name`, in the order they run.
+    fn order(s: &TriggerStore) -> Vec<String> {
+        s.list()
+            .iter()
+            .map(|t| format!("{}/{}", t.group.as_deref().unwrap_or(""), t.name))
+            .collect()
+    }
+
+    #[test]
+    fn a_group_rename_keeps_the_order_the_triggers_run_in() {
+        let mut s = TriggerStore::new();
+        for (group, name) in [("Maren", "a"), ("Orla", "b"), ("Maren", "c")] {
+            s.set(in_group(group, name)).unwrap();
+        }
+        s.set_group_enabled("Maren", false);
+        s.stop(Some("Maren"), "c", StopKey(1));
+        assert_eq!(s.rename_group("Maren", "Healer"), Ok(2));
+        assert_eq!(order(&s), ["Healer/a", "Orla/b", "Healer/c"]);
+        assert!(!s.is_group_enabled("Healer"));
+        assert!(s.is_stopped(Some("Healer"), "c", StopKey(1)));
+        // A merge into Orla, which is on, keeps Orla on.
+        assert_eq!(s.rename_group("Healer", "Orla"), Ok(2));
+        assert!(s.is_group_enabled("Orla"));
+        assert_eq!(s.disabled_groups(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_rename_onto_a_group_that_holds_one_of_its_names_is_refused() {
+        let mut s = TriggerStore::new();
+        for (group, name) in [("Maren", "greet"), ("Maren", "a"), ("Orla", "greet")] {
+            s.set(in_group(group, name)).unwrap();
+        }
+        assert_eq!(
+            s.rename_group("Maren", "Orla"),
+            Err(vec!["greet".to_string()])
+        );
+        assert_eq!(order(&s), ["Maren/greet", "Maren/a", "Orla/greet"]);
     }
 
     #[test]

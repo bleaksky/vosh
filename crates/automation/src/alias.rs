@@ -323,6 +323,76 @@ impl AliasStore {
         self.groups.set_disabled(groups);
     }
 
+    /// The names of the aliases that both `from` and `to` hold, sorted,
+    /// which a rename of `from` to `to` would leave twice in one group.
+    pub fn group_clashes(&self, from: &str, to: &str) -> Vec<String> {
+        let (from, to) = (from.trim(), to.trim());
+        let mut names: Vec<String> = self
+            .aliases
+            .iter()
+            .filter(|(_, list)| {
+                list.iter().any(|a| a.group.as_deref() == Some(from))
+                    && list.iter().any(|a| a.group.as_deref() == Some(to))
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Whether any alias is in `group`.
+    pub fn holds_group(&self, group: &str) -> bool {
+        let group = group.trim();
+        self.aliases
+            .values()
+            .flatten()
+            .any(|a| a.group.as_deref() == Some(group))
+    }
+
+    /// Put every alias of `from` in `to`, as a rename of the group does,
+    /// and carry the group's state, see [`AliasStore::rename_group_state`].
+    /// A stopped alias stays stopped. Refuses with the names
+    /// [`AliasStore::group_clashes`] finds and changes nothing then.
+    /// Returns how many aliases moved.
+    pub fn rename_group(&mut self, from: &str, to: &str) -> Result<usize, Vec<String>> {
+        let (from, to) = (from.trim(), to.trim());
+        if from.is_empty() || to.is_empty() || from == to {
+            return Ok(0);
+        }
+        let clashes = self.group_clashes(from, to);
+        if !clashes.is_empty() {
+            return Err(clashes);
+        }
+        let kept = self.holds_group(to);
+        let mut moved = 0;
+        for list in self.aliases.values_mut() {
+            let mut touched = false;
+            for alias in list.iter_mut() {
+                if alias.group.as_deref() == Some(from) {
+                    alias.group = Some(to.to_string());
+                    moved += 1;
+                    touched = true;
+                }
+            }
+            if touched {
+                list.sort_by(|a, b| compare_groups(a.group.as_deref(), b.group.as_deref()));
+            }
+        }
+        if moved > 0 {
+            self.stopped.rename_group(from, to);
+            self.groups.rename(from, to, kept);
+            self.revision = next_revision();
+        }
+        Ok(moved)
+    }
+
+    /// Carry the state of the group `from` to `to` alone, for a profile
+    /// whose aliases a rename in the shared catalog moves. `kept` says
+    /// `to` held aliases before, which keep their state.
+    pub fn rename_group_state(&mut self, from: &str, to: &str, kept: bool) {
+        self.groups.rename(from.trim(), to.trim(), kept);
+    }
+
     /// Lowers the recursion cap so a test can reach it in a few steps.
     #[cfg(test)]
     #[must_use]
@@ -657,6 +727,51 @@ mod tests {
     /// The session the lines here are typed in, and another.
     const SESSION: StopKey = StopKey(1);
     const OTHER: StopKey = StopKey(2);
+
+    /// Two aliases in Maren with Maren off and `res` stopped, and a `ds`
+    /// in Orla.
+    fn maren_and_orla() -> AliasStore {
+        let mut s = AliasStore::new();
+        s.set(Alias::new("ds", "cast 'detect scry' maren").with_group("Maren"));
+        s.set(Alias::new("res", "cast 'resurrect'").with_group("Maren"));
+        s.set(Alias::new("ds", "cast 'detect scry' orla").with_group("Orla"));
+        s.set_group_enabled("Maren", false);
+        s.stop(Some("Maren"), "res", SESSION);
+        s
+    }
+
+    #[test]
+    fn a_group_rename_moves_its_aliases_with_their_state_and_stops() {
+        let mut s = maren_and_orla();
+        assert_eq!(s.rename_group("Maren", "Healer"), Ok(2));
+        assert!(s.get_in(Some("Healer"), "ds").is_some());
+        assert!(s.get_in(Some("Maren"), "ds").is_none());
+        assert!(!s.is_group_enabled("Healer"));
+        assert_eq!(s.disabled_groups(), ["Healer"]);
+        assert!(s.is_stopped(Some("Healer"), "res", SESSION));
+        // Zed lists after Orla, so Orla's ds now fires first.
+        assert_eq!(s.rename_group("Healer", "Zed"), Ok(2));
+        assert_eq!(s.get("ds").and_then(|a| a.group.as_deref()), Some("Orla"));
+    }
+
+    #[test]
+    fn a_rename_onto_a_group_that_holds_one_of_its_names_changes_nothing() {
+        let mut s = maren_and_orla();
+        assert_eq!(s.rename_group("Maren", "Orla"), Err(vec!["ds".to_string()]));
+        assert!(s.get_in(Some("Maren"), "res").is_some());
+        assert_eq!(s.disabled_groups(), ["Maren"]);
+    }
+
+    #[test]
+    fn a_merge_keeps_the_state_of_the_group_it_joins() {
+        let mut s = maren_and_orla();
+        s.remove(Some("Orla"), "ds");
+        s.set(Alias::new("rc", "recall").with_group("Orla"));
+        assert_eq!(s.rename_group("Maren", "Orla"), Ok(2));
+        assert!(s.is_group_enabled("Orla"));
+        assert_eq!(s.disabled_groups(), Vec::<String>::new());
+        assert!(!s.holds_group("Maren"));
+    }
 
     fn store(entries: &[(&str, &str)]) -> AliasStore {
         let mut s = AliasStore::new();
