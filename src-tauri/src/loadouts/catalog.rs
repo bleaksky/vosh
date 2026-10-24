@@ -183,7 +183,12 @@ pub(crate) fn lay_catalog_change_over(
     for (group, name) in gone {
         p.aliases.remove(group, name);
     }
+    // An item the profile already holds as it came, as after a group
+    // rename it took in place, stays where it is with its stops.
     for alias in came {
+        if p.aliases.get_in(alias.group.as_deref(), &alias.name) == Some(alias) {
+            continue;
+        }
         p.aliases.set(alias.clone());
     }
     // So is a trigger.
@@ -192,6 +197,10 @@ pub(crate) fn lay_catalog_change_over(
         p.triggers.remove(group, name);
     }
     for trigger in came {
+        // Kept in place it keeps the order it runs in.
+        if p.triggers.get_in(trigger.group.as_deref(), &trigger.name) == Some(trigger) {
+            continue;
+        }
         if let Err(e) = p.triggers.set(trigger.clone()) {
             warn!(error = %e, "catalog trigger rejected");
         }

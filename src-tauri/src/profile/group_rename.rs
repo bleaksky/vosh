@@ -7,10 +7,11 @@
 //! that name the group follow it.
 //!
 //! In loadout mode the shared catalog holds the triggers, aliases and
-//! macros, while each profile file keeps the groups it turned off and its
-//! folder map. So every other profile follows the rename in those, the
-//! open ones live and the rest in their files, and the loadouts follow
-//! it too. Timers stay in the profile file, so they rename there alone.
+//! macros, while each profile file keeps its timers, the groups it turned
+//! off and its folder map. So every other profile renames the group too,
+//! the open ones in place as the edited one does, so their triggers keep
+//! their order and their stops, and the rest in their files. The
+//! loadouts follow it too.
 
 use std::collections::BTreeSet;
 
@@ -192,33 +193,10 @@ pub(crate) fn rename_in_profile(p: &mut Profile, from: &str, to: &str) -> (usize
     (moved, [triggers > 0, aliases > 0, macros > 0, timers > 0])
 }
 
-/// Follow a rename the shared catalog took in another open profile `p`:
-/// the groups it keeps off in each catalog list in `moved`, where `kept`
-/// says the new name was a group already, and its folder map.
-pub(crate) fn follow_in_profile(
-    p: &mut Profile,
-    from: &str,
-    to: &str,
-    moved: InLists,
-    kept: InLists,
-) {
-    if moved[0] {
-        p.triggers.rename_group_state(from, to, kept[0]);
-    }
-    if moved[1] {
-        p.aliases.rename_group_state(from, to, kept[1]);
-    }
-    if moved[2] {
-        rename_off(&mut p.disabled_macro_groups, from, to, kept[2]);
-        p.macro_group_toggles = p.macro_group_toggles.wrapping_add(1);
-        crate::loadouts::presets::hold_profile_keys(p);
-    }
-    rename_in_folders(&mut p.group_folders, from, to);
-    p.group_toggles = p.group_toggles.wrapping_add(1);
-}
-
-/// [`follow_in_profile`] for the file of a profile that is not open.
-/// Returns whether the file changed and needs a save.
+/// Follow a rename in loadout mode in the file of a profile that is not
+/// open: the groups it keeps off in each catalog list in `moved`, where
+/// `kept` says the new name was a group there already, its own timers,
+/// and its folder map. Returns whether the file changed and needs a save.
 pub(crate) fn follow_in_file(
     config: &mut ProfileConfig,
     from: &str,
@@ -227,6 +205,18 @@ pub(crate) fn follow_in_file(
     kept: InLists,
 ) -> bool {
     let mut changed = false;
+    let timers_kept = config.timers.iter().any(|t| t.group.as_deref() == Some(to));
+    let mut timers = false;
+    for t in &mut config.timers {
+        if t.group.as_deref() == Some(from) {
+            t.group = Some(to.to_string());
+            timers = true;
+        }
+    }
+    if timers {
+        rename_off_list(&mut config.disabled_timer_groups, from, to, timers_kept);
+        changed = true;
+    }
     if moved[0] {
         changed |= rename_off_list(&mut config.disabled_trigger_groups, from, to, kept[0]);
     }
@@ -421,11 +411,13 @@ mod tests {
     }
 
     #[test]
-    fn a_closed_profile_file_follows_in_the_catalog_lists_alone() {
+    fn a_closed_profile_file_follows_in_the_lists_that_moved_and_its_timers() {
         let mut config = ProfileConfig {
             disabled_trigger_groups: vec!["combat".into(), "loot".into()],
             disabled_alias_groups: vec!["combat".into()],
+            disabled_macro_groups: vec!["combat".into()],
             disabled_timer_groups: vec!["combat".into()],
+            timers: grouped().timers,
             ..ProfileConfig::default()
         };
         config.group_folders.aliases = BTreeMap::from([("fight".into(), vec!["combat".into()])]);
@@ -439,8 +431,11 @@ mod tests {
         ));
         assert_eq!(config.disabled_trigger_groups, ["fighting", "loot"]);
         assert_eq!(config.disabled_alias_groups, ["fighting"]);
-        // Timers stay in each profile's own file, so its timers keep theirs.
-        assert_eq!(config.disabled_timer_groups, ["combat"]);
+        // No macro of the catalog moved, so that list stays.
+        assert_eq!(config.disabled_macro_groups, ["combat"]);
+        // The file's own timers take the new name and their state.
+        assert_eq!(config.timers[0].group.as_deref(), Some("fighting"));
+        assert_eq!(config.disabled_timer_groups, ["fighting"]);
         assert_eq!(config.group_folders.aliases["fight"], ["fighting"]);
         // A file that names neither group stays as it is, with no save.
         let mut untouched = ProfileConfig::default();
