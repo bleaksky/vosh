@@ -2102,7 +2102,7 @@ Help 4.1 Arrange the panels says how to fold a pane, close one and undo it, use 
 
 #### October 23. Many automation items at once
 
-A player kept 20 triggers in one group and wanted to move them to another without opening each one, and to rename a group. You approved two items on October 23. This is the first, picking several items and moving, turning, copying or deleting them in one step. The second, renaming a group across every list with its switch and loadouts, waits for your approval. The build is on feat/group-batch from main 55907d58.
+A player kept 20 triggers in one group and wanted to move them to another without opening each one, and to rename a group. You approved two items on October 23. This is the first, picking several items and moving, turning, copying or deleting them in one step. The second is renaming a group across every list with its switch and loadouts. The build was on feat/group-batch from main 55907d58. You checked both in a dev window on October 24 and approved them, and they merged into main.
 
 - Picking. Triggers, Aliases, Macros and Timers have a select button after the filter, and a Cmd or Ctrl click or a Shift click starts picking too. While picking, every row and group heading wears a checkbox, a click or Space checks a row, Shift with a click or an arrow checks the run from the anchor, Cmd or Ctrl A checks every row that shows, and the heading's checkbox checks or clears its group. Esc, Done or the select button stops. The rules live in `src/automation/listPick.ts`, and a Save keeps what you checked by each item's key. The pinned Tick never picks, and the arrows pass over it while you pick. The open row joins a pick only while it shows, so a row the filter or a folded group hides never joins unseen. New, a link to an item and the Tick stop picking, so the item they open shows its card.
 - Changed from the proposal. A checkbox that showed only under the pointer would push each row's name aside as the pointer moved down the list, so the select button turns every checkbox on at once instead.
@@ -2115,7 +2115,7 @@ Help 3.12 Change many items at once is new, 3.1 and 3.2 say the Group field list
 
 #### October 23. Renaming a group
 
-The second item you approved on October 23, after mockups. You chose that a rename reaches all four lists and that a rename onto a group you have merges the two after a confirm. The build follows picking on feat/group-batch.
+The second item you approved on October 23, after mockups. You chose that a rename reaches all four lists and that a rename onto a group you have merges the two after a confirm. The build follows picking on feat/group-batch. You approved it with picking on October 24.
 
 - The command. `groups_rename` in `src-tauri/src/ipc/automation.rs` renames `from` to `to` in the profile Settings shows and answers `renamed` with how many items moved, or `exists` while `to` is a group and `merge` is unset. A name both groups hold in Triggers or Aliases refuses with what to fix, through `clash_message`. Macros are known by their key and timers by their id, so they never clash.
 - The stores. `rename_group` on `TriggerStore` and `AliasStore` changes the group where each item stands, so the order triggers run in stays the same, moves the Lua stops, and carries the group's state through `GroupSwitch::rename`. The new name takes the old group's state unless it held items already, which keep theirs, and an off entry the new name kept from before goes when the old group was on.
