@@ -3,6 +3,8 @@ import {
   foldsInView,
   isFiltering,
   loadFolded,
+  renameFolded,
+  renameFoldedIn,
   saveFolded,
   withFold,
   type SearchFolds,
@@ -25,6 +27,9 @@ export interface ListFolds {
   setFold: (key: string, fold: boolean) => void;
   /** Open a group for good, like the one that holds the row you picked. */
   open: (key: string) => void;
+  /** Follow a rename of the group `from` to `to`, both fold keys, here
+   *  and in `others`, the lists the page does not show now. */
+  rename: (from: string, to: string, merge: boolean, others: readonly string[]) => void;
 }
 
 /** The folded groups of one Automation list. The list remembers them
@@ -71,5 +76,14 @@ export function useListFolds(list: string, filter: string): ListFolds {
     [kept, search, keep],
   );
 
-  return { folded, setFold, open };
+  const rename = useCallback(
+    (from: string, to: string, merge: boolean, others: readonly string[]) => {
+      const next = renameFolded(kept, from, to, merge);
+      if (next !== kept) keep(next);
+      for (const other of others) renameFoldedIn(pageStorage(), other, from, to, merge);
+    },
+    [kept, keep],
+  );
+
+  return { folded, setFold, open, rename };
 }

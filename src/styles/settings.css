@@ -2302,6 +2302,31 @@
   margin-left: 22px;
 }
 
+/* A heading's menu button shows while you point at the heading or it
+   holds focus, before the group's switch. */
+.st-icon-button.st-auto-headmore {
+  opacity: 0;
+}
+
+.st-auto-headrow:hover .st-auto-headmore,
+.st-auto-headrow:focus-within .st-auto-headmore {
+  opacity: 1;
+}
+
+/* A group's new name, typed in place of its heading at the heading's
+   height. */
+.st-auto-headrename {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 4px;
+}
+
+.st-auto-headrename .st-field {
+  height: 24px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
 /* The card for the rows you picked: how many over the card, with Done
    at the right, then a quiet hint while none is checked. */
 .st-auto-batch-head {

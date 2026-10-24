@@ -35,6 +35,7 @@ import {
   cx,
   Field,
   IconButton,
+  MoreIcon,
   PencilIcon,
   SearchIcon,
   Toggle,
@@ -221,6 +222,13 @@ export interface ItemListProps {
   picking?: ListPicking | null | undefined;
   /** Open a row's menu, from a right click, the menu key or Shift F10. */
   onRowMenu?: ((uid: string, at: MenuPlacement) => void) | undefined;
+  /** Open a group heading's menu, from a right click, the button that
+   *  shows on the heading, the menu key or Shift F10. */
+  onHeadingMenu?: ((group: string, at: MenuPlacement) => void) | undefined;
+  /** The group whose heading shows a name field in its place. */
+  renaming?: { group: string; field: ReactNode } | null | undefined;
+  /** A note under one group's heading, like the one a rename leaves. */
+  headingNote?: { group: string; note: ReactNode } | null | undefined;
 }
 
 /** A heading you moved to, and the selection it was made under. */
@@ -268,6 +276,9 @@ export function ItemList({
   groupSwitches,
   picking,
   onRowMenu,
+  onHeadingMenu,
+  renaming,
+  headingNote,
 }: ItemListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const baseId = useId();
@@ -333,6 +344,15 @@ export function ItemList({
     // sits on Edit all as JSON… under the list.
     // A group switch moves as its heading does.
     const { uid, fold, groupSwitch } = (e.target as HTMLElement).dataset ?? {};
+    const menuKey = e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10');
+    // On a heading they open the group's menu under it.
+    const headingGroup = fold !== undefined ? groupOfSectionKey(fold) : null;
+    if (onHeadingMenu && headingGroup !== null && menuKey) {
+      e.preventDefault();
+      const r = (e.target as HTMLElement).getBoundingClientRect();
+      onHeadingMenu(headingGroup, { x: r.left + 16, y: r.bottom });
+      return;
+    }
     // The menu key and Shift F10 open a row's menu under the row.
     if (
       onRowMenu &&
@@ -500,12 +520,22 @@ export function ItemList({
             return (
               <Fragment key={section.key}>
                 {divider}
-                <div className={cx('st-auto-headrow', index === 0 && !pinned && 'is-first')}>
+                <div
+                  className={cx('st-auto-headrow', index === 0 && !pinned && 'is-first')}
+                  onContextMenu={
+                    group !== null && onHeadingMenu && renaming?.group !== group
+                      ? (e) => {
+                          e.preventDefault();
+                          onHeadingMenu(group, { x: e.clientX, y: e.clientY });
+                        }
+                      : undefined
+                  }
+                >
                   {/* While picking, a group's checkbox checks or clears its
                       rows. It sits over the heading, since it cannot sit
                       inside the fold button. The keys reach the same
                       through Shift arrows and the row menu. */}
-                  {state && picking && (
+                  {state && picking && renaming?.group !== group && (
                     <button
                       type="button"
                       className={cx(
@@ -521,28 +551,44 @@ export function ItemList({
                       {state === 'all' && <CheckIcon size={12} />}
                     </button>
                   )}
-                  <h2 className="st-auto-heading">
-                    <button
-                      type="button"
-                      className="st-auto-fold"
-                      aria-expanded={open}
-                      aria-controls={open ? groupId : undefined}
-                      aria-describedby={noteId}
-                      tabIndex={tabId === id ? 0 : -1}
-                      data-fold={key}
-                      onClick={(e) => onHeadingClick(e, key, open)}
-                      onFocus={() => setCursor({ id, selected })}
-                    >
-                      <ChevronRightIcon size={12} className="st-auto-fold-chevron" />
-                      <span className="st-auto-fold-name">{section.heading}</span>
-                      {!open && (
-                        <span className="st-auto-fold-count">
-                          {count}
-                          <VisuallyHidden> {count === 1 ? noun.one : noun.many}</VisuallyHidden>
-                        </span>
-                      )}
-                    </button>
-                  </h2>
+                  {renaming && renaming.group === group ? (
+                    renaming.field
+                  ) : (
+                    <h2 className="st-auto-heading">
+                      <button
+                        type="button"
+                        className="st-auto-fold"
+                        aria-expanded={open}
+                        aria-controls={open ? groupId : undefined}
+                        aria-describedby={noteId}
+                        tabIndex={tabId === id ? 0 : -1}
+                        data-fold={key}
+                        onClick={(e) => onHeadingClick(e, key, open)}
+                        onFocus={() => setCursor({ id, selected })}
+                      >
+                        <ChevronRightIcon size={12} className="st-auto-fold-chevron" />
+                        <span className="st-auto-fold-name">{section.heading}</span>
+                        {!open && (
+                          <span className="st-auto-fold-count">
+                            {count}
+                            <VisuallyHidden> {count === 1 ? noun.one : noun.many}</VisuallyHidden>
+                          </span>
+                        )}
+                      </button>
+                    </h2>
+                  )}
+                  {group !== null && onHeadingMenu && renaming?.group !== group && (
+                    <IconButton
+                      className="st-auto-headmore"
+                      label={`${group} group options`}
+                      icon={<MoreIcon />}
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        onHeadingMenu(group, { x: r.left, y: r.bottom + 4 });
+                      }}
+                    />
+                  )}
                   {/* The group's on and off switch sits after the heading,
                       since a switch cannot sit inside a button. */}
                   {group !== null && groupSwitch && groupSwitches && (
@@ -567,6 +613,9 @@ export function ItemList({
                   <p id={noteId} className="st-auto-groupnote">
                     {newGroupNote(newHold)}
                   </p>
+                )}
+                {headingNote && headingNote.group === group && (
+                  <p className="st-auto-groupnote">{headingNote.note}</p>
                 )}
                 {open && (
                   <div id={groupId} className="st-auto-group">

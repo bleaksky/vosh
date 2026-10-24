@@ -44,12 +44,16 @@ import {
   togglePick,
   type ListPick,
 } from '../../automation/listPick';
+import { renameGroup } from '../../ipc/automation';
 import { useEscape } from '../../lib/escapeStack';
 import { scrollWithin } from '../../lib/scrollWithin';
 import { Button } from '../../ui';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import type { MenuPlacement } from '../../ui/MenuSurface';
 import { getShownProfile, isShownHeld, subscribeShownMoves, useProfileHold } from '../shownProfile';
 import { BatchCard } from './BatchCard';
+import { GroupNameField } from './GroupNameField';
+import { HeadingMenu } from './HeadingMenu';
 import { ItemList, type ListPicking, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';
 import { RowMenu } from './RowMenu';
@@ -107,6 +111,17 @@ interface SaveError {
 }
 
 const NO_UIDS: readonly string[] = [];
+
+/** The lists a group's name reaches, by their `KindSpec.id`. */
+const GROUP_LISTS = ['triggers', 'aliases', 'macros', 'timers'];
+
+/** How many of `entries` name `group` as a word in their text, like a
+ *  command that says `#group Maren off`. */
+function mentionsOf(entries: readonly ListEntry[], group: string): number {
+  const word = group.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}_])${word}($|[^\\p{L}\\p{N}_])`, 'u');
+  return entries.filter((e) => re.test(e.text)).length;
+}
 
 /** `pick` over a draft loaded again: each checked row by its key, so a
  *  Save keeps what you checked. */
@@ -176,6 +191,14 @@ export function DraftEditor<T>({
   /** Goes up when a row's menu asks for New group…, so the Group field
    *  of the card takes focus once it shows. */
   const [groupFocusSeq, setGroupFocusSeq] = useState(0);
+  /** A group heading's menu, on the group it opened on. */
+  const [headingMenu, setHeadingMenu] = useState<{ group: string; at: MenuPlacement } | null>(null);
+  /** The group whose heading shows a name field. */
+  const [renaming, setRenaming] = useState<string | null>(null);
+  /** A rename onto a group you have, waiting for you to confirm it. */
+  const [mergeAsk, setMergeAsk] = useState<{ from: string; to: string } | null>(null);
+  /** The last rename, which leaves a note under the group's heading. */
+  const [renamed, setRenamed] = useState<{ from: string; to: string } | null>(null);
   const canPick = spec.regroup !== undefined;
   const errorId = useId();
   const draftRef = useRef<Draft<T> | null>(null);
@@ -681,6 +704,47 @@ export function DraftEditor<T>({
     [pick.on],
   );
 
+  // A rename acts on the store at once, as a group's switch does, and
+  // reaches every list. The list loads again after it, keeping the row
+  // you were on under the group's new name. A new name that is a group
+  // already asks first.
+  const renameTo = async (from: string, to: string, merge: boolean): Promise<boolean> => {
+    const d = draftRef.current;
+    const uid = selectedRef.current;
+    const item = d && uid !== null ? findDraftItem(d, uid) : undefined;
+    const regroup = spec.regroup;
+    const keep = item
+      ? spec.keyOf(
+          regroup && spec.entry(item.value).group === from ? regroup(item.value, to) : item.value,
+        )
+      : null;
+    try {
+      const done = await renameGroup(from, to, merge, getShownProfile());
+      if (done.outcome === 'exists') {
+        setMergeAsk({ from, to });
+        return true;
+      }
+      const others = GROUP_LISTS.filter((list) => list !== spec.id);
+      folds.rename(sectionKeyOf({ group: from }), sectionKeyOf({ group: to }), merge, others);
+      onError(null);
+      setRenamed(done.items > 0 ? { from, to } : null);
+      await load(keep);
+      return true;
+    } catch (e) {
+      onError(automationSaveError(e));
+      return false;
+    }
+  };
+
+  const onHeadingMenu = useCallback((group: string, at: MenuPlacement) => {
+    setHeadingMenu({ group, at });
+  }, []);
+
+  // An edit ends the note a rename left, since the list it counted moved on.
+  useEffect(() => {
+    if (count > 0) setRenamed(null);
+  }, [count]);
+
   // Delete removes the card that held focus, the button included. Put
   // focus on the row that took the deleted one's place, else the row
   // that is selected, else the filter, so it never drops to the page.
@@ -947,6 +1011,26 @@ export function DraftEditor<T>({
               groupSwitches={groupSwitches}
               picking={picking}
               onRowMenu={canPick ? onRowMenu : undefined}
+              onHeadingMenu={canPick ? onHeadingMenu : undefined}
+              renaming={
+                renaming === null
+                  ? null
+                  : {
+                      group: renaming,
+                      field: (
+                        <GroupNameField
+                          group={renaming}
+                          onCommit={async (to) => {
+                            const closed = await renameTo(renaming, to, false);
+                            if (closed) setRenaming(null);
+                            return closed;
+                          }}
+                          onCancel={() => setRenaming(null)}
+                        />
+                      ),
+                    }
+              }
+              headingNote={renamed ? { group: renamed.to, note: renamedNote(renamed) } : null}
               footer={
                 spec.json ? (
                   <Button
@@ -977,8 +1061,66 @@ export function DraftEditor<T>({
         onSave={() => void onSave()}
       />
       {menu && draft && findDraftItem(draft, menu.uid) && rowMenu(menu)}
+      {headingMenu && (
+        <HeadingMenu
+          group={headingMenu.group}
+          at={headingMenu.at}
+          dirty={dirty}
+          onRename={() => setRenaming(headingMenu.group)}
+          onSelectAll={() => {
+            const section = sections.find((sec) => sec.heading === headingMenu.group);
+            if (section)
+              setPick((p) =>
+                groupPick(
+                  p,
+                  section.entries.map((e) => e.uid),
+                  true,
+                ),
+              );
+          }}
+          onUngroup={() => {
+            const section = allSections.find((sec) => sec.heading === headingMenu.group);
+            if (section)
+              moveItems(
+                section.entries.map((e) => e.uid),
+                '',
+              );
+          }}
+          onClose={() => setHeadingMenu(null)}
+        />
+      )}
+      {mergeAsk && (
+        <ConfirmDialog
+          title={`Merge ${mergeAsk.from} into ${mergeAsk.to}?`}
+          body={`${mergeAsk.to} is already a group. The triggers, aliases, macros and timers of ${mergeAsk.from} join it, and ${mergeAsk.to} stays on or off as it is now.`}
+          confirmLabel="Merge"
+          tone="primary"
+          onConfirm={() => {
+            const { from, to } = mergeAsk;
+            setMergeAsk(null);
+            void renameTo(from, to, true);
+          }}
+          onCancel={() => setMergeAsk(null)}
+        />
+      )}
     </>
   );
+
+  /** The note under a renamed group's heading: where it came from, and
+   *  how many items here still name the old group in their text, with a
+   *  way to see them. */
+  function renamedNote({ from }: { from: string; to: string }): ReactNode {
+    const n = mentionsOf(entries, from);
+    if (n === 0) return `Renamed from ${from}.`;
+    return (
+      <>
+        Renamed from {from}. {countPhrase(n, spec.noun)} still {n === 1 ? 'says' : 'say'} {from}.{' '}
+        <button type="button" className="st-auto-link" onClick={() => setFilter(from)}>
+          {n === 1 ? 'Show it' : 'Show them'}
+        </button>
+      </>
+    );
+  }
 
   function rowMenu(open: { uid: string; at: MenuPlacement }) {
     const uids = targetsOf(open.uid);
