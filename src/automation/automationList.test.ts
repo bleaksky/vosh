@@ -12,6 +12,8 @@ import {
   loadFolded,
   neighborUid,
   PRESET_SECTION_HEADING,
+  renameFolded,
+  renameFoldedIn,
   saveFolded,
   searchText,
   sectionKeyOf,
@@ -282,5 +284,26 @@ describe('remembering folds', () => {
     expect(loadFolded(refusing, 'triggers').size).toBe(0);
     expect(() => saveFolded(refusing, 'triggers', new Set(['g:idle']))).not.toThrow();
     expect(() => saveFolded(refusing, 'triggers', new Set())).not.toThrow();
+  });
+});
+
+describe('a renamed group', () => {
+  it('folds as the old group did, unless it joined a group with a fold of its own', () => {
+    const folded = new Set(['g:Maren', 'g:Orla']);
+    expect([...renameFolded(folded, 'g:Maren', 'g:Healer', false)]).toEqual(['g:Orla', 'g:Healer']);
+    expect([...renameFolded(folded, 'g:Maren', 'g:Orla', true)]).toEqual(['g:Orla']);
+    const open = new Set(['g:Orla']);
+    expect(renameFolded(open, 'g:Maren', 'g:Healer', false)).toBe(open);
+  });
+
+  it('follows in a list the page does not show', () => {
+    const kept = new Map<string, string>([[foldedStorageKey('timers'), '["g:Maren"]']]);
+    const storage = {
+      getItem: (k: string) => kept.get(k) ?? null,
+      setItem: (k: string, v: string) => void kept.set(k, v),
+      removeItem: (k: string) => void kept.delete(k),
+    };
+    renameFoldedIn(storage, 'timers', 'g:Maren', 'g:Healer', false);
+    expect(kept.get(foldedStorageKey('timers'))).toBe('["g:Healer"]');
   });
 });

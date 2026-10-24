@@ -49,6 +49,9 @@ export interface DetailProps<T> {
   /** What the list ring on this item says, like an alias another group's
    *  alias of its name covers. Undefined for an item with none. */
   note?: string | undefined;
+  /** The groups the Group field offers: every group in the four lists,
+   *  and the ones this list's draft names. */
+  groups: readonly string[];
 }
 
 /** Everything one kind's editor needs. Keep a spec stable across
@@ -117,6 +120,15 @@ export interface KindSpec<T> {
   /** The list whose groups the switch on each heading turns. Leave out
    *  for kinds whose headings have no switch, like Presets. */
   groups?: GroupList;
+  /** `value` filed under `group`, blank for none. A kind that sets it
+   *  lets you pick several rows and move, turn, copy or delete them at
+   *  once, from the card for the picked rows or from a row's menu. */
+  regroup?: (value: T, group: string) => T;
+  /** `value` turned on or off. */
+  turn?: (value: T, on: boolean) => T;
+  /** Whether you can turn this item on or off here, when the kind can.
+   *  A preset macro takes only a new group. */
+  canTurn?: (value: T) => boolean;
   /** Mono list rows for MUD text, like alias names and macro keys. */
   monoName?: boolean;
   monoMeta?: boolean;

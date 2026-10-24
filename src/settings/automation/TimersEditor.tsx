@@ -33,6 +33,8 @@ import type { DetailProps, DirtyReport, KindSpec } from './types';
 const TIMERS_SPEC: KindSpec<TimerRecord> = {
   id: 'timers',
   groups: 'timers',
+  regroup: withGroup,
+  turn: (t, enabled) => ({ ...t, enabled }),
   noun: { one: 'timer', many: 'timers' },
   filterLabel: 'Filter timers',
   newLabel: 'New timer',
@@ -167,7 +169,7 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
   );
 }
 
-function TimerDetail({ value: t, update, fresh, revealInList }: DetailProps<TimerRecord>) {
+function TimerDetail({ value: t, update, fresh, revealInList, groups }: DetailProps<TimerRecord>) {
   const nameRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -189,6 +191,7 @@ function TimerDetail({ value: t, update, fresh, revealInList }: DetailProps<Time
       </Row>
       <Row label="Group">
         <GroupField
+          groups={groups}
           width="100%"
           value={t.group ?? ''}
           onCommit={(group) => {

@@ -11,6 +11,7 @@
 
 pub(crate) mod export;
 pub(crate) mod file;
+pub(crate) mod group_rename;
 pub(crate) mod inactive;
 pub(crate) mod layout_history;
 pub(crate) mod live;

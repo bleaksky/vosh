@@ -183,6 +183,7 @@ async function mount(start: PresetToggle) {
         update={(fn) => setValue(fn)}
         fresh={false}
         revealInList={() => {}}
+        groups={[]}
         onOpenTriggers={() => {}}
       />
     );

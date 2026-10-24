@@ -59,6 +59,23 @@ impl Stops {
         self.by_key.remove(&key);
     }
 
+    /// Move every stop of an item in `from` to the same item in `to`, as a
+    /// rename of the group does, so a stopped item stays stopped.
+    pub(crate) fn rename_group(&mut self, from: &str, to: &str) {
+        let prefix = format!("{from}\u{1f}");
+        for names in self.by_key.values_mut() {
+            let moved: Vec<String> = names
+                .iter()
+                .filter(|n| n.starts_with(&prefix))
+                .cloned()
+                .collect();
+            for id in moved {
+                names.remove(&id);
+                names.insert(format!("{to}\u{1f}{}", &id[prefix.len()..]));
+            }
+        }
+    }
+
     /// The stops whose item `unchanged` says a whole list save left as it
     /// was, each under the key it came under.
     pub(crate) fn kept(&self, unchanged: impl Fn(&str) -> bool) -> Self {

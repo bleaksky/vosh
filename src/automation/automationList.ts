@@ -288,6 +288,35 @@ export function saveFolded(
   }
 }
 
+/** `folded` after the group `from` took the name `to`, both fold keys.
+ *  The new group shows folded as the old one did, unless `merge` says
+ *  it was a group already, which keeps its own fold. */
+export function renameFolded(
+  folded: ReadonlySet<string>,
+  from: string,
+  to: string,
+  merge: boolean,
+): ReadonlySet<string> {
+  if (!folded.has(from)) return folded;
+  const next = new Set(folded);
+  next.delete(from);
+  if (!merge) next.add(to);
+  return next;
+}
+
+/** [renameFolded] for a list the page does not show now, in storage. */
+export function renameFoldedIn(
+  storage: (Pick<Storage, 'getItem'> & Pick<Storage, 'setItem' | 'removeItem'>) | null,
+  list: string,
+  from: string,
+  to: string,
+  merge: boolean,
+): void {
+  const folded = loadFolded(storage, list);
+  const next = renameFolded(folded, from, to, merge);
+  if (next !== folded) saveFolded(storage, list, next);
+}
+
 /** `folded` with `key` folded or open. */
 export function withFold(
   folded: ReadonlySet<string>,

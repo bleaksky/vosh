@@ -16,6 +16,7 @@ export { clearCoach, menuRows, showCoach, type Coach } from './coach';
 export { CoachRing } from './CoachRing';
 export { Chip, ChipButton, type ChipButtonProps, type ChipProps } from './Chip';
 export { ColorField, type ColorFieldProps } from './ColorField';
+export { ComboField, type ComboFieldProps } from './ComboField';
 export { cx } from './cx';
 export { Disclosure, DisclosurePanel, type DisclosureProps } from './Disclosure';
 export { Field, type FieldProps } from './Field';

@@ -8,8 +8,10 @@
 //! when it names none. Every window hears a change only while that
 //! profile is the one in front.
 
+use std::sync::Arc;
+
 use serde::de::value::{self, StrDeserializer};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use vosh_automation::trigger::Trigger;
 
@@ -18,7 +20,9 @@ use crate::app::events::{
     PRESETS_CHANGED, TIMERS_CHANGED,
 };
 use crate::app::state::SharedState;
-use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
+use crate::disk::save::{
+    persist_profile, persist_state, save_then_broadcast, SavePolicy, PERSIST_LOCK,
+};
 use crate::import::{merge_triggers, ImportFormat};
 use crate::loadouts::gating::{loadout_hold, new_group_hold, LoadoutHold};
 use crate::loadouts::presets::{
@@ -26,6 +30,9 @@ use crate::loadouts::presets::{
     remove_preset_macros, retag_returned_macros, set_macro, switch_presets, PresetSwitch,
 };
 use crate::loadouts::set::LoadoutSet;
+use crate::profile::group_rename::{
+    clash_message, clashes, follow_in_file, follow_in_loadouts, lists_holding, rename_in_profile,
+};
 use crate::profile::live::{Macro, Profile, Timer};
 use crate::script::{list_groups, set_list_group, GroupList};
 
@@ -350,6 +357,138 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
     }
     broadcast_list_changes(&app, &open, lists);
     Ok(switches)
+}
+
+/// What a rename of a group did, as Settings reads it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "outcome", rename_all = "lowercase")]
+pub(crate) enum GroupRenamed {
+    /// The group has its new name, and `items` moved across the lists.
+    Renamed { items: usize },
+    /// The new name is a group already. Settings asks first, then calls
+    /// again with `merge`.
+    Exists,
+}
+
+/// Rename the group `from` to `to` in every list of the profile, from
+/// the menu on a group heading in Settings, as
+/// [`crate::profile::group_rename`] says. A new name that is a group
+/// already answers [`GroupRenamed::Exists`] unless `merge` is set. A
+/// name both groups hold in Triggers or Aliases refuses the rename with
+/// what to fix. In loadout mode the loadouts and every other profile
+/// follow, the open ones live and the rest in their files. Saves, and
+/// every window hears what changed.
+#[tauri::command]
+pub(crate) async fn groups_rename<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    from: String,
+    to: String,
+    merge: bool,
+    profile: Option<String>,
+) -> Result<GroupRenamed, String> {
+    let (from, to) = (from.trim().to_string(), to.trim().to_string());
+    if to.is_empty() {
+        return Err("Type a name for the group.".to_string());
+    }
+    if from == to {
+        return Ok(GroupRenamed::Renamed { items: 0 });
+    }
+    let edited = state.edited_profile(profile)?;
+    let on_catalog = state.global_catalog.lock().await.is_some();
+    let (open, items, moved, kept, lists, macros, timers) = {
+        let mut set = state.loadout_set.lock().await;
+        let mut p = edited.lock().await;
+        if !lists_holding(&p, &from).contains(&true) {
+            return Err(format!("Vosh has no group named “{from}” now."));
+        }
+        let kept = lists_holding(&p, &to);
+        let exists = kept.contains(&true);
+        if exists && !merge {
+            return Ok(GroupRenamed::Exists);
+        }
+        if let Some(message) = clash_message(&clashes(&p, &from, &to), &from, &to) {
+            return Err(message);
+        }
+        let before = ListRevisions::of_lists(&p);
+        let (items, moved) = rename_in_profile(&mut p, &from, &to);
+        if on_catalog {
+            if let Some(set) = set.as_mut() {
+                // Loadouts list catalog groups alone, never timers.
+                follow_in_loadouts(set, &from, &to, kept[..3].contains(&true));
+            }
+        }
+        (
+            p.open().clone(),
+            items,
+            moved,
+            kept,
+            ListChanges::between(before, ListRevisions::of_lists(&p)),
+            p.macros.clone(),
+            p.timers.clone(),
+        )
+    };
+    // The catalog holds triggers, aliases and macros for every profile,
+    // and each file keeps its own timers, off groups and folder map. The
+    // other open profiles rename in place, and the files of the rest
+    // follow, all under the lock every profile file write takes, so a
+    // switch cannot open a profile between the two.
+    let shared: SharedState = state.inner().clone();
+    let mut others = Vec::new();
+    if on_catalog {
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        let open_now = state.open_profiles();
+        for other in open_now.iter().filter(|o| !Arc::ptr_eq(o, &open)) {
+            let mut o = other.lock().await;
+            let before = ListRevisions::of_lists(&o);
+            rename_in_profile(&mut o, &from, &to);
+            let changes = ListChanges::between(before, ListRevisions::of_lists(&o));
+            others.push((other.clone(), changes));
+        }
+        let open_names: Vec<String> = open_now.iter().filter_map(|o| o.name()).collect();
+        let in_catalog = [moved[0], moved[1], moved[2], false];
+        {
+            let guard = state.profile_set.lock().await;
+            if let Some(set) = guard.as_ref() {
+                for stored in set.read_all() {
+                    if open_names.iter().any(|n| n == stored.name) {
+                        continue;
+                    }
+                    let Some(Ok(mut file)) = stored.file else {
+                        continue;
+                    };
+                    if follow_in_file(&mut file.config, &from, &to, in_catalog, kept) {
+                        if let Err(e) = file.config.save(&stored.path) {
+                            tracing::warn!(
+                                error = %e,
+                                path = %stored.path.display(),
+                                "profile file kept the old group name",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        persist_state(&shared, &open).await;
+        for (other, _) in &others {
+            persist_state(&shared, other).await;
+        }
+    } else {
+        persist_profile(&shared, &open).await;
+    }
+    broadcast_list_changes(&app, &open, lists);
+    if state.in_front(&open) {
+        if moved[2] {
+            broadcast(&app, MACROS_CHANGED, &macros);
+        }
+        if moved[3] {
+            broadcast(&app, TIMERS_CHANGED, &timers);
+        }
+    }
+    for (other, changes) in others {
+        broadcast_list_changes(&app, &other, changes);
+    }
+    Ok(GroupRenamed::Renamed { items })
 }
 
 /// List every interval timer, in stored order.
@@ -1227,5 +1366,177 @@ mod tests {
         assert_eq!(p.ui.enabled_presets, ["none"]);
         assert!(p.triggers.is_empty());
         assert_eq!(heard.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_group_rename_in_loadout_mode_reaches_the_catalog_the_loadouts_and_every_profile() {
+        use std::collections::BTreeMap;
+        use std::sync::Arc;
+
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::Manager;
+        use vosh_automation::alias::Alias;
+        use vosh_automation::trigger::{Trigger, TriggerAction};
+
+        use super::{groups_rename, GroupRenamed};
+        use crate::app::state::{AppState, SharedState};
+        use crate::loadouts::catalog::{load_global_catalog, GlobalCatalog};
+        use crate::loadouts::set::{load_loadout_set, Loadout};
+        use crate::profile::file::ProfileConfig;
+        use crate::profile::tests::james_like_set;
+
+        let dir = tempfile::tempdir().unwrap();
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state = app.state::<SharedState>();
+        state.app_data.set(dir.path().to_path_buf()).unwrap();
+        let set = james_like_set(dir.path());
+        // Healer is not open. Its file keeps combat off and a folder for it.
+        let healer = set.profile_path("Healer");
+        let mut file = ProfileConfig {
+            disabled_trigger_groups: vec!["combat".into()],
+            ..ProfileConfig::default()
+        };
+        file.group_folders.triggers = BTreeMap::from([("fight".into(), vec!["combat".into()])]);
+        file.save(&healer).unwrap();
+        state.set_profiles(set).await;
+        *state.global_catalog.lock().await = Some(GlobalCatalog::default());
+        let mut loadouts = LoadoutSet::default();
+        loadouts.loadouts.push(Loadout {
+            enabled_groups: vec!["combat".into()],
+            ..Loadout::empty("Tolliver")
+        });
+        *state.loadout_set.lock().await = Some(loadouts);
+        {
+            let mut p = state.selected_profile().await;
+            for (group, pattern) in [("combat", "^x$"), ("loot", "^y$")] {
+                p.triggers
+                    .set(Trigger {
+                        group: Some(group.into()),
+                        ..Trigger::new("flee", pattern, TriggerAction::Gag)
+                    })
+                    .unwrap();
+            }
+            p.aliases.set(Alias::new("kk", "kick").with_group("combat"));
+        }
+        let rename = |to: &str, merge| {
+            groups_rename(
+                app.handle().clone(),
+                app.state(),
+                "combat".into(),
+                to.into(),
+                merge,
+                None,
+            )
+        };
+        // loot is a group already, so Settings asks first, and both hold a
+        // flee trigger, so the merge is refused.
+        assert_eq!(rename("loot", false).await, Ok(GroupRenamed::Exists));
+        assert_eq!(
+            rename("loot", true).await,
+            Err("combat and loot both have a trigger named flee. Rename one of them first.".into())
+        );
+        assert_eq!(
+            rename("fighting", false).await,
+            Ok(GroupRenamed::Renamed { items: 2 })
+        );
+
+        let catalog = load_global_catalog(dir.path()).unwrap();
+        let mut groups: Vec<String> = catalog
+            .triggers
+            .iter()
+            .filter_map(|t| t.group.clone())
+            .collect();
+        groups.sort();
+        assert_eq!(groups, ["fighting", "loot"]);
+        assert_eq!(catalog.aliases[0].group.as_deref(), Some("fighting"));
+        assert_eq!(
+            load_loadout_set(dir.path()).unwrap().loadouts[0].enabled_groups,
+            ["fighting"]
+        );
+        let healer = ProfileConfig::load(&healer).unwrap();
+        assert_eq!(healer.disabled_trigger_groups, ["fighting"]);
+        assert_eq!(healer.group_folders.triggers["fight"], ["fighting"]);
+    }
+
+    #[tokio::test]
+    async fn another_open_profile_renames_in_place_with_its_order_state_and_stops() {
+        use std::sync::Arc;
+
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::Manager;
+        use vosh_automation::alias::Alias;
+        use vosh_automation::trigger::{Trigger, TriggerAction};
+        use vosh_automation::StopKey;
+
+        use super::{groups_rename, GroupRenamed};
+        use crate::app::state::{AppState, SharedState};
+        use crate::loadouts::catalog::GlobalCatalog;
+        use crate::profile::tests::james_like_set;
+
+        /// The catalog's items: a, b, c in that order, and an alias.
+        fn catalog_items(p: &mut Profile) {
+            for (group, name) in [("combat", "a"), ("loot", "b"), ("combat", "c")] {
+                p.triggers
+                    .set(Trigger {
+                        group: Some(group.into()),
+                        ..Trigger::new(name, "^x$", TriggerAction::Gag)
+                    })
+                    .unwrap();
+            }
+            p.aliases.set(Alias::new("kk", "kick").with_group("combat"));
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state = app.state::<SharedState>();
+        state.app_data.set(dir.path().to_path_buf()).unwrap();
+        state.set_profiles(james_like_set(dir.path())).await;
+        let catalog = {
+            let mut p = state.selected_profile().await;
+            catalog_items(&mut p);
+            GlobalCatalog::from_profile(&p)
+        };
+        *state.global_catalog.lock().await = Some(catalog);
+        // Healer plays in a second session, keeps combat off, has stopped
+        // trigger c, and has a timer of its own in combat.
+        let mut healer = Profile::default();
+        catalog_items(&mut healer);
+        healer.triggers.set_group_enabled("combat", false);
+        healer.triggers.stop(Some("combat"), "c", StopKey(7));
+        healer.timers.push(Timer {
+            id: 1,
+            name: String::new(),
+            interval_secs: 30,
+            command: "rescue".into(),
+            enabled: true,
+            group: Some("combat".into()),
+        });
+        let healer = state.add_open_profile("Healer", healer);
+        state.open_session(healer.clone());
+
+        let done = groups_rename(
+            app.handle().clone(),
+            app.state(),
+            "combat".into(),
+            "fighting".into(),
+            false,
+            None,
+        )
+        .await;
+        assert_eq!(done, Ok(GroupRenamed::Renamed { items: 3 }));
+        let h = healer.lock().await;
+        let order: Vec<String> = h
+            .triggers
+            .list()
+            .iter()
+            .map(|t| format!("{}/{}", t.group.as_deref().unwrap_or(""), t.name))
+            .collect();
+        assert_eq!(order, ["fighting/a", "loot/b", "fighting/c"]);
+        assert!(!h.triggers.is_group_enabled("fighting"));
+        assert!(h.triggers.is_stopped(Some("fighting"), "c", StopKey(7)));
+        assert_eq!(h.aliases.groups(), [("fighting".to_string(), true)]);
+        assert_eq!(h.timers[0].group.as_deref(), Some("fighting"));
     }
 }

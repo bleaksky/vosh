@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -24,16 +25,23 @@ import {
   type ListStop,
 } from '../../automation/automationList';
 import { loadoutHoldNote, newGroupNote } from '../../automation/groupSwitches';
+import { pickState } from '../../automation/listPick';
 import { scrollWithin } from '../../lib/scrollWithin';
+import { isMacPlatform } from '../../lib/shortcuts';
 import {
+  CheckboxIcon,
+  CheckIcon,
   ChevronRightIcon,
   cx,
   Field,
+  IconButton,
+  MoreIcon,
   PencilIcon,
   SearchIcon,
   Toggle,
   VisuallyHidden,
 } from '../../ui';
+import type { MenuPlacement } from '../../ui/MenuSurface';
 import type { GroupSwitches } from './useGroupSwitches';
 
 /** A row pinned above the groups, like the Tick in Timers. */
@@ -45,12 +53,30 @@ export interface PinnedEntry {
   anchor: string;
 }
 
+/** Picking several rows, for a list whose kind can change many at
+ *  once. listPick.ts holds the rules. */
+export interface ListPicking {
+  /** Picking is on: each row wears its checkbox and a click checks it. */
+  on: boolean;
+  checked: ReadonlySet<string>;
+  /** Check or clear a row, or check the run to it. */
+  row: (uid: string, how: 'toggle' | 'range') => void;
+  /** Check or clear every row of a group, from its heading. */
+  group: (uids: readonly string[], check: boolean) => void;
+  /** Check every row you can see. */
+  all: () => void;
+  start: () => void;
+  end: () => void;
+}
+
 interface RowProps {
   uid: string;
   name: string;
   meta: string | undefined;
   enabled: boolean;
   selected: boolean;
+  /** The row's checkbox while picking is on, null while it is off. */
+  checked: boolean | null;
   tabbable: boolean;
   placeholder: string;
   monoName: boolean;
@@ -66,7 +92,8 @@ interface RowProps {
   /** The id of the save bar's error line while it names this row, so a
    *  reader hears what to fix. Undefined for a row it does not name. */
   errorId: string | undefined;
-  onSelect: (uid: string) => void;
+  onActivate: (uid: string, e?: MouseEvent<HTMLButtonElement>) => void;
+  onMenu: ((uid: string, e: MouseEvent<HTMLButtonElement>) => void) | undefined;
   onFocus: () => void;
 }
 
@@ -79,6 +106,7 @@ const ListRow = memo(function ListRow({
   meta,
   enabled,
   selected,
+  checked,
   tabbable,
   placeholder,
   monoName,
@@ -88,7 +116,8 @@ const ListRow = memo(function ListRow({
   edited,
   warnNote,
   errorId,
-  onSelect,
+  onActivate,
+  onMenu,
   onFocus,
 }: RowProps) {
   const warn = warnNote !== undefined;
@@ -100,15 +129,24 @@ const ListRow = memo(function ListRow({
       <button
         type="button"
         className={cx('st-auto-row', warn && 'is-warn', errorId && 'is-error')}
-        aria-current={selected ? 'true' : undefined}
+        // While picking, a row is a toggle that says whether it is
+        // checked. Otherwise the open row is the current one.
+        aria-current={checked === null && selected ? 'true' : undefined}
+        aria-pressed={checked ?? undefined}
         aria-describedby={describedBy}
         tabIndex={tabbable ? 0 : -1}
         data-uid={uid}
         data-st-anchor={anchor}
         data-st-flash={anchor ? '' : undefined}
-        onClick={() => onSelect(uid)}
+        onClick={(e) => onActivate(uid, e)}
+        onContextMenu={onMenu && ((e) => onMenu(uid, e))}
         onFocus={onFocus}
       >
+        {checked !== null && (
+          <span className={cx('st-auto-check', checked && 'is-checked')} aria-hidden="true">
+            {checked && <CheckIcon size={12} />}
+          </span>
+        )}
         <span
           className={cx(
             'st-auto-row-name',
@@ -180,6 +218,17 @@ export interface ItemListProps {
   /** The on and off switch after each group heading. Null or left out
    *  for lists whose groups have none. */
   groupSwitches?: GroupSwitches | null | undefined;
+  /** Picking several rows. Null or left out for a list that cannot. */
+  picking?: ListPicking | null | undefined;
+  /** Open a row's menu, from a right click, the menu key or Shift F10. */
+  onRowMenu?: ((uid: string, at: MenuPlacement) => void) | undefined;
+  /** Open a group heading's menu, from a right click, the button that
+   *  shows on the heading, the menu key or Shift F10. */
+  onHeadingMenu?: ((group: string, at: MenuPlacement) => void) | undefined;
+  /** The group whose heading shows a name field in its place. */
+  renaming?: { group: string; field: ReactNode } | null | undefined;
+  /** A note under one group's heading, like the one a rename leaves. */
+  headingNote?: { group: string; note: ReactNode } | null | undefined;
 }
 
 /** A heading you moved to, and the selection it was made under. */
@@ -196,7 +245,13 @@ interface HeadingCursor {
  *  takes Tab, the selected row unless you moved to a heading. A group
  *  heading can carry the switch that turns its whole group on and off.
  *  Tab reaches it from its heading while that heading holds the stop,
- *  so the list still takes one Tab from outside. */
+ *  so the list still takes one Tab from outside.
+ *
+ *  A list that can pick several rows has Select beside the filter. A
+ *  Cmd or Ctrl click, or a Shift click or Shift arrow, picks too. While
+ *  picking, each row and group heading wears a checkbox, a click or
+ *  Space checks a row, the arrows only move, and Cmd or Ctrl A checks
+ *  every row you can see. */
 export function ItemList({
   noun,
   filterLabel,
@@ -219,16 +274,51 @@ export function ItemList({
   folded,
   onFold,
   groupSwitches,
+  picking,
+  onRowMenu,
+  onHeadingMenu,
+  renaming,
+  headingNote,
 }: ItemListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const baseId = useId();
   const [cursor, setCursor] = useState<HeadingCursor | null>(null);
   const stops: ListStop[] = listStops(sections, folded);
-  if (pinned) stops.unshift({ kind: 'row', uid: pinned.uid });
+  // While picking, the arrows pass over the pinned row, which never
+  // picks, so they never stop picking on their way.
+  if (pinned && !picking?.on) stops.unshift({ kind: 'row', uid: pinned.uid });
   const heading = cursor !== null && cursor.selected === selected ? cursor.id : null;
   const tabId = tabStopId(stops, sections, folded, selected, heading);
   const placeholder = `Untitled ${noun.one}`;
   const onRowFocus = useCallback(() => setCursor(null), []);
+  const mac = isMacPlatform();
+  const pinnedUid = pinned?.uid ?? null;
+
+  // A click picks while picking is on, or with Cmd or Ctrl, or Shift.
+  // The pinned row never picks, so a click on it opens it alone.
+  const onActivate = useCallback(
+    (uid: string, e?: MouseEvent<HTMLButtonElement>) => {
+      if (!picking || uid === pinnedUid) {
+        onSelect(uid);
+        return;
+      }
+      const mod = e !== undefined && (mac ? e.metaKey : e.ctrlKey);
+      if (e?.shiftKey) picking.row(uid, 'range');
+      else if (mod || picking.on) picking.row(uid, 'toggle');
+      else onSelect(uid);
+    },
+    [picking, pinnedUid, mac, onSelect],
+  );
+  const onMenu = useMemo(
+    () =>
+      onRowMenu &&
+      ((uid: string, e: MouseEvent<HTMLButtonElement>) => {
+        if (uid === pinnedUid) return;
+        e.preventDefault();
+        onRowMenu(uid, { x: e.clientX, y: e.clientY });
+      }),
+    [onRowMenu, pinnedUid],
+  );
 
   useEffect(() => {
     if (revealSeq === 0 || selected === null) return;
@@ -254,6 +344,32 @@ export function ItemList({
     // sits on Edit all as JSON… under the list.
     // A group switch moves as its heading does.
     const { uid, fold, groupSwitch } = (e.target as HTMLElement).dataset ?? {};
+    const menuKey = e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10');
+    // On a heading they open the group's menu under it.
+    const headingGroup = fold !== undefined ? groupOfSectionKey(fold) : null;
+    if (onHeadingMenu && headingGroup !== null && menuKey) {
+      e.preventDefault();
+      const r = (e.target as HTMLElement).getBoundingClientRect();
+      onHeadingMenu(headingGroup, { x: r.left + 16, y: r.bottom });
+      return;
+    }
+    // The menu key and Shift F10 open a row's menu under the row.
+    if (
+      onRowMenu &&
+      uid !== undefined &&
+      uid !== pinnedUid &&
+      (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))
+    ) {
+      e.preventDefault();
+      const r = (e.target as HTMLElement).getBoundingClientRect();
+      onRowMenu(uid, { x: r.left + 16, y: r.bottom });
+      return;
+    }
+    if (picking && (mac ? e.metaKey : e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      picking.all();
+      return;
+    }
     const at =
       uid !== undefined
         ? stopId({ kind: 'row', uid })
@@ -271,7 +387,11 @@ export function ItemList({
       return;
     }
     const stop = action.to;
-    if (stop.kind === 'row') onSelect(stop.uid);
+    if (stop.kind === 'row') {
+      onSelect(stop.uid);
+      // Shift with an arrow checks the run from where you started.
+      if (picking && e.shiftKey && stop.uid !== pinnedUid) picking.row(stop.uid, 'range');
+    }
     const el = stopElement(stop);
     // Focus would scroll the stop into view on its own, centered when it
     // was hidden and in every box above it. Keep that off so the list
@@ -292,17 +412,28 @@ export function ItemList({
   else if (hasItems && sections.length === 0 && filter.trim()) empty = `No ${noun.many} match.`;
 
   return (
-    <div className="st-auto-list">
-      <Field
-        icon={<SearchIcon />}
-        type="search"
-        width={240}
-        className="st-auto-filter"
-        value={filter}
-        onChange={onFilter}
-        placeholder={filterLabel}
-        aria-label={filterLabel}
-      />
+    <div className={cx('st-auto-list', picking?.on && 'is-picking')}>
+      <div className="st-auto-tools">
+        <Field
+          icon={<SearchIcon />}
+          type="search"
+          width="auto"
+          className="st-auto-filter"
+          value={filter}
+          onChange={onFilter}
+          placeholder={filterLabel}
+          aria-label={filterLabel}
+        />
+        {picking && (
+          <IconButton
+            className="st-auto-select"
+            label={`Select several ${noun.many}`}
+            aria-pressed={picking.on}
+            icon={<CheckboxIcon />}
+            onClick={() => (picking.on ? picking.end() : picking.start())}
+          />
+        )}
+      </div>
       <div ref={scrollRef} className="st-auto-scroll" onKeyDown={onKeyDown}>
         <div className="st-auto-sections">
           {pinned && (
@@ -312,6 +443,7 @@ export function ItemList({
               meta={undefined}
               enabled={pinned.enabled}
               selected={selected === pinned.uid}
+              checked={null}
               tabbable={tabId === stopId({ kind: 'row', uid: pinned.uid })}
               placeholder={placeholder}
               monoName={false}
@@ -321,7 +453,8 @@ export function ItemList({
               edited={false}
               warnNote={undefined}
               errorId={undefined}
-              onSelect={onSelect}
+              onActivate={onActivate}
+              onMenu={undefined}
               onFocus={onRowFocus}
             />
           )}
@@ -337,6 +470,7 @@ export function ItemList({
                     meta={entry.meta}
                     enabled={entry.enabled}
                     selected={selected === entry.uid}
+                    checked={picking?.on ? picking.checked.has(entry.uid) : null}
                     tabbable={tabId === stopId({ kind: 'row', uid: entry.uid })}
                     placeholder={placeholder}
                     monoName={monoName}
@@ -350,7 +484,8 @@ export function ItemList({
                       (entry.enabled ? warnNotes?.get(entry.name) : undefined)
                     }
                     errorId={errorUids?.has(entry.uid) ? errorId : undefined}
-                    onSelect={onSelect}
+                    onActivate={onActivate}
+                    onMenu={onMenu}
                     onFocus={onRowFocus}
                   />
                 ))
@@ -380,32 +515,80 @@ export function ItemList({
                 ? groupSwitches.newHold
                 : null;
             const noteId = hold || newHold ? `${groupId}-note` : undefined;
+            const uids = section.entries.map((e) => e.uid);
+            const state = picking?.on ? pickState(picking.checked, uids) : null;
             return (
               <Fragment key={section.key}>
                 {divider}
-                <div className={cx('st-auto-headrow', index === 0 && !pinned && 'is-first')}>
-                  <h2 className="st-auto-heading">
+                <div
+                  className={cx('st-auto-headrow', index === 0 && !pinned && 'is-first')}
+                  onContextMenu={
+                    group !== null && onHeadingMenu && renaming?.group !== group
+                      ? (e) => {
+                          e.preventDefault();
+                          onHeadingMenu(group, { x: e.clientX, y: e.clientY });
+                        }
+                      : undefined
+                  }
+                >
+                  {/* While picking, a group's checkbox checks or clears its
+                      rows. It sits over the heading, since it cannot sit
+                      inside the fold button. The keys reach the same
+                      through Shift arrows and the row menu. */}
+                  {state && picking && renaming?.group !== group && (
                     <button
                       type="button"
-                      className="st-auto-fold"
-                      aria-expanded={open}
-                      aria-controls={open ? groupId : undefined}
-                      aria-describedby={noteId}
-                      tabIndex={tabId === id ? 0 : -1}
-                      data-fold={key}
-                      onClick={(e) => onHeadingClick(e, key, open)}
-                      onFocus={() => setCursor({ id, selected })}
-                    >
-                      <ChevronRightIcon size={12} className="st-auto-fold-chevron" />
-                      <span className="st-auto-fold-name">{section.heading}</span>
-                      {!open && (
-                        <span className="st-auto-fold-count">
-                          {count}
-                          <VisuallyHidden> {count === 1 ? noun.one : noun.many}</VisuallyHidden>
-                        </span>
+                      className={cx(
+                        'st-auto-check st-auto-headcheck',
+                        state === 'all' && 'is-checked',
+                        state === 'some' && 'is-some',
                       )}
+                      tabIndex={-1}
+                      aria-label={`Select every ${noun.one} in ${section.heading}`}
+                      aria-pressed={state === 'all' ? true : state === 'some' ? 'mixed' : false}
+                      onClick={() => picking.group(uids, state !== 'all')}
+                    >
+                      {state === 'all' && <CheckIcon size={12} />}
                     </button>
-                  </h2>
+                  )}
+                  {renaming && renaming.group === group ? (
+                    renaming.field
+                  ) : (
+                    <h2 className="st-auto-heading">
+                      <button
+                        type="button"
+                        className="st-auto-fold"
+                        aria-expanded={open}
+                        aria-controls={open ? groupId : undefined}
+                        aria-describedby={noteId}
+                        tabIndex={tabId === id ? 0 : -1}
+                        data-fold={key}
+                        onClick={(e) => onHeadingClick(e, key, open)}
+                        onFocus={() => setCursor({ id, selected })}
+                      >
+                        <ChevronRightIcon size={12} className="st-auto-fold-chevron" />
+                        <span className="st-auto-fold-name">{section.heading}</span>
+                        {!open && (
+                          <span className="st-auto-fold-count">
+                            {count}
+                            <VisuallyHidden> {count === 1 ? noun.one : noun.many}</VisuallyHidden>
+                          </span>
+                        )}
+                      </button>
+                    </h2>
+                  )}
+                  {group !== null && onHeadingMenu && renaming?.group !== group && (
+                    <IconButton
+                      className="st-auto-headmore"
+                      label={`${group} group options`}
+                      icon={<MoreIcon />}
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        onHeadingMenu(group, { x: r.left, y: r.bottom + 4 });
+                      }}
+                    />
+                  )}
                   {/* The group's on and off switch sits after the heading,
                       since a switch cannot sit inside a button. */}
                   {group !== null && groupSwitch && groupSwitches && (
@@ -430,6 +613,9 @@ export function ItemList({
                   <p id={noteId} className="st-auto-groupnote">
                     {newGroupNote(newHold)}
                   </p>
+                )}
+                {headingNote && headingNote.group === group && (
+                  <p className="st-auto-groupnote">{headingNote.note}</p>
                 )}
                 {open && (
                   <div id={groupId} className="st-auto-group">

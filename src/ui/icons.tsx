@@ -191,6 +191,16 @@ export function RingIcon(props: IconProps) {
 }
 
 /** Two sheets, the front one whole: copy. */
+/** A checked box, for Select over an Automation list. */
+export function CheckboxIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" {...scale(props.size)} />
+      <path d="M5.25 8.25l2 2 3.5-4.25" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
 export function CopyIcon(props: IconProps) {
   return (
     <Glyph {...props}>

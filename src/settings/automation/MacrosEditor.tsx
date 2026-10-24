@@ -27,6 +27,10 @@ import type { DetailProps, EditorProps, KindSpec } from './types';
 const MACROS_SPEC: KindSpec<MacroRecord> = {
   id: 'macros',
   groups: 'macros',
+  regroup: withGroup,
+  turn: (m, enabled) => ({ ...m, enabled }),
+  // A preset macro changes only its group, as on its card.
+  canTurn: (m) => !m.preset,
   noun: { one: 'macro', many: 'macros' },
   filterLabel: 'Filter macros',
   newLabel: 'New macro',
@@ -94,7 +98,7 @@ function keptKeyNotes(macros: readonly Macro[]): ReadonlyMap<string, string> {
   return notes;
 }
 
-function MacroDetail({ value: m, update, fresh, revealInList }: DetailProps<MacroRecord>) {
+function MacroDetail({ value: m, update, fresh, revealInList, groups }: DetailProps<MacroRecord>) {
   const keyRef = useRef<HTMLInputElement | null>(null);
   // A preset macro changes only its group here, as a preset trigger does.
   const locked = Boolean(m.preset);
@@ -142,6 +146,7 @@ function MacroDetail({ value: m, update, fresh, revealInList }: DetailProps<Macr
       </Row>
       <Row label="Group">
         <GroupField
+          groups={groups}
           width="100%"
           value={m.group ?? ''}
           onCommit={(group) => {

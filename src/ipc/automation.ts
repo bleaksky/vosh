@@ -411,6 +411,26 @@ export async function setGroupEnabled(
   return invoke('groups_set_enabled', { list, group, enabled, profile });
 }
 
+/** What a rename of a group did: the group has its new name and
+ *  `items` moved, or the new name is a group already, which Settings
+ *  asks about before it merges the two. */
+export type GroupRenamed = { outcome: 'renamed'; items: number } | { outcome: 'exists' };
+
+/** Rename the group `from` to `to` in Triggers, Aliases, Macros and
+ *  Timers at once. The group keeps its state in each list, unless `to`
+ *  is a group there already, which keeps its own. In loadout mode the
+ *  loadouts and every profile follow. A new name that is a group answers
+ *  `exists` unless `merge` is set. A name both groups hold refuses with
+ *  what to fix. */
+export async function renameGroup(
+  from: string,
+  to: string,
+  merge: boolean,
+  profile?: string | null,
+): Promise<GroupRenamed> {
+  return invoke('groups_rename', { from, to, merge, profile });
+}
+
 /** A group of any list turned on or off: #group, Lua, or a switch in
  *  Settings. */
 export async function subscribeGroupsChanged(cb: () => void): Promise<UnlistenFn> {
