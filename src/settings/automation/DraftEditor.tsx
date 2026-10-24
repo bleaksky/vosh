@@ -370,6 +370,7 @@ export function DraftEditor<T>({
   useEffect(() => {
     if (!pinnedSeq || pinnedUid === null || pinnedSeqDone.current === pinnedSeq) return;
     pinnedSeqDone.current = pinnedSeq;
+    setPick(NO_PICK);
     setSelected(pinnedUid);
   }, [pinnedSeq, pinnedUid]);
 
@@ -383,6 +384,7 @@ export function DraftEditor<T>({
     const item = draft.items.find((i) => linkKey(i.value) === selectKey.key);
     if (!item) return;
     setFilter('');
+    setPick(NO_PICK);
     setSelected(item.uid);
     reveal(item.uid);
     // reveal reads the draft through its ref.
@@ -456,30 +458,30 @@ export function DraftEditor<T>({
   // The rows you can check: the ones you can see, less the pinned block.
   const rowOrder = useMemo(() => order.filter((uid) => uid !== pinnedUid), [order, pinnedUid]);
   const checked = useMemo(() => new Set(pick.uids), [pick.uids]);
-  /** The row you were on, unless that is the pinned block. */
-  const leadRow = (): string | null =>
-    selectedRef.current !== pinnedUidRef.current ? selectedRef.current : null;
-  const picking = useMemo<ListPicking | null>(
-    () =>
-      canPick
-        ? {
-            on: pick.on,
-            checked,
-            row: (uid, how) => {
-              const lead = leadRow();
-              setPick((p) =>
-                how === 'range' ? rangePick(p, uid, rowOrder, lead) : togglePick(p, uid, lead),
-              );
-              setSelected(uid);
-            },
-            group: (uids, check) => setPick((p) => groupPick(p, uids, check)),
-            all: () => setPick(allPick(rowOrder)),
-            start: () => setPick(startPick(leadRow())),
-            end: () => setPick(NO_PICK),
-          }
-        : null,
-    [canPick, pick.on, checked, rowOrder],
-  );
+  const picking = useMemo<ListPicking | null>(() => {
+    if (!canPick) return null;
+    /** The row you were on, while you can see it. A row the filter or
+     *  a folded group hides never joins what you pick unseen. */
+    const leadRow = (): string | null =>
+      selectedRef.current !== null && rowOrder.includes(selectedRef.current)
+        ? selectedRef.current
+        : null;
+    return {
+      on: pick.on,
+      checked,
+      row: (uid, how) => {
+        const lead = leadRow();
+        setPick((p) =>
+          how === 'range' ? rangePick(p, uid, rowOrder, lead) : togglePick(p, uid, lead),
+        );
+        setSelected(uid);
+      },
+      group: (uids, check) => setPick((p) => groupPick(p, uids, check)),
+      all: () => setPick(allPick(rowOrder)),
+      start: () => setPick(startPick(leadRow())),
+      end: () => setPick(NO_PICK),
+    };
+  }, [canPick, pick.on, checked, rowOrder]);
 
   // The Group field of the card, once New group… asks for it.
   useEffect(() => {
@@ -524,6 +526,8 @@ export function DraftEditor<T>({
     const uid = nextDraftUid();
     setDraft(addDraftItem(d, spec.blank(), uid));
     setFilter('');
+    // The new item's card shows in place of the card for picked rows.
+    setPick(NO_PICK);
     setSelected(uid);
     setFresh(uid);
     reveal(uid);
@@ -589,7 +593,9 @@ export function DraftEditor<T>({
     if (!regroup || uids.length === 0) return;
     updateEach(uids, (v) => regroup(v, group));
     const lead = selectedRef.current;
-    reveal(lead !== null && uids.includes(lead) ? lead : uids[0]);
+    const shown = lead !== null && uids.includes(lead) ? lead : uids[0];
+    setSelected(shown);
+    reveal(shown);
   };
 
   const turnItems = (uids: readonly string[], on: boolean) => {
@@ -597,8 +603,13 @@ export function DraftEditor<T>({
     if (turn) updateEach(uids, (v) => turn(v, on), spec.canTurn);
   };
 
-  // Each copy lands right below its original, and the copies are what
-  // you have picked after, or the one copy opens.
+  /** Whether `uids` are the rows you checked, as from the card or a
+   *  checked row's menu, and not one row outside them. */
+  const arePicked = (uids: readonly string[]) => pick.on && uids.every((uid) => checked.has(uid));
+
+  // Each copy lands right below its original. Copies of the rows you
+  // checked are what you have checked after, and the copy of one row
+  // opens, leaving your checks as they were while you pick.
   const duplicateItems = (uids: readonly string[]) => {
     const d = draftRef.current;
     if (!d || !spec.duplicate) return;
@@ -618,13 +629,15 @@ export function DraftEditor<T>({
     if (copies.length === 0) return;
     setDraft(next);
     setFilter('');
-    if (pick.on) setPick({ on: true, uids: copies, anchor: copies[0] });
-    else setFresh(copies[0]);
+    if (arePicked(uids)) setPick({ on: true, uids: copies, anchor: copies[0] });
+    else if (!pick.on) setFresh(copies[0]);
     setSelected(copies[0]);
     reveal(copies[0]);
   };
 
-  // Delete stops picking, and the row after the last one deleted opens.
+  // Deleting the rows you checked stops picking, and the row after the
+  // last one deleted opens. Deleting one row outside them keeps your
+  // checks.
   const deleteItems = (uids: readonly string[]) => {
     const d = draftRef.current;
     if (!d) return;
@@ -646,7 +659,7 @@ export function DraftEditor<T>({
     const next = after ?? before ?? pinned?.uid ?? null;
     let draftAfter = d;
     for (const uid of gone) draftAfter = removeDraftItem(draftAfter, uid);
-    setPick(NO_PICK);
+    if (arePicked(uids)) setPick(NO_PICK);
     setSelected(next);
     setDraft(draftAfter);
     afterDeleteRef.current = next;
@@ -848,6 +861,7 @@ export function DraftEditor<T>({
         turnable={f.turnable}
         turnableOn={f.turnableOn}
         deletable={f.deletable}
+        hidden={uids.filter((uid) => !rowOrder.includes(uid)).length}
         shared={f.shared}
         groups={groups}
         clashNote={clashNoteFor(uids)}
@@ -984,8 +998,12 @@ export function DraftEditor<T>({
         picking={pick.on}
         onMove={(group) => moveItems(uids, group)}
         onNewGroup={() => {
-          if (uids.length > 1) setPick((p) => (p.on ? p : startPick(open.uid)));
-          else setSelected(open.uid);
+          // The checked rows type their group on the card for them. One
+          // row types it on its own card, so picking stops for it.
+          if (!arePicked(uids)) {
+            setPick(NO_PICK);
+            setSelected(open.uid);
+          }
           setGroupFocusSeq((n) => n + 1);
         }}
         onTurn={(on) => turnItems(uids, on)}

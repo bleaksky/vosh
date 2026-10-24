@@ -175,6 +175,19 @@ async function mount() {
     /** Type into the field the label names, without leaving it. */
     fill: (label: string) => (text: string) =>
       act(async () => on(labelled(label)).onChange({ target: { value: text } })),
+    /** The notes on the card that are not warnings. */
+    notes: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-card-note').map(
+        (el) => el.textContent,
+      ),
+    /** Type into the filter over the list. */
+    filter: (text: string) =>
+      act(async () => {
+        const el = findAll(container, (n) => n.getAttribute('aria-label') === 'Filter aliases')[0];
+        if (!el) throw new Error('no filter');
+        on(el).onChange({ target: { value: text } });
+        await settle();
+      }),
     /** How many the card for the picked rows says, or null. */
     title: () =>
       findAll(container, (el) => hasClass(el, 'st-auto-batch-title'))[0]?.textContent ?? null,
@@ -311,5 +324,44 @@ describe('picking several aliases', () => {
     await page.click('Delete 2 aliases');
     expect(page.title()).toBeNull();
     expect(page.rows()).toEqual(['/heal', 'Tolliver/res*']);
+  });
+
+  it('opens the new alias, not the card for picked rows, on New alias', async () => {
+    const page = await mount();
+    await page.pick('Tolliver', 'ds');
+    await page.pick('Tolliver', 'res', { ctrlKey: true });
+    await page.click('New alias');
+    expect(page.title()).toBeNull();
+  });
+
+  it('leaves out the open row while the filter hides it', async () => {
+    const page = await mount();
+    await page.pick('', 'heal');
+    await page.filter('ds');
+    await page.pick('Maren', 'ds', { ctrlKey: true });
+    expect(page.title()).toBe('1 alias selected');
+  });
+
+  it('says how many picked rows the filter hides', async () => {
+    const page = await mount();
+    await page.pick('', 'heal');
+    await page.pick('Tolliver', 'res', { ctrlKey: true });
+    await page.filter('heal');
+    expect(page.notes()).toEqual(['The filter or a folded group hides 1 of them.']);
+  });
+
+  it('moves rows from different groups out of their groups', async () => {
+    const page = await mount();
+    await page.pick('Tolliver', 'res');
+    await page.pick('', 'heal', { ctrlKey: true });
+    await page.fill('Group')('');
+    await page.click('Move to no group');
+    await page.click('Save');
+    expect(storedAliases().map((a) => `${a.group ?? ''}/${a.name}`)).toEqual([
+      'Tolliver/ds',
+      '/res',
+      'Maren/ds',
+      '/heal',
+    ]);
   });
 });

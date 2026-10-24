@@ -15,6 +15,8 @@ export interface BatchCardProps {
   turnableOn: number;
   /** How many of them you can delete. */
   deletable: number;
+  /** How many of them the filter or a folded group hides. */
+  hidden: number;
   /** The group every checked item shares, blank for none, or null when
    *  they differ. */
   shared: string | null;
@@ -41,6 +43,7 @@ export function BatchCard({
   turnable,
   turnableOn,
   deletable,
+  hidden,
   shared,
   groups,
   clashNote,
@@ -80,7 +83,9 @@ export function BatchCard({
   }
 
   const target = group.trim();
-  const canMove = target !== (shared ?? '') && !(shared === null && target === '');
+  // Rows in several groups can move anywhere, and an empty field moves
+  // rows out of their groups.
+  const canMove = shared === null || target !== shared;
   const note = canMove ? clashNote(target) : null;
   const move = () => {
     if (canMove) onMove(target);
@@ -94,6 +99,13 @@ export function BatchCard({
       {head}
       <Card className="st-auto-card">
         {note && <CardNote tone="warn">{note}</CardNote>}
+        {hidden > 0 && (
+          <CardNote>
+            {hidden === count
+              ? `The filter or a folded group hides ${count === 1 ? 'it' : 'all of them'}.`
+              : `The filter or a folded group hides ${hidden} of them.`}
+          </CardNote>
+        )}
         <Row label="Group">
           <span className="st-auto-batch-move">
             <ComboField
@@ -106,7 +118,11 @@ export function BatchCard({
               onChange={setGroup}
               onPick={(picked) => {
                 setGroup(picked);
-                if (picked !== (shared ?? '')) onMove(picked);
+                // A move Save would refuse waits in the field, under its
+                // note, for Move.
+                if ((shared === null || picked !== shared) && clashNote(picked) === null) {
+                  onMove(picked);
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -116,7 +132,7 @@ export function BatchCard({
               }}
             />
             <Button disabled={!canMove} onClick={move}>
-              Move
+              {target === '' && canMove ? 'Move to no group' : 'Move'}
             </Button>
           </span>
         </Row>

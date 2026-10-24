@@ -273,7 +273,9 @@ export function ItemList({
   const baseId = useId();
   const [cursor, setCursor] = useState<HeadingCursor | null>(null);
   const stops: ListStop[] = listStops(sections, folded);
-  if (pinned) stops.unshift({ kind: 'row', uid: pinned.uid });
+  // While picking, the arrows pass over the pinned row, which never
+  // picks, so they never stop picking on their way.
+  if (pinned && !picking?.on) stops.unshift({ kind: 'row', uid: pinned.uid });
   const heading = cursor !== null && cursor.selected === selected ? cursor.id : null;
   const tabId = tabStopId(stops, sections, folded, selected, heading);
   const placeholder = `Untitled ${noun.one}`;

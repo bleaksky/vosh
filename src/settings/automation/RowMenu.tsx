@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { countPhrase, type KindNoun } from '../../automation/automationDraft';
 import { CheckIcon, ChevronRightIcon } from '../../ui';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
@@ -46,6 +46,17 @@ export function RowMenu(props: RowMenuProps) {
   const subId = useId();
   const moveRef = useRef<HTMLButtonElement | null>(null);
   const [sub, setSub] = useState<{ focus: boolean } | null>(null);
+
+  // Hand focus back to where it was, as the row after Shift F10, when
+  // the menu closes without moving it somewhere else, as New group…
+  // and Delete do.
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      const current = document.activeElement;
+      if (!current || current === document.body) previous?.focus({ preventScroll: true });
+    };
+  }, []);
   const pick = (run: () => void) => () => {
     onClose();
     run();
