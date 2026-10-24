@@ -861,14 +861,14 @@ In Triggers, Aliases, Macros, and Timers, you can select many items and change t
 
 Click an item to select it or to clear it. Hold `Shift` and click to select all the items from the last one you clicked to this one. `Cmd+A` selects all the items that show. The checkbox on a group heading selects all the items in that group, or clears them.
 
-The card on the right tells how many items you selected. It changes all of them together.
+The card on the right tells how many items you selected. It changes all of them together. When the filter or a folded group hides some of them, the card tells you how many. The changes apply to those items too.
 
-- `Group` and `Move` put the items in a group. Choose a group from the list, or type a new name.
+- `Group` and `Move` put the items in a group. Choose a group from the list, or type a new name. To take the items out of their groups, clear the field and click `Move to no group`.
 - `Turn on` and `Turn off` set `Enabled` for each item. A macro from a preset keeps its state.
 - `Duplicate` puts a copy of each item below it. Then the copies are selected.
 - `Delete` deletes the items. Items from a preset stay. To remove them, turn their preset off under Presets.
 
-These changes are edits, as on the card of one item. `Save` keeps them, and `Discard` undoes them. One group can have only one alias or trigger with a given name. If a move puts two items with the same name in one group, the card tells you before you move. Then rename one before you save.
+These changes are edits, as on the card of one item. `Save` keeps them, and `Discard` undoes them. One group can have only one alias or trigger with a given name. If a move puts two items with the same name in one group, the card tells you before you move. A group that you choose from the list then waits in the field until you click `Move`. Rename one of the items before you save.
 
 To stop, click `Done`, click the select button again, or press `Escape`.
 
