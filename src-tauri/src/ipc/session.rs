@@ -97,7 +97,7 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
     }
     if let Some(app_data) = state.app_data.get() {
         let _ = std::fs::remove_file(crate::disk::paths::scrollback_path(app_data, closed.id));
-        let _ = std::fs::remove_file(crate::disk::paths::history_path(app_data, closed.id));
+        crate::input::history::remove(&crate::disk::paths::history_path(app_data, closed.id));
     }
     let persist_guard = PERSIST_LOCK.lock().await;
     let open = closed.profile();

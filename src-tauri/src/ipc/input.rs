@@ -54,24 +54,41 @@ pub(crate) async fn history_get(
     let Some(app_data) = state.app_data.get() else {
         return Ok(Vec::new());
     };
-    history::load(&history_path(app_data, id)).map_err(|e| e.to_string())
+    Ok(history::load(&history_path(app_data, id)))
 }
 
 /// Keep `line`, a command `session` sent, for the next run. Answers false
-/// for a line that gives the game a password, which history never keeps.
+/// for a line history never keeps, one that gives the game a password or
+/// one you sent while logging in, see [`history::keeps`].
 #[tauri::command]
 pub(crate) async fn history_push(
     state: State<'_, SharedState>,
     line: String,
     session: Option<SessionId>,
 ) -> Result<bool, String> {
-    if !history::keeps(&line) {
+    push(&state, &line, session).await
+}
+
+async fn push(state: &AppState, line: &str, session: Option<SessionId>) -> Result<bool, String> {
+    let session = state.session(session)?;
+    let connected = session.live_address().is_some();
+    let kept = {
+        let p = session.lock_profile().await;
+        let c = session.connection.lock();
+        history::keeps(&p, &c, line, connected)
+    };
+    if !kept {
         return Ok(false);
     }
-    let id = state.session(session)?.id;
-    if let Some(app_data) = state.app_data.get() {
-        history::append(&history_path(app_data, id), &line).map_err(|e| e.to_string())?;
-    }
+    let Some(app_data) = state.app_data.get() else {
+        return Ok(true);
+    };
+    let id = session.id;
+    // A session that closed while the line was on its way leaves no file.
+    history::append(&history_path(app_data, id), line, || {
+        state.session(Some(id)).is_ok()
+    })
+    .map_err(|e| e.to_string())?;
     Ok(true)
 }
 
@@ -79,7 +96,7 @@ pub(crate) async fn history_push(
 mod tests {
     use vosh_automation::alias::Alias;
 
-    use super::{known_words, KnownWords};
+    use super::{known_words, push, KnownWords};
     use crate::app::state::AppState;
     use crate::input::slash::SLASH_COMMANDS;
     use crate::profile::live::Profile;
@@ -117,5 +134,32 @@ mod tests {
         let sent = serde_json::to_value(known_words(&state, None).await.unwrap()).unwrap();
         assert_eq!(sent["aliases"], serde_json::json!(["kk"]));
         assert_eq!(sent["commands"][0], "alias");
+    }
+
+    #[tokio::test]
+    async fn a_pushed_command_lands_in_its_session_file_until_the_session_closes() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::default();
+        state.app_data.set(dir.path().to_path_buf()).unwrap();
+        let first = state.selected_session().id;
+        let tolliver = state.open_session(state.add_open_profile("Tolliver", Profile::default()));
+        let file = crate::disk::paths::history_path(dir.path(), tolliver.id);
+
+        assert_eq!(push(&state, "look", Some(tolliver.id)).await, Ok(true));
+        assert_eq!(
+            push(&state, "look;password old new", Some(tolliver.id)).await,
+            Ok(false)
+        );
+        assert_eq!(push(&state, "score", None).await, Ok(true));
+        assert_eq!(crate::input::history::load(&file), ["look"]);
+        assert_eq!(
+            crate::input::history::load(&crate::disk::paths::history_path(dir.path(), first)),
+            ["score"]
+        );
+
+        let id = tolliver.id;
+        state.close_session(id).unwrap();
+        assert!(push(&state, "where", Some(id)).await.is_err());
+        assert_eq!(crate::input::history::load(&file), ["look"]);
     }
 }
