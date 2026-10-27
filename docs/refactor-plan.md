@@ -2213,6 +2213,14 @@ The review found two faults and three risks, all fixed with tests.
 
 Help 2.1 tells the pace and the repeat stop.
 
+The review found two faults and smaller ones, fixed with tests.
+
+- Lines that waited in the pace drained into the game's editor while the writing card held the session's lines. The hold now takes the lines that wait, in order, and the pace waits while it holds.
+- The repeat stop counted apart from the game. Typing the same command started the count again where the game counts on, lines counted as they joined the queue rather than as they left, and a walk step of one letter counted where the game skips it, so a long walk lost its 40th step. The stop now counts each line as it leaves, what you type and walk steps included, by the game's rule in `read_from_buffer`, where a line of one character neither counts nor ends a run but sets the line to compare with, and `!` repeats the last.
+- A `#walk` step waited behind automation and could run out its time. Walk steps go through `Stream::write_step`, past the pace and held only by the writing card.
+- The chip lay over the end of a long command. The field leaves room for it now, and it reads out as it changes.
+- Two things stay as they are. A line you type goes ahead of lines that wait, so `note write` typed while automation lines wait lets them land in the editor, and plugin sends made outside the session loop, at load or from the Console, go past the pace as before.
+
 #### October 27. Item 6, `#list`
 
 - The store. `VariableStore` in `crates/automation/src/vars.rs` keeps lists beside variables, and a name is one or the other, so setting either takes away the other of its name. `VarView::list` reads the session's list over the profile's, as variables read. `interpolate` reads `$name[1]`, `$name[-1]` and `$name[#]` from a list, a place past the end as empty. A name that is no list, or an index that is no number, passes through as typed, as an unknown variable does. `split_items` reads the items of a command, a run in braces as one.
