@@ -111,6 +111,17 @@ pub(super) struct Conn<R: tauri::Runtime> {
 }
 
 impl<R: tauri::Runtime> Conn<R> {
+    /// Read and write by the charset of the profile the session plays
+    /// now, which a switch at login or a pick in Settings changes. The
+    /// CHARSET and MTTS answers keep what the connect said.
+    pub(super) fn follow_charset(&mut self) {
+        let charset = self.session.connection.lock().charset;
+        if charset != self.stream.charset() {
+            self.stream.set_charset(charset);
+            self.decoder.set_charset(charset);
+        }
+    }
+
     /// Output from elsewhere in the session, such as a slash command's
     /// echo, landed since this loop last wrote, which closes the open row.
     pub(super) fn others_wrote(&self) -> bool {
@@ -188,6 +199,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         c.log_kinds = super::log_kinds::LogKinds::default();
         c.round_trip.connect(chrono::Local::now().time());
         c.send_pace = super::pace::pace_of(&p.ui);
+        c.charset = p.charset;
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
         c.prompt.set_cols(usize::from(negotiator.window_size.0));
@@ -519,9 +531,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 emit_prompt_state(&conn.app, &conn.session, state);
             }
             _ = poll.tick() => {
-                // A change to the pace in Settings reaches the loop here.
+                // A change to the pace or the charset reaches the loop here.
                 let pace = conn.session.connection.lock().send_pace;
                 conn.stream.set_pace(pace);
+                conn.follow_charset();
                 if let Err(e) = handle_tick(
                     &conn.app,
                     &mut conn.stream,

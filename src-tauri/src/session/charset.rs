@@ -18,11 +18,11 @@
 
 use std::borrow::Cow;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use vosh_protocol::telnet::{codes as telnet_codes, Event};
 
 /// How a profile reads the game's text.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Charset {
     /// UTF-8, with a byte that is not UTF-8 read as Windows Latin 1.
@@ -36,15 +36,48 @@ impl Charset {
     pub(crate) fn is_default(&self) -> bool {
         *self == Self::Utf8
     }
+
+    /// The charset `name` names, in any case and with or without its
+    /// dashes, so a hand edit such as `"UTF-8"` or `"ISO-8859-1"` reads.
+    /// A name Vosh does not know reads as UTF-8, so the profile still
+    /// loads.
+    fn named(name: &str) -> Self {
+        let plain: String = name
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .map(|c| c.to_ascii_lowercase())
+            .collect();
+        match plain.as_str() {
+            "latin1" | "l1" | "iso88591" | "cp819" | "windows1252" | "cp1252" => Self::Latin1,
+            _ => Self::Utf8,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Charset {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Name(String),
+            Other(serde::de::IgnoredAny),
+        }
+        Ok(match Raw::deserialize(deserializer)? {
+            Raw::Name(name) => Self::named(&name),
+            Raw::Other(_) => Self::Utf8,
+        })
+    }
 }
 
 /// The characters Windows Latin 1 puts at 0x80 to 0x9F, where ISO 8859-1
-/// has controls. The five it leaves open read as the controls.
+/// has controls. The five it leaves open read as U+FFFD, since as the C1
+/// controls xterm.js would take 0x90 and 0x9D as the start of a DCS or an
+/// OSC and hide the text after them.
 const WINDOWS_80_9F: [char; 32] = [
-    '\u{20AC}', '\u{0081}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
-    '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{008D}', '\u{017D}', '\u{008F}',
-    '\u{0090}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
-    '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}', '\u{0153}', '\u{009D}', '\u{017E}', '\u{0178}',
+    '\u{20AC}', '\u{FFFD}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
+    '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{FFFD}', '\u{017D}', '\u{FFFD}',
+    '\u{FFFD}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
+    '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}', '\u{0153}', '\u{FFFD}', '\u{017E}', '\u{0178}',
 ];
 
 /// The character Windows Latin 1 gives `byte`.
@@ -60,6 +93,9 @@ fn latin1_byte(c: char) -> Option<u8> {
     let code = u32::from(c);
     if code < 0x80 || (0xA0..=0xFF).contains(&code) {
         return u8::try_from(code).ok();
+    }
+    if c == char::REPLACEMENT_CHARACTER {
+        return None;
     }
     WINDOWS_80_9F
         .iter()
@@ -95,6 +131,12 @@ impl Decoder {
         }
     }
 
+    /// Read by `charset` from here. The start of a character that waits
+    /// stays, and the next read takes it by the new charset.
+    pub(crate) fn set_charset(&mut self, charset: Charset) {
+        self.charset = charset;
+    }
+
     /// `bytes` as valid UTF-8, borrowed when they are already.
     pub(crate) fn decode<'a>(&mut self, bytes: &'a [u8]) -> Cow<'a, [u8]> {
         if self.charset == Charset::Utf8
@@ -105,6 +147,7 @@ impl Decoder {
         }
         let mut out = Vec::with_capacity(bytes.len() + bytes.len() / 2);
         if self.charset == Charset::Latin1 {
+            push_latin1(&mut out, &std::mem::take(&mut self.pending));
             push_latin1(&mut out, bytes);
             return Cow::Owned(out);
         }
@@ -190,6 +233,19 @@ impl Decoder {
     }
 }
 
+/// `bytes`, a whole piece of text such as a GMCP packet, as valid UTF-8,
+/// with a byte that is not UTF-8 read as Windows Latin 1. Borrowed when
+/// it is UTF-8 already.
+pub(crate) fn read_whole(bytes: &[u8]) -> Cow<'_, [u8]> {
+    if std::str::from_utf8(bytes).is_ok() {
+        return Cow::Borrowed(bytes);
+    }
+    let mut decoder = Decoder::new(Charset::Utf8);
+    let mut out = decoder.decode(bytes).into_owned();
+    out.extend(decoder.flush());
+    Cow::Owned(out)
+}
+
 /// `buf`, a line Vosh sends as UTF-8, as `charset` writes it. Latin 1
 /// writes each character as its byte, a `?` for one it lacks, and
 /// doubles a 0xFF, which telnet would read as IAC. Bytes that are not
@@ -217,7 +273,7 @@ pub(crate) fn encode(charset: Charset, buf: &[u8]) -> Cow<'_, [u8]> {
 mod tests {
     use vosh_protocol::telnet::{codes, Event};
 
-    use super::{encode, Charset, Decoder};
+    use super::{encode, read_whole, Charset, Decoder};
 
     fn read(decoder: &mut Decoder, bytes: &[u8]) -> String {
         String::from_utf8(decoder.decode(bytes).into_owned()).expect("valid UTF-8")
@@ -265,6 +321,50 @@ mod tests {
                 Event::Command(codes::GA),
             ]
         );
+    }
+
+    #[test]
+    fn the_five_open_places_read_as_the_replacement_character() {
+        let mut d = Decoder::new(Charset::Utf8);
+        assert_eq!(
+            read(&mut d, b"a\x81\x8d\x8f\x90\x9db"),
+            "a\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}b"
+        );
+        assert_eq!(
+            &*encode(Charset::Latin1, "\u{FFFD}\u{9D}".as_bytes()),
+            b"??"
+        );
+    }
+
+    #[test]
+    fn a_whole_packet_reads_its_latin1_bytes() {
+        assert_eq!(
+            &*read_whole(b"Comm.Channel {\"text\":\"caf\xe9\xc3\"}"),
+            "Comm.Channel {\"text\":\"café\u{C3}\"}".as_bytes()
+        );
+    }
+
+    #[test]
+    fn a_change_of_charset_takes_the_character_that_waits() {
+        let mut d = Decoder::new(Charset::Utf8);
+        assert_eq!(read(&mut d, b"Maren\xc3"), "Maren");
+        d.set_charset(Charset::Latin1);
+        assert_eq!(read(&mut d, b"\xa9"), "\u{C3}\u{A9}");
+    }
+
+    #[test]
+    fn a_hand_edited_name_still_reads() {
+        #[derive(serde::Deserialize)]
+        struct File {
+            charset: Charset,
+        }
+        let read = |text: &str| toml::from_str::<File>(text).map(|f| f.charset).ok();
+        assert_eq!(read("charset = \"latin1\""), Some(Charset::Latin1));
+        assert_eq!(read("charset = \"ISO-8859-1\""), Some(Charset::Latin1));
+        assert_eq!(read("charset = \"Latin-1\""), Some(Charset::Latin1));
+        assert_eq!(read("charset = \"UTF-8\""), Some(Charset::Utf8));
+        assert_eq!(read("charset = \"cp437\""), Some(Charset::Utf8));
+        assert_eq!(read("charset = 7"), Some(Charset::Utf8));
     }
 
     #[test]

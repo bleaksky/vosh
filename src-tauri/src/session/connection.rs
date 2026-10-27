@@ -149,6 +149,10 @@ pub(crate) struct Connection {
     /// pace, as the profile sets it. The session loop takes it as the
     /// link starts and on each poll after, see [`super::pace`].
     pub(crate) send_pace: Option<u32>,
+    /// How the profile reads the game's text and writes yours. The
+    /// session loop takes it at each read and each poll, so a switch to
+    /// a character's profile at login reads by that profile's charset.
+    pub(crate) charset: super::charset::Charset,
 }
 
 impl Connection {

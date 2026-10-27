@@ -282,6 +282,7 @@ pub(crate) fn hand_to_connection(p: &mut Profile, c: &mut Connection, tick_befor
     c.tick
         .adopt(&mut p.tick, tick_before, tokio::time::Instant::now());
     c.send_pace = crate::session::pace::pace_of(&p.ui);
+    c.charset = p.charset;
     let table = p.prompt.clone();
     crate::prompt::take_config(p, c, table);
 }

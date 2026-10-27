@@ -432,8 +432,8 @@ pub(crate) async fn charset_get(
 }
 
 /// Set how `profile`, or the profile the selected session plays when it
-/// names none, reads the game's text, and save. A connection takes it as
-/// it starts, so the next connect reads by it.
+/// names none, reads the game's text and writes yours, and save. Each
+/// session on the profile reads by it from its next read.
 #[tauri::command]
 pub(crate) async fn charset_set<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -441,9 +441,13 @@ pub(crate) async fn charset_set<R: tauri::Runtime>(
     charset: crate::session::charset::Charset,
     profile: Option<String>,
 ) -> Result<(), String> {
+    let sessions = state.all_sessions();
     let open = {
         let mut p = state.lock_named(profile).await?;
         p.charset = charset;
+        for session in p.players(&sessions) {
+            session.connection.lock().charset = charset;
+        }
         p.open().clone()
     };
     crate::disk::save::save_by(&app, &state, &open, crate::disk::save::SavePolicy::Now).await;
