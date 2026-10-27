@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -43,7 +44,7 @@ import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { getPasswordMode, subscribePasswordMode } from '../stores/session/inputModeStore';
-import { getSelected, useSelected } from '../stores/session/sessionsStore';
+import { getSelected, useSelected, useSessions } from '../stores/session/sessionsStore';
 import { getTargetState } from '../stores/session/targetStore';
 import { useWalk } from '../stores/session/walkStore';
 
@@ -150,8 +151,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // whether the server just took echo or just handed it back.
   const passwordModeRef = useRef(passwordMode);
   const maskedNow = () => isMasked(passwordMode, passwordModeRef.current);
+  const sessions = useSessions();
+  const openSessions = useMemo(() => sessions.map((s) => s.id), [sessions]);
   const { history, searchPrefix, remember, resetSearch, recallOlder, recallNewer } =
-    useCommandHistory(value, setValue, session);
+    useCommandHistory(value, setValue, session, openSessions);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   // Line-number gutter next to the multi-line prompt. Kept in its own
   // ref so the textarea's scroll position can be mirrored onto it once a
@@ -310,7 +313,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       echoMark: echoMarkRef.current,
       echoDim: echoDimRef.current,
     });
-    if (plan.remember) remember(line, to);
+    // A line for the game's editor is text for a note, not a command, so
+    // it stays out of history.
+    if (plan.remember && !editorRef.current) remember(line, to);
     // #nativesurface is handled here, not in the backend, because the
     // renderer flag lives in localStorage (terminalRenderer.ts reads it
     // at startup). It takes effect on macOS only, where `off` forces

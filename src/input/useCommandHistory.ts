@@ -1,11 +1,45 @@
 // The typed commands Up and Down recall into the command line, with the
 // prefix search over them, and the line you were composing, for each
-// session.
+// session. Rust keeps each session's commands in a file beside its
+// scrollback (src-tauri/src/input/history.rs), so a session shows what it
+// sent in earlier runs too.
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { historyGet, historyPush } from '../ipc/input';
 
 /** No history yet. */
 const NONE: readonly string[] = [];
+
+/** No session list yet. */
+const NONE_OPEN: readonly number[] = [];
+
+/** How many commands a session keeps, the newest. Rust cuts each file
+ *  to the same number, HISTORY_CAP in input/history.rs. */
+export const HISTORY_CAP = 1000;
+
+/** `lines` with `line` at the end, unless it repeats the newest one, and
+ *  no more than the cap. The same array when nothing changes. */
+export function withLine(lines: readonly string[], line: string): readonly string[] {
+  if (lines[lines.length - 1] === line) return lines;
+  const next = [...lines, line];
+  return next.length > HISTORY_CAP ? next.slice(next.length - HISTORY_CAP) : next;
+}
+
+/** What a session sent in earlier runs, then what it sent in this one,
+ *  with no command twice in a row and no more than the cap. A line can
+ *  reach both when it went out while the earlier ones still loaded. */
+export function joinHistory(earlier: readonly string[], now: readonly string[]): readonly string[] {
+  let joined: readonly string[] = NONE;
+  for (const line of [...earlier, ...now]) joined = withLine(joined, line);
+  return joined;
+}
+
+/** `lines` without the newest copy of `line`. The same array when it
+ *  holds none. */
+export function withoutNewest(lines: readonly string[], line: string): readonly string[] {
+  const at = lines.lastIndexOf(line);
+  return at < 0 ? lines : [...lines.slice(0, at), ...lines.slice(at + 1)];
+}
 
 /** The typed history of the command line, which holds `value`, and the
  *  prefix search over it, for the selected session `session`. Recalled
@@ -17,11 +51,14 @@ const NONE: readonly string[] = [];
  *  Each session keeps its own history and its own draft. As the
  *  selection moves, the line you were composing stays with the session
  *  you leave, and the command line takes the one the next session holds,
- *  before the page paints. */
+ *  before the page paints. A session reads what it sent in earlier runs
+ *  the first time it shows. `open` lists the sessions that are open, and
+ *  the history of one that closes goes with it, as its file does. */
 export function useCommandHistory(
   value: string,
   setValue: (next: string) => void,
   session: number,
+  open: readonly number[] = NONE_OPEN,
 ) {
   const [histories, setHistories] = useState<ReadonlyMap<number, readonly string[]>>(
     () => new Map(),
@@ -56,13 +93,67 @@ export function useCommandHistory(
     return matchingIndices(searchPrefix);
   };
 
-  /** Add a line submitted to `to`, unless it repeats its newest one. */
+  // The sessions whose earlier commands were asked for, and the newest
+  // line handed to Rust for each, so a repeat never lands in the file.
+  const loaded = useRef(new Set<number>());
+  const pushed = useRef(new Map<number, string>());
+
+  useEffect(() => {
+    if (loaded.current.has(session)) return;
+    loaded.current.add(session);
+    historyGet(session).then(
+      (earlier) => {
+        if (!Array.isArray(earlier) || earlier.length === 0) return;
+        if (!pushed.current.has(session)) pushed.current.set(session, earlier[earlier.length - 1]!);
+        setHistories((now) =>
+          new Map(now).set(session, joinHistory(earlier, now.get(session) ?? NONE)),
+        );
+      },
+      () => undefined,
+    );
+  }, [session]);
+
+  useEffect(() => {
+    if (open.length === 0) return;
+    const live = new Set(open);
+    for (const id of [...loaded.current]) {
+      if (!live.has(id)) {
+        loaded.current.delete(id);
+        pushed.current.delete(id);
+      }
+    }
+    setHistories((now) => {
+      const gone = [...now.keys()].filter((id) => !live.has(id));
+      if (gone.length === 0) return now;
+      const next = new Map(now);
+      for (const id of gone) next.delete(id);
+      return next;
+    });
+  }, [open]);
+
+  /** Add a line submitted to `to`, unless it repeats its newest one, and
+   *  hand it to Rust for the next run. A line Rust turns down, one that
+   *  gives the game a password, leaves the history again. */
   const remember = (line: string, to: number) => {
     setHistories((now) => {
       const lines = now.get(to) ?? NONE;
-      if (lines[lines.length - 1] === line) return now;
-      return new Map(now).set(to, [...lines, line]);
+      const next = withLine(lines, line);
+      return next === lines ? now : new Map(now).set(to, next);
     });
+    if (pushed.current.get(to) === line) return;
+    pushed.current.set(to, line);
+    historyPush(line, to).then(
+      (kept) => {
+        if (kept !== false) return;
+        pushed.current.delete(to);
+        setHistories((now) => {
+          const lines = now.get(to) ?? NONE;
+          const next = withoutNewest(lines, line);
+          return next === lines ? now : new Map(now).set(to, next);
+        });
+      },
+      () => undefined,
+    );
   };
 
   const resetSearch = () => {
