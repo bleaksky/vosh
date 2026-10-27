@@ -62,6 +62,8 @@ pub(crate) struct StateInner {
     /// Snapshot of session and profile variables, refreshed by the
     /// caller before each Lua entry. `mud.var(name)` reads from here.
     pub(crate) var_snapshot: HashMap<String, String>,
+    /// The same for lists, which `mud.list(name)` reads.
+    pub(crate) list_snapshot: HashMap<String, Vec<String>>,
     /// The call running now, while one runs.
     pub(crate) call: Option<CallInfo>,
 }

@@ -61,6 +61,12 @@ pub(crate) fn refresh_vars(profile: &Profile, c: &Connection) {
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
         .collect();
     c.script.set_var_snapshot(snapshot);
+    let lists: std::collections::HashMap<String, Vec<String>> = c
+        .var_view(profile)
+        .lists()
+        .map(|(k, items, _)| (k.to_string(), items.to_vec()))
+        .collect();
+    c.script.set_list_snapshot(lists);
 }
 
 /// Run the Lua body of a script alias with the words typed after its
@@ -320,6 +326,13 @@ pub(crate) fn apply_actions(
                 Scope::Session => c.vars.set(name, value),
                 Scope::Profile => {
                     profile.vars.set(name, value);
+                    result.durable_changed = true;
+                }
+            },
+            Action::SetList { scope, name, items } => match scope {
+                Scope::Session => c.vars.set_list(name, items),
+                Scope::Profile => {
+                    profile.vars.set_list(name, items);
                     result.durable_changed = true;
                 }
             },
