@@ -6,9 +6,11 @@
 //! `login_match.rs` which profile a login picks and `worlds.rs` the
 //! worlds Vosh knows. `open.rs` holds a profile the sessions play,
 //! `switch.rs` moves a session to another profile, `inactive.rs`
-//! reads and edits a profile that is not active, and `export.rs` holds
-//! the table an export adds after a profile's settings.
+//! reads and edits a profile that is not active, `export.rs` holds the
+//! table an export adds after a profile's settings, and `backups.rs`
+//! lists the backups of a profile file that a restore puts back.
 
+pub(crate) mod backups;
 pub(crate) mod export;
 pub(crate) mod file;
 pub(crate) mod group_rename;

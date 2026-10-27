@@ -10,8 +10,9 @@ use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
 use crate::app::state::SharedState;
-use crate::import::vosh::apply::{apply_import, AddAs, ImportResult};
+use crate::import::vosh::apply::{apply_import, restore_profile, AddAs, ImportResult};
 use crate::import::vosh::{preview, ImportPreview};
+use crate::profile::backups::{self, ProfileBackup};
 use crate::profile::inactive::{export_path, export_text, profile_detail, ProfileDetail};
 use crate::profile::login_match::LoginClaim;
 use crate::profile::set::{display_name, ProfileEntry};
@@ -151,6 +152,60 @@ pub(crate) async fn profile_import_apply<R: tauri::Runtime>(
         &logins,
     )
     .await
+}
+
+/// The backups Vosh kept of the profile `name`'s file, newest first, see
+/// [`backups::list`].
+#[tauri::command]
+pub(crate) async fn profile_backups(
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<Vec<ProfileBackup>, String> {
+    let path = profile_file(state.inner(), &name).await?;
+    Ok(backups::list(&path))
+}
+
+/// Put the profile `name` back as its backup `file` holds it, see
+/// [`restore_profile`].
+#[tauri::command]
+pub(crate) async fn profile_restore<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    name: String,
+    file: String,
+) -> Result<(), String> {
+    restore_profile(&app, state.inner(), &name, &file).await
+}
+
+/// Show the profile `name`'s file in the file manager, or the profiles
+/// folder when the profile never saved one.
+#[tauri::command]
+pub(crate) async fn profile_reveal(
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<(), String> {
+    let path = profile_file(state.inner(), &name).await?;
+    let shown = if path.is_file() {
+        crate::app::plugins::reveal::reveal_file(&path)
+    } else {
+        crate::app::plugins::reveal::reveal(path.parent().unwrap_or(&path))
+    };
+    shown.map_err(|e| {
+        warn!(profile = %name, error = %e, "could not open the file manager");
+        format!(
+            "Vosh could not show the file of the {} profile.",
+            display_name(&name)
+        )
+    })
+}
+
+/// Where the profile `name` keeps its file, once the set knows it.
+async fn profile_file(state: &SharedState, name: &str) -> Result<std::path::PathBuf, String> {
+    let set = state.loaded_profile_set().await?;
+    if set.get(name).is_none() {
+        return Err(crate::profile::set::ProfileSetError::NotFound(name.to_string()).to_string());
+    }
+    Ok(set.profile_path(name))
 }
 
 /// Who is logged in on the session: the connection, the character once

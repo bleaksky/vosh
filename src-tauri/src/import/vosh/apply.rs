@@ -142,6 +142,82 @@ pub(crate) async fn apply_import<R: tauri::Runtime>(
     Ok(result)
 }
 
+/// Why a restore waits for the relaunch that finishes a move to
+/// loadouts, as an import does.
+const RESTORE_MIGRATION_PENDING: &str =
+    "Quit Vosh and open it again to finish the move to loadouts, then restore the profile.";
+
+/// Put the profile `name` back as its backup `file` holds it, the way an
+/// import with Replace lays a file over it. The profile keeps its world,
+/// its characters and its plugins, and in loadout mode the catalog. What
+/// the file holds now becomes a backup first, since every save keeps
+/// one. A backup that does not read changes nothing.
+pub(crate) async fn restore_profile<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    name: &str,
+    file: &str,
+) -> Result<(), String> {
+    let after = {
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        if state.relaunch_pending.load(Ordering::Acquire) {
+            return Err(RESTORE_MIGRATION_PENDING.into());
+        }
+        let path = {
+            let set = state.loaded_profile_set().await?;
+            if set.get(name).is_none() {
+                return Err(
+                    crate::profile::set::ProfileSetError::NotFound(name.to_string()).to_string(),
+                );
+            }
+            set.profile_path(name)
+        };
+        let shown_name = crate::profile::set::display_name(name);
+        let backup = crate::profile::backups::backup_of(&path, file)
+            .ok_or_else(|| format!("Vosh has no such backup of {shown_name}."))?;
+        let config = ProfileConfig::load(&backup).map_err(|e| {
+            warn!(path = %backup.display(), error = %e, "profile backup unreadable");
+            format!("Vosh could not read that backup of {shown_name}, so nothing changed.")
+        })?;
+        let sessions = state.all_sessions();
+        let selected = state.selected_session();
+        let shown = selected.profile();
+        let (lists_before, macros_before) = {
+            let p = shown.lock().await;
+            let c = selected.connection.lock();
+            (ListRevisions::of(&p, &c), p.macros.clone())
+        };
+        let mut after = After::default();
+        if let Some(open) = replace(state, &sessions, &shown, name, config, &mut after).await? {
+            open.hold(false);
+            persist_state(state, &open).await;
+        }
+        let p = shown.lock().await;
+        let c = selected.connection.lock();
+        after.lists = ListChanges::since(lists_before, &p, &c);
+        after.macros = (p.macros != macros_before).then(|| p.macros.clone());
+        after.shown = Some(shown.clone());
+        drop(c);
+        drop(p);
+        after
+    };
+    for (session, apply) in after.plugins {
+        deliver_detached(app, &session, apply).await;
+    }
+    for (event, payload) in after.replaced {
+        broadcast(app, event, &payload);
+    }
+    if let Some(shown) = &after.shown {
+        broadcast_list_changes(app, shown, after.lists);
+        if let Some(macros) = after.macros.filter(|_| state.in_front(shown)) {
+            broadcast(app, MACROS_CHANGED, &macros);
+        }
+    }
+    broadcast(app, PROFILES_CHANGED, &name.to_string());
+    broadcast_profile_changed(app, name);
+    Ok(())
+}
+
 /// What the import leaves for after it lets go of the persist lock.
 #[derive(Default)]
 struct After {
