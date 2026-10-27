@@ -2,6 +2,22 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.96.0 - 2026-10-27
+
+Change many automation items at once, keep your command history through a restart, pace what your triggers send, and set the text encoding of a world.
+
+- In Triggers, Aliases, Macros, and Timers, you can select many items and move, turn on, turn off, duplicate, or delete them together. Click the select button after the filter, or hold Cmd and click an item. Right click an item for the same changes.
+- Rename a group from the menu on its heading. Vosh renames it in all four lists and in your loadouts, and asks before it merges two groups when you type a name you already have.
+- Your command history comes back after you quit Vosh or after a crash. Each session keeps its newest 1,000 lines, and never keeps a password or what you type while you log in.
+- Vosh paces what your triggers, timers, the tick, Lua, and plugins send. A burst sends 10 lines at once and the rest at 4 a second. What you type never waits. The command line shows how many lines wait, and a click drops them. Change the speed or turn the pace off in Settings › Input › Advanced.
+- When your triggers, timers, or scripts send the same line 40 times in a row, Vosh stops it there and tells you which line it is, long before the 75 that leave your character mortally wounded on Aabahran.
+- The tick can send its command a set number of seconds before or after the tick. Or when you send restarts the count from a command you type.
+- `#list` keeps items in order under one name. Use them as `$foes[1]`, `$foes[-1]` for the last, and `$foes[#]` for how many. `#list foes keep` saves a list with the profile, and Lua can read and write lists too.
+- Lua scripts and plugins get `json` to read and write JSON, and `regex` to match text with the same syntax as triggers.
+- A profile's menu in Settings › Characters can show its file in Finder or Explorer, and Restore from a backup puts back an earlier version. Backups follow a profile when you rename it, and a save that changes nothing no longer uses up a backup.
+- Text encoding in Settings › General › Connection sets Latin 1 for an older world that garbles the accented letters you send. UTF-8, the default, still shows an older world's accented letters.
+- On macOS, a byte from the game that isn't UTF-8 no longer hides the rest of its line.
+
 ## v0.95.6 - 2026-10-15
 
 Arrange your panes in a mode of their own, fold a pane down to its header, and bring back an earlier layout.
