@@ -115,8 +115,9 @@ target it does not know.
 
 The top level `charset` key says how the profile reads the game's text
 and writes yours. It writes `charset = "latin1"` for Latin 1 and
-nothing for UTF-8, the default. Builds before it drop the key and read
-UTF-8.
+nothing for UTF-8, the default. A name it does not know, such as
+`"cp437"`, reads as UTF-8 and the profile still loads. Builds before it
+keep the key among the keys they do not know and read UTF-8.
 
 A pane in `[ui.panes]` writes `folded = true` while it is folded down
 to its header, and nothing while it is open. Builds before 0.95.6 drop
