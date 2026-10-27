@@ -6,6 +6,7 @@
 //! in it to the walker there.
 
 mod automation;
+pub(crate) mod history;
 pub(crate) mod profile;
 mod prompt;
 mod script;

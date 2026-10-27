@@ -92,6 +92,8 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::reconnect_get,
         session::reconnect_set,
         input::input_known_words,
+        input::history_get,
+        input::history_push,
         automation::triggers_list,
         session::target_get,
         automation::triggers_export,

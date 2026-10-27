@@ -72,6 +72,16 @@ pub(crate) fn scrollback_path(app_data: &Path, session: SessionId) -> PathBuf {
     }
 }
 
+/// The commands `session` sent from the command line, which Up brings
+/// back after a restart. Named like its scrollback.
+pub(crate) fn history_path(app_data: &Path, session: SessionId) -> PathBuf {
+    if session == SessionId::FIRST {
+        app_data.join("history.txt")
+    } else {
+        app_data.join(format!("history-{session}.txt"))
+    }
+}
+
 /// How full each affect was cast, per character, for the Affects pane.
 pub(crate) fn affect_full_path(app_data: &Path) -> PathBuf {
     app_data.join("affect_full.toml")

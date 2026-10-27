@@ -1,10 +1,13 @@
-//! The command for the words Vosh knows on the command line, so the page
-//! colors what you type from what Vosh would run and never guesses.
+//! The commands for the command line. The words Vosh knows, so the page
+//! colors what you type from what Vosh would run and never guesses, and
+//! the history each session keeps across a restart.
 
 use serde::Serialize;
 use tauri::State;
 
 use crate::app::state::{AppState, SharedState};
+use crate::disk::paths::history_path;
+use crate::input::history;
 use crate::input::slash::SLASH_COMMANDS;
 use crate::sessions::SessionId;
 
@@ -38,6 +41,38 @@ async fn known_words(state: &AppState, session: Option<SessionId>) -> Result<Kno
             .map(|&name| name.to_string())
             .collect(),
     })
+}
+
+/// The commands `session`, or the selected session, sent in earlier
+/// runs, oldest first.
+#[tauri::command]
+pub(crate) async fn history_get(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<Vec<String>, String> {
+    let id = state.session(session)?.id;
+    let Some(app_data) = state.app_data.get() else {
+        return Ok(Vec::new());
+    };
+    history::load(&history_path(app_data, id)).map_err(|e| e.to_string())
+}
+
+/// Keep `line`, a command `session` sent, for the next run. Answers false
+/// for a line that gives the game a password, which history never keeps.
+#[tauri::command]
+pub(crate) async fn history_push(
+    state: State<'_, SharedState>,
+    line: String,
+    session: Option<SessionId>,
+) -> Result<bool, String> {
+    if !history::keeps(&line) {
+        return Ok(false);
+    }
+    let id = state.session(session)?.id;
+    if let Some(app_data) = state.app_data.get() {
+        history::append(&history_path(app_data, id), &line).map_err(|e| e.to_string())?;
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
