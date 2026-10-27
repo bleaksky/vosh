@@ -246,6 +246,10 @@ Turn on `Color commands as you type` to color each line by its first word. An al
 
 To set the delay, use `Wait between pasted lines` in Settings under Input, then Advanced. It goes from 0 to 10000 ms.
 
+Vosh also paces what your triggers, timers, the tick, Lua, and plugins send. When they send a burst, the first 10 lines go at once. The rest go at 4 lines each second, the speed at which Aabahran reads commands. What you type, your aliases, and your macros never wait. While lines wait, the right end of the command line shows how many, such as `6 lines wait`. Click it to drop them. When more than 200 lines wait, your automation sends faster than any game reads, so Vosh drops them all and tells you. To change the speed, or to turn the pace off, use `Pace sends from triggers and timers` and `Lines each second` in Settings under Input, then Advanced.
+
+Aabahran counts each command that you send many times in a row. At 25 it warns you, at 50 it holds you, and at 75 it freezes your character. So when your triggers, timers, or scripts send the same line 40 times in a row, Vosh holds it back and tells you which line it is. When you type any command, they can send it again. Vosh never holds back a command that you type.
+
 ### 2.2 Recall command history
 
 <!-- id: play.reuse-history -->

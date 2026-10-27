@@ -2204,6 +2204,15 @@ The review found two faults and three risks, all fixed with tests.
 - Backups stayed under the old name after a rename and stayed on disk after a delete. They move with a rename and go with a delete now, as the layout history does.
 - The dialog showed no backup when the list failed, and the arrows did not move the pick. It shows the error now, and the arrows move through the list.
 
+#### October 27. Item 5, pacing what automation sends
+
+- The pace. `src-tauri/src/session/pace.rs` holds `Pace`, a bucket of 10 lines that refills at the profile's lines a second, 4 at first and 1 to 20 in Settings. `Stream::write_all`, which every automation send takes, the lines of triggers, timers, the tick, Lua, plugins and `#walk`, offers its lines to it, sends what the bucket allows and keeps the rest in order. `Stream::write_now`, which what you type, your aliases, your macros and the writing card's lines take, goes past it. The lines the writing card held go through the pace when it lets go of them. A telnet answer, which ends no line, never waits.
+- The loop. `io_loop` sleeps until the next line's turn and sends it, takes the pace from `Connection::send_pace` on each 250 ms poll, and drops what waits when the link ends. `hand_to_connection` and a Settings save hand each session the profile's pace, and the link takes it as it starts.
+- Runaway and repeats. Over 200 lines waiting drops them all with a line that says so. Automation's 40th line in a row that repeats the one before is held back with a line that names it, and so is each after it until you type a command or automation sends another line. The line names the command, not the trigger or timer that sent it, since the stream does not know which one did. That departs from the review page.
+- The page. `session://paced` carries the count, `pacedStore.ts` keeps it for each session, and the command line shows `6 lines wait` at its right where the writing card's sends that wait show. A click calls `session_paced_drop`. Settings under Input, Advanced gains Pace sends from triggers and timers and Lines each second. The review page called the first Pace what automation sends, and the search test that keeps every hit for automation in the Automation group asked for the new name.
+
+Help 2.1 tells the pace and the repeat stop.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
