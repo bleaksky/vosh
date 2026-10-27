@@ -251,8 +251,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // the count. The card's Check spelling covers it, since all you type
   // there is your text.
   const writing = useWriting();
-  // The lines the pace holds back in the selected session.
+  // The lines the pace holds back in the selected session, which the
+  // command line shows where the writing card's sends that wait show.
   const paced = usePaced();
+  const showPaced = writing.held === 0 && paced > 0;
   const editor = editorLineOf(writing);
   // The pill's menu opens the card only on a text it takes.
   const editorCard = editor && cardTakes(editor.kind) ? editor.kind : null;
@@ -681,7 +683,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   return (
     <div
-      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}${pill ? ' is-mode' : ''}`}
+      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}${pill ? ' is-mode' : ''}${showPaced ? ' has-paced' : ''}`}
       style={rowStyle}
     >
       {pill ? (
@@ -795,9 +797,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           {heldLine(writing.held)}
         </span>
       )}
-      {writing.held === 0 && paced > 0 && (
+      {showPaced && (
         <button
           type="button"
+          aria-live="polite"
           className="in-paced"
           title="Drop them"
           aria-label={`${pacedLine(paced)}. Drop them`}

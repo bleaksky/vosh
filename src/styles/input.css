@@ -423,6 +423,13 @@ button.input-pill:focus-visible {
   cursor: pointer;
 }
 
+/* The field leaves room for the chip, so a long command never runs under
+   it and a click near its end places the caret. */
+.input-row.has-paced input,
+.input-row.has-paced textarea {
+  padding-right: 120px;
+}
+
 .input-row .in-paced:hover,
 .input-row .in-paced:focus-visible {
   background: var(--hover);
