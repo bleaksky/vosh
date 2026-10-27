@@ -1,4 +1,5 @@
-//! Variables in two scopes, and `$name` interpolation.
+//! Variables and lists in two scopes, and `$name` and `$name[1]`
+//! interpolation.
 //!
 //! Profile scope persists and saves in the profile file, and every session
 //! on the profile reads it. Session scope belongs to one session and
@@ -14,10 +15,15 @@ pub enum Scope {
     Session,
 }
 
-/// The variables of one scope.
+/// The most items a list holds.
+pub const LIST_ITEMS: usize = 500;
+
+/// The variables and lists of one scope. A name is a variable or a list,
+/// never both, so setting one takes away the other of that name.
 #[derive(Debug, Default, Clone)]
 pub struct VariableStore {
     vars: HashMap<String, String>,
+    lists: HashMap<String, Vec<String>>,
 }
 
 impl VariableStore {
@@ -26,12 +32,41 @@ impl VariableStore {
     }
 
     pub fn set(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        self.vars.insert(name.into(), value.into());
+        let name = name.into();
+        self.lists.remove(&name);
+        self.vars.insert(name, value.into());
     }
 
-    /// Remove `name`. Returns true if it was set.
+    /// Remove the variable or the list `name`. Returns true if one was set.
     pub fn remove(&mut self, name: &str) -> bool {
-        self.vars.remove(name).is_some()
+        let var = self.vars.remove(name).is_some();
+        let list = self.lists.remove(name).is_some();
+        var || list
+    }
+
+    /// Put the list `name` in place, taking away a variable of that name.
+    pub fn set_list(&mut self, name: impl Into<String>, items: Vec<String>) {
+        let name = name.into();
+        self.vars.remove(&name);
+        self.lists.insert(name, items);
+    }
+
+    pub fn list(&self, name: &str) -> Option<&[String]> {
+        self.lists.get(name).map(Vec::as_slice)
+    }
+
+    pub fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
+        self.lists.get_mut(name)
+    }
+
+    /// Every list, by name.
+    pub fn lists(&self) -> impl Iterator<Item = (&str, &[String])> + '_ {
+        self.lists.iter().map(|(k, v)| (k.as_str(), v.as_slice()))
+    }
+
+    /// Take the list `name` out of this scope.
+    pub fn take_list(&mut self, name: &str) -> Option<Vec<String>> {
+        self.lists.remove(name)
     }
 
     pub fn get(&self, name: &str) -> Option<&str> {
@@ -40,6 +75,7 @@ impl VariableStore {
 
     pub fn clear(&mut self) {
         self.vars.clear();
+        self.lists.clear();
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
@@ -58,6 +94,26 @@ impl<'a> VarView<'a> {
     /// Resolve a variable. Session wins, then profile.
     pub fn get(self, name: &str) -> Option<&'a str> {
         self.session.get(name).or_else(|| self.profile.get(name))
+    }
+
+    /// Resolve a list, with the scope that holds it. Session wins, then
+    /// profile.
+    pub fn list(self, name: &str) -> Option<(&'a [String], Scope)> {
+        self.session
+            .list(name)
+            .map(|items| (items, Scope::Session))
+            .or_else(|| self.profile.list(name).map(|items| (items, Scope::Profile)))
+    }
+
+    /// Every list a lookup finds, the session's first.
+    pub fn lists(self) -> impl Iterator<Item = (&'a str, &'a [String], Scope)> {
+        let session = self.session;
+        session.lists().map(|(k, v)| (k, v, Scope::Session)).chain(
+            self.profile
+                .lists()
+                .filter(move |(k, _)| session.list(k).is_none())
+                .map(|(k, v)| (k, v, Scope::Profile)),
+        )
     }
 
     /// Every variable a lookup finds, the session entries first, then
@@ -124,6 +180,11 @@ impl<'a> VarView<'a> {
                     end += 1;
                 }
                 let name = &text[i + 1..end];
+                if let Some((value, used)) = self.list_item(name, &text[end..]) {
+                    out.push_str(&value);
+                    i = end + used;
+                    continue;
+                }
                 if let Some(val) = self.get(name) {
                     out.push_str(val);
                 } else {
@@ -137,6 +198,64 @@ impl<'a> VarView<'a> {
         }
         out
     }
+}
+
+impl VarView<'_> {
+    /// What `[index]` at the start of `after` reads from the list `name`,
+    /// and how many bytes of `after` it took: an item counted from 1, or
+    /// from the end below 0, or `#` for how many items it holds. An index
+    /// past the end reads empty. None when `name` is no list or `after`
+    /// holds no index.
+    fn list_item(self, name: &str, after: &str) -> Option<(String, usize)> {
+        let rest = after.strip_prefix('[')?;
+        let close = rest.find(']')?;
+        let index = rest[..close].trim();
+        let (items, _) = self.list(name)?;
+        let used = close + 2;
+        if index == "#" {
+            return Some((items.len().to_string(), used));
+        }
+        let n: i64 = index.parse().ok()?;
+        let len = i64::try_from(items.len()).ok()?;
+        let at = if n < 0 { len + n } else { n - 1 };
+        let item = usize::try_from(at).ok().and_then(|at| items.get(at));
+        Some((item.cloned().unwrap_or_default(), used))
+    }
+}
+
+/// The items of `args`, words apart, or a run in braces as one item, as
+/// `#list name add Orla {the guard}` gives `Orla` and `the guard`. A `\}`
+/// inside braces is a brace of the item.
+pub fn split_items(args: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut rest = args.trim_start();
+    while !rest.is_empty() {
+        if let Some(inner) = rest.strip_prefix('{') {
+            let mut item = String::new();
+            let mut chars = inner.char_indices();
+            let mut end = inner.len();
+            while let Some((at, c)) = chars.next() {
+                match c {
+                    '\\' if inner[at + 1..].starts_with('}') => {
+                        item.push('}');
+                        chars.next();
+                    }
+                    '}' => {
+                        end = at + 1;
+                        break;
+                    }
+                    _ => item.push(c),
+                }
+            }
+            items.push(item);
+            rest = inner[end.min(inner.len())..].trim_start();
+        } else {
+            let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            items.push(rest[..end].to_string());
+            rest = rest[end..].trim_start();
+        }
+    }
+    items
 }
 
 fn is_valid_name(s: &str) -> bool {
@@ -288,5 +407,72 @@ mod tests {
         let mut found: Vec<_> = entries.iter().map(|(k, val, _)| (*k, *val)).collect();
         found.sort_unstable();
         assert_eq!(found, [("a", "s"), ("b", "p"), ("c", "p"), ("d", "s")]);
+    }
+
+    fn foes() -> Vec<String> {
+        vec!["Orla".into(), "the guard".into(), "Maren".into()]
+    }
+
+    #[test]
+    fn a_list_reads_by_place_from_either_end_and_by_count() {
+        let mut session = VariableStore::new();
+        session.set_list("foes", foes());
+        let profile = VariableStore::new();
+        let view = VarView {
+            session: &session,
+            profile: &profile,
+        };
+        assert_eq!(view.interpolate("kill $foes[1]"), "kill Orla");
+        assert_eq!(view.interpolate("kill $foes[-1]"), "kill Maren");
+        assert_eq!(view.interpolate("say $foes[#] foes"), "say 3 foes");
+        assert_eq!(view.interpolate("kill $foes[9]."), "kill .");
+        // Not an index, and not a list, pass through as typed.
+        assert_eq!(view.interpolate("say $foes[x]"), "say $foes[x]");
+        assert_eq!(view.interpolate("say $foes"), "say $foes");
+        assert_eq!(view.interpolate("say $nope[1]"), "say $nope[1]");
+    }
+
+    #[test]
+    fn a_name_is_a_variable_or_a_list_never_both() {
+        let mut store = VariableStore::new();
+        store.set("foes", "Orla");
+        store.set_list("foes", foes());
+        assert_eq!(store.get("foes"), None);
+        assert_eq!(store.list("foes").map(<[String]>::len), Some(3));
+        store.set("foes", "Orla");
+        assert_eq!(store.list("foes"), None);
+        assert!(store.remove("foes"));
+        assert!(!store.remove("foes"));
+    }
+
+    #[test]
+    fn a_session_list_hides_the_profile_list_of_its_name() {
+        let mut session = VariableStore::new();
+        let mut profile = VariableStore::new();
+        profile.set_list("foes", foes());
+        profile.set_list("friends", vec!["Tolliver".into()]);
+        session.set_list("foes", vec!["rat".into()]);
+        let view = VarView {
+            session: &session,
+            profile: &profile,
+        };
+        assert_eq!(view.interpolate("$foes[1] $friends[1]"), "rat Tolliver");
+        let mut names: Vec<_> = view.lists().map(|(n, _, scope)| (n, scope)).collect();
+        names.sort_unstable_by_key(|(n, _)| *n);
+        assert_eq!(
+            names,
+            [("foes", Scope::Session), ("friends", Scope::Profile)]
+        );
+    }
+
+    #[test]
+    fn items_split_at_spaces_and_braces_hold_one() {
+        assert_eq!(
+            split_items("Orla {the guard} Maren"),
+            ["Orla", "the guard", "Maren"]
+        );
+        assert_eq!(split_items(r"{a \} b}"), ["a } b"]);
+        assert_eq!(split_items("  "), Vec::<String>::new());
+        assert_eq!(split_items("{open"), ["open"]);
     }
 }
