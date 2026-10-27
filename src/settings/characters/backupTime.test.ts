@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backupTime } from './RestoreDialog';
+import { backupTime } from './backupTime';
 
 // How Restore from a backup… names when each backup was set aside.
 

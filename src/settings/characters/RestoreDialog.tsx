@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { profileBackups, type ProfileBackup } from '../../ipc/characters';
 import { loadoutsGetState } from '../../ipc/loadouts';
 import { profileDisplayName } from '../../lib/characterProfiles';
 import { CheckIcon, cx } from '../../ui';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { backupTime } from './backupTime';
 
 // Restore from a backup… on a profile's menu: the confirm recipe in the
 // primary tone with the backups Vosh kept, newest first, one picked.
@@ -15,20 +16,6 @@ interface Props {
   name: string;
   onRestore: (file: string) => void;
   onCancel: () => void;
-}
-
-const DAY = 86_400_000;
-
-/** "Today at 14:02", "Yesterday at 22:15" or "Oct 24 at 09:41". */
-export function backupTime(ms: number, now: number = Date.now()): string {
-  const at = new Date(ms);
-  const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  if (ms >= start.getTime()) return `Today at ${time}`;
-  if (ms >= start.getTime() - DAY) return `Yesterday at ${time}`;
-  const day = at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return `${day} at ${time}`;
 }
 
 function counts(b: ProfileBackup, loadouts: boolean): string {
@@ -45,6 +32,8 @@ export function RestoreDialog({ name, onRestore, onCancel }: Props) {
   const [backups, setBackups] = useState<ProfileBackup[] | null>(null);
   const [loadouts, setLoadouts] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const rows = useRef<(HTMLButtonElement | null)[]>([]);
   const display = profileDisplayName(name);
 
   useEffect(() => {
@@ -61,8 +50,10 @@ export function RestoreDialog({ name, onRestore, onCancel }: Props) {
         setBackups(list);
         setPicked(list[0]?.file ?? null);
       },
-      () => {
-        if (!cancelled) setBackups([]);
+      (e) => {
+        if (cancelled) return;
+        setBackups([]);
+        setFailed(String(e));
       },
     );
     return () => {
@@ -70,12 +61,32 @@ export function RestoreDialog({ name, onRestore, onCancel }: Props) {
     };
   }, [name]);
 
+  // The arrows move the pick through the list, as in a radio group.
+  const onRowKey = (e: KeyboardEvent<HTMLButtonElement>, at: number) => {
+    if (!backups) return;
+    const step =
+      e.key === 'ArrowDown' || e.key === 'ArrowRight'
+        ? 1
+        : e.key === 'ArrowUp' || e.key === 'ArrowLeft'
+          ? -1
+          : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    const next = (at + step + backups.length) % backups.length;
+    const row = backups[next];
+    if (!row) return;
+    setPicked(row.file);
+    rows.current[next]?.focus();
+  };
+
   const body =
-    backups !== null && backups.length === 0
-      ? `Vosh has no backup of ${display} yet. It keeps one each time a change saves.`
-      : loadouts
-        ? `Vosh puts back the timers, switches and layouts of ${display} as they were. Your triggers, aliases and macros live in the shared catalog and stay as they are. What you have now becomes a backup first.`
-        : `Vosh puts ${display} back as it was. What you have now becomes a backup first, so you can come back to it.`;
+    failed !== null
+      ? failed
+      : backups !== null && backups.length === 0
+        ? `Vosh has no backup of ${display} yet. It keeps one each time a change saves.`
+        : loadouts
+          ? `Vosh puts back the timers, switches and layouts of ${display} as they were. Your triggers, aliases and macros live in the shared catalog and stay as they are. What you have now becomes a backup first.`
+          : `Vosh puts ${display} back as it was. What you have now becomes a backup first, so you can come back to it.`;
 
   return (
     <ConfirmDialog
@@ -89,17 +100,21 @@ export function RestoreDialog({ name, onRestore, onCancel }: Props) {
     >
       {backups && backups.length > 0 && (
         <div className="ov-pick-list" role="radiogroup" aria-label="Backups">
-          {backups.map((b) => {
+          {backups.map((b, at) => {
             const on = b.file === picked;
             return (
               <button
                 key={b.file}
+                ref={(el) => {
+                  rows.current[at] = el;
+                }}
                 type="button"
                 role="radio"
                 aria-checked={on}
                 tabIndex={on ? 0 : -1}
                 className={cx('ov-pick-row', on && 'is-on')}
                 onClick={() => setPicked(b.file)}
+                onKeyDown={(e) => onRowKey(e, at)}
               >
                 <span className="ov-pick-check" aria-hidden="true">
                   {on && <CheckIcon size={12} />}
