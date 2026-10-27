@@ -30,6 +30,11 @@ export function heldLine(held: number): string {
   return held === 1 ? '1 send waits' : `${held} sends wait`;
 }
 
+/** What the chip of the lines the pace holds says. */
+export function pacedLine(paced: number): string {
+  return paced === 1 ? '1 line waits' : `${paced} lines wait`;
+}
+
 /** The width of one column of the command line's face. */
 export function useFieldCell(field: HTMLElement | null): number {
   const [cell, setCell] = useState(0);

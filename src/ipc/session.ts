@@ -14,6 +14,7 @@ import {
   SESSIONS_CHANGED,
   STATE,
   TARGET,
+  PACED,
   WALK,
 } from './events';
 
@@ -288,6 +289,19 @@ export type WalkProgress =
       total: number;
       why: 'plain' | 'lost_sight' | 'lost_track';
     };
+
+/** How many lines the pace holds back in each session, as the count
+ *  changes. Rust sends `{session, data}`. */
+export async function onPaced(cb: (waiting: number, session: number) => void): Promise<UnlistenFn> {
+  return listen<{ session?: number; data: number }>(PACED, (event) => {
+    cb(typeof event.payload.data === 'number' ? event.payload.data : 0, sessionOf(event.payload));
+  });
+}
+
+/** Drop the lines the pace holds in `session`. */
+export async function sessionPacedDrop(session: number): Promise<void> {
+  await invoke('session_paced_drop', { session });
+}
 
 /** Hear each change to where a session's walk stands, with that
  *  session. A walk ends idle when it arrives or the connection drops. */

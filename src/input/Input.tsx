@@ -15,15 +15,22 @@ import {
   nativeSurfaceScroll,
   nativeSurfaceSelectAll,
 } from '../ipc/nativeSurface';
-import { sendInput, sendMaskedInput, sendRawInput, stopWalk } from '../ipc/session';
+import {
+  sendInput,
+  sendMaskedInput,
+  sendRawInput,
+  sessionPacedDrop,
+  stopWalk,
+} from '../ipc/session';
 import type { LineLook } from '../ipc/uiConfigInput';
 import { writingStart, type WritingKind } from '../ipc/writing';
 import { useWriting, writingOf } from '../stores/session/writingStore';
+import { usePaced } from '../stores/session/pacedStore';
 import { loadWriting, useWritingFile } from '../writing/draftsStore';
 import { cardTakes } from '../writing/kinds';
 import { pasted } from '../writing/text';
 import { looksLikeChat } from './chatLine';
-import { editorLineOf, heldLine, useFieldCell, washPast } from './editorLine';
+import { editorLineOf, heldLine, pacedLine, useFieldCell, washPast } from './editorLine';
 import { EditorMarks } from './EditorMarks';
 import { modeOf, type ModePill as Pill } from './modePill';
 import { LinePill } from './LinePill';
@@ -244,6 +251,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // the count. The card's Check spelling covers it, since all you type
   // there is your text.
   const writing = useWriting();
+  // The lines the pace holds back in the selected session.
+  const paced = usePaced();
   const editor = editorLineOf(writing);
   // The pill's menu opens the card only on a text it takes.
   const editorCard = editor && cardTakes(editor.kind) ? editor.kind : null;
@@ -785,6 +794,19 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           <span className="wr-held-dot dot is-warn" aria-hidden="true" />
           {heldLine(writing.held)}
         </span>
+      )}
+      {writing.held === 0 && paced > 0 && (
+        <button
+          type="button"
+          className="in-paced"
+          title="Drop them"
+          aria-label={`${pacedLine(paced)}. Drop them`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void sessionPacedDrop(session).catch(() => undefined)}
+        >
+          <span className="wr-held-dot dot is-warn" aria-hidden="true" />
+          {pacedLine(paced)}
+        </button>
       )}
       {!passwordMode && caretPos && (
         <span
