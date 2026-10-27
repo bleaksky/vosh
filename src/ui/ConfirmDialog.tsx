@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { trapDialogFocus } from './dialogFocus';
 import { cx } from './cx';
 import { useEscape } from '../lib/escapeStack';
@@ -84,7 +85,7 @@ export function ConfirmDialog({
     };
   }, []);
 
-  return (
+  const layer = (
     <div
       className={cx('ov-confirm-layer', at && 'is-placed')}
       onPointerDown={(e) => {
@@ -120,4 +121,8 @@ export function ConfirmDialog({
       </div>
     </div>
   );
+  // The layer goes to the body, so a sticky column or any other stacking
+  // context the caller sits in cannot draw the page over the card. Markup
+  // rendered with no document keeps it in place.
+  return typeof document === 'undefined' ? layer : createPortal(layer, document.body);
 }
