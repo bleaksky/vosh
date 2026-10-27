@@ -63,7 +63,7 @@ pub(crate) struct StateInner {
     /// caller before each Lua entry. `mud.var(name)` reads from here.
     pub(crate) var_snapshot: HashMap<String, String>,
     /// The same for lists, which `mud.list(name)` reads.
-    pub(crate) list_snapshot: HashMap<String, Vec<String>>,
+    pub(crate) list_snapshot: HashMap<String, std::sync::Arc<Vec<String>>>,
     /// The call running now, while one runs.
     pub(crate) call: Option<CallInfo>,
 }

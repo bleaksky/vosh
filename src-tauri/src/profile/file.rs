@@ -360,8 +360,33 @@ impl ProfileConfig {
         for (k, v) in &self.profile_vars {
             vars.set(k.clone(), v.clone());
         }
+        // A list from the file keeps to the limits `#list` keeps.
         for (k, items) in &self.profile_lists {
-            vars.set_list(k.clone(), items.clone());
+            let named = k
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !named {
+                warnings.push(format!(
+                    "list `{k}` skipped: a name is letters, digits and _"
+                ));
+                continue;
+            }
+            let kept: Vec<String> = items
+                .iter()
+                .filter(|item| item.len() <= 4 * 1024)
+                .take(vosh_automation::vars::LIST_ITEMS)
+                .cloned()
+                .collect();
+            if kept.len() < items.len() {
+                warnings.push(format!(
+                    "list `{k}` kept {} of its {} items, the ones within the limits",
+                    kept.len(),
+                    items.len()
+                ));
+            }
+            vars.set_list(k.clone(), kept);
         }
         profile.vars = vars;
 

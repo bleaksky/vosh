@@ -15,6 +15,11 @@ pub(super) fn slash_var(profile: &Profile, c: &mut Connection, args: &str) -> In
     if name.is_empty() {
         return InputResult::error("usage #var <name> [value]");
     }
+    if c.vars.list(name).is_some() || profile.vars.list(name).is_some() {
+        return InputResult::error(format!(
+            "{name} is a list. Show it with #list {name}, or remove it with #unvar {name}"
+        ));
+    }
     if value.is_empty() {
         return match c.var_view(profile).get(name) {
             Some(v) => InputResult::echo_line(format!("{name} = {v}")),
@@ -35,9 +40,9 @@ pub(super) fn slash_unvar(profile: &mut Profile, c: &mut Connection, args: &str)
     let session = c.vars.remove(name);
     let shared = profile.vars.remove(name);
     if session || shared {
-        InputResult::echo_line(format!("var {name} removed"))
+        InputResult::echo_line(format!("{name} removed"))
     } else {
-        InputResult::error(format!("var {name} not set"))
+        InputResult::error(format!("{name} not set"))
     }
 }
 
@@ -128,7 +133,7 @@ pub(super) fn slash_list(profile: &mut Profile, c: &mut Connection, args: &str) 
         return InputResult::error(USAGE);
     }
     let (cmd, rest) = split_first_word(rest);
-    if c.var_view(profile).get(name).is_some() {
+    if c.vars.get(name).is_some() || profile.vars.get(name).is_some() {
         return InputResult::error(format!(
             "{name} is a variable. Remove it with #unvar {name} first"
         ));
@@ -140,19 +145,24 @@ pub(super) fn slash_list(profile: &mut Profile, c: &mut Connection, args: &str) 
             long.len()
         ));
     }
-    let full = |list: &Vec<String>, more: usize| list.len() + more > LIST_ITEMS;
+    // What the list holds now, so a refused change makes no empty list.
+    let held = c
+        .var_view(profile)
+        .list(name)
+        .map_or(0, |(list, _)| list.len());
+    let too_many = |more: usize| held + more > LIST_ITEMS;
     match cmd {
         "" => show_list(profile, c, name),
         "add" => {
             if items.is_empty() {
                 return InputResult::error(USAGE);
             }
+            if too_many(items.len()) {
+                return InputResult::error(format!("a list holds at most {LIST_ITEMS} items"));
+            }
             let Some(list) = list_mut(profile, c, name, true) else {
                 return InputResult::error(USAGE);
             };
-            if full(list, items.len()) {
-                return InputResult::error(format!("a list holds at most {LIST_ITEMS} items"));
-            }
             list.extend(items);
             InputResult::echo_line(format!("{name} holds {}", items_phrase(list.len())))
         }
@@ -162,15 +172,15 @@ pub(super) fn slash_list(profile: &mut Profile, c: &mut Connection, args: &str) 
             if items.is_empty() {
                 return InputResult::error(USAGE);
             }
+            let Some(at) = place(at, held, true) else {
+                return InputResult::error(format!("{name} has no place {at}"));
+            };
+            if too_many(items.len()) {
+                return InputResult::error(format!("a list holds at most {LIST_ITEMS} items"));
+            }
             let Some(list) = list_mut(profile, c, name, true) else {
                 return InputResult::error(USAGE);
             };
-            let Some(at) = place(at, list.len(), true) else {
-                return InputResult::error(format!("{name} has no place {at}"));
-            };
-            if full(list, items.len()) {
-                return InputResult::error(format!("a list holds at most {LIST_ITEMS} items"));
-            }
             let len = items.len();
             list.splice(at..at, items);
             InputResult::echo_line(format!(
@@ -182,6 +192,9 @@ pub(super) fn slash_list(profile: &mut Profile, c: &mut Connection, args: &str) 
         }
         "delete" | "set" => {
             let (at, rest) = split_first_word(rest);
+            if at.is_empty() {
+                return InputResult::error(USAGE);
+            }
             let Some(list) = list_mut(profile, c, name, false) else {
                 return InputResult::error(format!("list {name} not set"));
             };

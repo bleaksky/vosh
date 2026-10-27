@@ -92,6 +92,7 @@ pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
         "set_profile_list",
         lua.create_function(mud_set_profile_list)?,
     )?;
+    mud.set("unset_list", lua.create_function(mud_unset_var)?)?;
 
     mud.set("set_prompt_var", lua.create_function(mud_set_prompt_var)?)?;
     mud.set(
@@ -311,7 +312,7 @@ fn mud_unset_var(lua: &Lua, name: mlua::String) -> LuaResult<()> {
 fn mud_list(lua: &Lua, name: String) -> LuaResult<Option<Table>> {
     let items = with_state(lua, |s| Ok(s.list_snapshot.get(&name).cloned()))?;
     items
-        .map(|items| lua.create_sequence_from(items))
+        .map(|items| lua.create_sequence_from(items.iter().map(String::as_str)))
         .transpose()
 }
 
@@ -347,6 +348,16 @@ fn set_list(lua: &Lua, scope: Scope, name: &mlua::String, items: &Table) -> LuaR
     let Some([name]) = all_capped(lua, [(name, NAME_BYTES)])? else {
         return Ok(());
     };
+    let mut chars = name.chars();
+    let named = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !named {
+        return Err(mlua::Error::RuntimeError(format!(
+            "a list name is letters, digits and _, starting with a letter or _, not `{name}`"
+        )));
+    }
     let Some(items) = list_items(lua, items)? else {
         return Ok(());
     };
@@ -358,7 +369,7 @@ fn set_list(lua: &Lua, scope: Scope, name: &mlua::String, items: &Table) -> LuaR
         });
         if queued {
             s.var_snapshot.remove(&name);
-            s.list_snapshot.insert(name, items);
+            s.list_snapshot.insert(name, std::sync::Arc::new(items));
         }
         Ok(())
     })

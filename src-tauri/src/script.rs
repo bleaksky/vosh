@@ -61,10 +61,11 @@ pub(crate) fn refresh_vars(profile: &Profile, c: &Connection) {
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
         .collect();
     c.script.set_var_snapshot(snapshot);
-    let lists: std::collections::HashMap<String, Vec<String>> = c
+    // Each list goes shared, so a line copies none of their items.
+    let lists: std::collections::HashMap<String, std::sync::Arc<Vec<String>>> = c
         .var_view(profile)
-        .lists()
-        .map(|(k, items, _)| (k.to_string(), items.to_vec()))
+        .shared_lists()
+        .map(|(k, items)| (k.to_string(), std::sync::Arc::clone(items)))
         .collect();
     c.script.set_list_snapshot(lists);
 }

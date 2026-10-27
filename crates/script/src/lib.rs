@@ -281,7 +281,7 @@ impl ScriptEngine {
 
     /// Replace the list snapshot `mud.list(name)` reads, as
     /// [`Self::set_var_snapshot`] does for variables.
-    pub fn set_list_snapshot(&self, snapshot: HashMap<String, Vec<String>>) {
+    pub fn set_list_snapshot(&self, snapshot: HashMap<String, std::sync::Arc<Vec<String>>>) {
         if let Ok(mut s) = self.state.cell.lock() {
             s.list_snapshot = snapshot;
         }

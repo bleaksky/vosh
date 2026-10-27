@@ -2769,3 +2769,74 @@ fn lua_writes_a_list_and_reads_it_back() {
         b"say 1\r\n"
     );
 }
+
+#[test]
+fn a_session_name_hides_the_profile_name_of_either_kind() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let _ = process_on(&mut p, &mut c, "#list foes add Orla");
+    let _ = process_on(&mut p, &mut c, "#list foes keep");
+    // #var refuses a name a list has, in either scope.
+    let r = process_on(&mut p, &mut c, "#var foes x");
+    assert!(
+        r.echo.iter().any(|l| l.contains("foes is a list")),
+        "{:?}",
+        r.echo
+    );
+    // Lua can still set one, and then the session's name decides both
+    // readings, so the variable hides the profile list.
+    let _ = run_line(&state, &mut p, &mut c, "#lua mud.set_var('foes', 'x')");
+    assert_eq!(
+        process_on(&mut p, &mut c, "say $foes $foes[1]").bytes,
+        b"say x x[1]\r\n"
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["no lists defined"]
+    );
+}
+
+#[test]
+fn unset_list_removes_a_list_and_a_refused_insert_makes_none() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let r = process_on(&mut p, &mut c, "#list newl insert 5 x");
+    assert!(r.echo.iter().any(|l| l.contains("newl has no place 5")));
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["no lists defined"]
+    );
+    let _ = process_on(&mut p, &mut c, "#list foes add Orla");
+    let _ = run_line(&state, &mut p, &mut c, "#lua mud.unset_list('foes')");
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["no lists defined"]
+    );
+    let r = process_on(&mut p, &mut c, "#list foes delete");
+    assert!(
+        r.echo.iter().any(|l| l.contains("usage #list")),
+        "{:?}",
+        r.echo
+    );
+}
+
+#[test]
+fn a_list_holds_five_hundred_items_from_any_path() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let many = vec!["x"; 500].join(" ");
+    let _ = process_on(&mut p, &mut c, &format!("#list foes add {many}"));
+    let r = process_on(&mut p, &mut c, "#list foes add one");
+    assert!(r.echo.iter().any(|l| l.contains("at most 500 items")));
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua local t = {} for i = 1, 501 do t[i] = 'x' end mud.set_list('big', t)",
+    );
+    let _ = ran;
+    assert!(c.vars.list("big").is_none());
+}
