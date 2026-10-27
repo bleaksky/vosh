@@ -113,6 +113,11 @@ profile file keeps the rest. Room triggers sit in `[[room_triggers]]`,
 apart from `[[triggers]]`, since 0.8.0 fails a whole file on a trigger
 target it does not know.
 
+The top level `charset` key says how the profile reads the game's text
+and writes yours. It writes `charset = "latin1"` for Latin 1 and
+nothing for UTF-8, the default. Builds before it drop the key and read
+UTF-8.
+
 A pane in `[ui.panes]` writes `folded = true` while it is folded down
 to its header, and nothing while it is open. Builds before 0.95.6 drop
 the key and open the pane.

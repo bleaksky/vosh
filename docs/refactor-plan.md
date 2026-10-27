@@ -2238,6 +2238,16 @@ The review found two faults and smaller ones, all fixed with tests.
 - A refused add or insert left an empty list. The checks run first now. A delete or set with no place gives the usage line, `#unvar` names what it removed without calling a list a var, a list from the file keeps to the limits, and a Lua list needs a name `$` can read.
 - The import preview still counts variables alone, and a session list named `target` goes with your target as the variable does.
 
+#### October 27. Item 7, text encoding per profile
+
+- The reader. `src-tauri/src/session/charset.rs` holds `Charset`, UTF-8 or Latin 1, and the `Decoder` each connection keeps. `handle_read` passes the parser's events through it, so the accumulator, the triggers, the log, the scrollback and both renderers read one text. UTF-8 that is valid goes through untouched, with no copy. A byte that is not UTF-8 reads as Windows Latin 1, which maps 0x80 to 0x9F to the curly quotes, the euro and the rest browsers read the name Latin 1 as. A character split across two reads waits for the next read, or for a GA or EOR, which let it out as it stands. Latin 1 reads every byte as Windows Latin 1.
+- The writer. `Stream::write_raw` passes each buffer through `encode`, which for Latin 1 writes each character as its byte, a `?` for one Latin 1 lacks, and doubles a 0xFF. A buffer that is not UTF-8, a telnet command, goes as it is.
+- Negotiation. `Negotiator::use_latin1` makes CHARSET take the first Latin 1 name the server offers, ISO-8859-1 among them, in place of UTF-8, and drops the UTF-8 bit from MTTS, 267 in place of 271.
+- The profile. A top level `charset` key, out of the file for UTF-8. `charset_get` and `charset_set` read and save it for the profile Settings shows, and Settings under General, Connection gains Text encoding. A connection takes it as it starts, so a change applies from the next connect.
+- The grid. `TermGrid::decode` in `src-tauri/src/native/grid/regions.rs` dropped the rest of a feed after a byte that was not UTF-8, and held a short bad tail forever. It now shows U+FFFD for the byte and keeps the text after it, and holds only the start of a character.
+
+Help 1.1 tells the setting.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

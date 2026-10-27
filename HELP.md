@@ -21,6 +21,8 @@ You connect from the session button. It sits in the middle of the title band, ov
 
 While you're connected, the button shows your character name and the world. If a saved profile matches the host and port you dialed, Vosh changes to that profile before it connects. A profile set to log in as your character takes over right after login, when the server tells Vosh who you are.
 
+Vosh reads the text of the game as UTF-8, which most worlds send. If a byte isn't UTF-8, Vosh reads it as Latin 1, so the accented letters of an older world show correctly. If the game shows the accented letters you send incorrectly, set `Text encoding` to `Latin 1` in Settings under General, then Connection. Vosh then reads all the text of the game as Latin 1 and sends your text as Latin 1. The change starts at your next connect.
+
 To disconnect, click the session button and choose `Disconnect`.
 
 ### 1.2 Reconnect
