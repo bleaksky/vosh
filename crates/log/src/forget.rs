@@ -105,6 +105,13 @@ impl PasswordLines {
     }
 }
 
+/// True when `line`, as you sent it, runs a game command that takes a
+/// password and gives it one, like `password <old> <new>`. Rule 3 above
+/// blanks such a line in the log, and command history never keeps one.
+pub fn carries_password(line: &str) -> bool {
+    aabahran::carries_password(line)
+}
+
 /// What blanking did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Forgotten {
