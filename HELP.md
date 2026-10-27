@@ -250,14 +250,14 @@ To set the delay, use `Wait between pasted lines` in Settings under Input, then 
 
 <!-- id: play.reuse-history -->
 
-Command history records every line you send during a session. You can get the lines back in the command line.
+Command history records every line you send in a session. You can get the lines back in the command line. Each session keeps its newest 1,000 lines, and they come back after you quit and open Vosh again, or after a crash. When you close a session, its history goes with it.
 
 - In an empty command line, press `ArrowUp` to go back through the commands you sent, newest first.
 - To search by prefix, type a few characters, then press `ArrowUp`. Only lines that start with that text come up.
 - Press `ArrowDown` to go toward newer matches. One step past the newest match puts back exactly what you typed before the search started.
 - You can edit the recalled line at any point. An edit ends the search. The next `ArrowUp` starts a new search from the text that is now in the command line.
 
-History skips a line that is the same as the line before it. It never records what you type in password mode.
+History skips a line that is the same as the line before it. It never records what you type in password mode, or a command that gives the game a password, such as `password <old> <new>`. Lines you write in the game's editor stay out too.
 
 When `Keep last command` is on, the line you just sent stays in the command line, fully selected. `Enter` sends it again, and when you type, your text replaces it.
 

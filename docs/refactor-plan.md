@@ -2124,6 +2124,26 @@ The second item you approved on October 23, after mockups. You chose that a rena
 
 Help 3.13 Rename a group is new, and the keyboard list says the menu key opens a heading's menu.
 
+#### October 27. Before 1.0
+
+A check of `docs/requirements.md` against the code found promises that were never built. You chose on October 27 to build seven of them before 1.0 and to move the rest past it, and you approved the review page with every pick it recommends (https://claude.ai/artifact/HqEQQtp3B4yyk1Bkft72dy). The rewritten requirements are 90996e89. The items run in this order on feat/pre-1.0 from main 5a6878ef, each its own stop.
+
+1. Command history that outlives a restart, kept for each session beside its scrollback, the newest 1,000, with password changes kept out.
+2. The tick sends its command a set number of seconds after or before the tick, and a pattern for a line you send resets it as `#tick reset` does.
+3. `json` and `regex` tables in Lua, with the trigger regex syntax and `json.null`.
+4. Show in Finder and Restore from a backup… on a profile's menu. A save that changes nothing makes no backup, a restore in loadout mode brings back the profile file alone, and every confirm dialog draws at the top of the window.
+5. Vosh paces what triggers, timers, the tick, Lua and plugins send, 10 at once and then 4 a second, never what you type. Over 200 waiting drops them, and automation stops at the 40th identical line in a row.
+6. `#list`, TinTin++ style, read as `$name[1]`, `$name[-1]` and `$name[#]`, kept in the profile with `#list <name> keep`.
+7. Text encoding per profile, UTF-8 that reads a stray byte as Windows Latin 1, or Latin 1, read once as bytes leave the telnet layer.
+
+#### October 27. Item 1, command history
+
+- The file. `src-tauri/src/input/history.rs` keeps each session's commands in `history.txt` for the first session and `history-<n>.txt` for the rest, beside the scrollback and named like it. `append` adds each command as it goes out, so a crash loses none. `load` reads the newest 1,000 and cuts a longer file back with `swap_in`. Closing a session deletes the file with its scrollback.
+- The commands. `history_get` hands a session's earlier commands to the page, and `history_push` adds one. It answers false for a line that gives the game a password, by `carries_password`, which `crates/log` now exports from the rule its password wipe uses.
+- The page. `useCommandHistory` loads a session's earlier commands the first time it shows, puts them before what it sent since, and hands each new command to Rust once. A line Rust turns down leaves the history again, so a password change stays in memory only until Rust answers. The history of a session that closes goes, so a new session with its number starts empty. Lines for the game's editor stay out, which they did not before.
+
+Help 2.2 says history comes back after a restart and what it leaves out, and `docs/data-files.md` lists the files.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

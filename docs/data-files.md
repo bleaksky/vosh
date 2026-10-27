@@ -73,6 +73,7 @@ it the same way.
 | `layouts/<name>.toml`, `layouts/.seen.toml` | TOML                | `src-tauri/src/profile/layout_history.rs`                      |
 | `logs.sqlite`                               | SQLite in WAL mode  | `crates/log/src/sqlite.rs`                                     |
 | `scrollback.txt`, `scrollback-<n>.txt`      | Raw bytes, CRLF     | `src-tauri/src/logs.rs`                                        |
+| `history.txt`, `history-<n>.txt`            | Text, one per line  | `src-tauri/src/input/history.rs`                               |
 | `scripts/`                                  | A folder            | `create_scripts_dir` in `src-tauri/src/app/launch.rs`          |
 | `plugins/<name>/manifest.toml` and its Lua  | TOML and Lua        | `src-tauri/src/app/plugins.rs` and its folder                  |
 | `maps.sqlite`                               | SQLite              | Nothing now                                                    |
@@ -218,6 +219,17 @@ scrollback.txt, which an older build reads too. Each other session
 keeps a file with its number. Vosh writes each one every 3 minutes while
 it changes, when a connection ends and as you quit. Closing a session
 deletes its file.
+
+### history.txt and history-<n>.txt
+
+The commands each session sent from the command line, one per line,
+oldest first, which Up brings back after a restart. Each one lands at
+the end of the file as it goes out, so a crash loses none. Launch reads
+the newest 1,000 and cuts a longer file back to them with `swap_in`.
+A command that gives the game a password, like `password <old> <new>`,
+never lands. The page keeps what you type in password mode and lines
+for the game's editor out before they get here. The files take the
+scrollback's numbers, and closing a session deletes its file.
 
 ### scripts/ and plugins/
 
