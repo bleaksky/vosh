@@ -24,7 +24,7 @@ import { withGroup } from '../../automation/automationTriggers';
 import { subscribeTimersChanged, timersList } from '../../ipc/automation';
 import { tickGetConfig, tickSetConfig, type TickConfig } from '../../ipc/tick';
 import { followTickDraft } from '../../automation/tickDraft';
-import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
+import { Card, Disclosure, Field, FieldArea, Row, Select, Toggle } from '../../ui';
 import { getShownProfile, isShownHeld, subscribeShownMoves } from '../shownProfile';
 import { DraftEditor, type PinnedPart } from './DraftEditor';
 import { GroupField, NumberField } from './fields';
@@ -261,13 +261,48 @@ function TickCard({
           onChange={(s) => set({ auto_fire: text(s) })}
         />
       </Row>
+      <Row label="Send it">
+        <span className="st-field-pair">
+          <NumberField
+            value={Math.abs(v.fire_offset_secs)}
+            min={0}
+            max={60}
+            disabled={v.auto_fire === null}
+            aria-label="Seconds"
+            onChange={(n) => set({ fire_offset_secs: v.fire_offset_secs < 0 ? -n : n })}
+          />
+          <Select
+            value={v.fire_offset_secs < 0 ? 'before' : 'after'}
+            disabled={v.auto_fire === null}
+            aria-label="Before or after the tick"
+            width={132}
+            options={[
+              { value: 'after', label: 'seconds after' },
+              { value: 'before', label: 'seconds before' },
+            ]}
+            onChange={(side) => {
+              const n = Math.abs(v.fire_offset_secs);
+              set({ fire_offset_secs: side === 'before' ? -n : n });
+            }}
+          />
+        </span>
+      </Row>
       <Row label="Reset on">
         <Field
           mono
           width="100%"
           value={v.reset_pattern ?? ''}
-          placeholder="A pattern that restarts it"
+          placeholder="A pattern for a game line"
           onChange={(s) => set({ reset_pattern: text(s) })}
+        />
+      </Row>
+      <Row label="Or when you send">
+        <Field
+          mono
+          width="100%"
+          value={v.reset_on_send ?? ''}
+          placeholder="A pattern for a command"
+          onChange={(s) => set({ reset_on_send: text(s) })}
         />
       </Row>
       <Row label="Warn before it fires">

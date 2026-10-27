@@ -40,8 +40,13 @@ export interface TickConfig {
   enabled: boolean;
   interval_secs: number;
   auto_fire: string | null;
+  /** When the command goes against the tick, in seconds. Below 0 it
+   *  goes before, counted from `interval_secs`, and above 0 after. */
+  fire_offset_secs: number;
   sound: boolean;
   reset_pattern: string | null;
+  /** A pattern for a line you send that starts the count again. */
+  reset_on_send: string | null;
   warn_at_secs: number | null;
   warn_message: string | null;
   warn_color: string | null;
