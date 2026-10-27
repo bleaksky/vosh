@@ -36,13 +36,19 @@ pub(crate) const BACKUP_RETENTION: usize = 10;
 /// in place, since nothing moves it before the rename.
 ///
 /// A file held by [`hold_unread`] is refused before any step, so no
-/// save writes the defaults over settings Vosh could not read.
+/// save writes the defaults over settings Vosh could not read. A file
+/// that already holds `contents` is left alone and keeps no backup, so
+/// the backups are the last [`BACKUP_RETENTION`] changes, not the last
+/// saves, many of which change nothing.
 pub(crate) fn write_with_backup(path: &Path, contents: &str) -> std::io::Result<()> {
     if is_unread(path) {
         return Err(std::io::Error::other(format!(
             "Vosh could not read {} at launch, so it will not save over it",
             path.display()
         )));
+    }
+    if std::fs::read(path).is_ok_and(|now| now == contents.as_bytes()) {
+        return Ok(());
     }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -244,6 +250,19 @@ mod tests {
             "expected exactly BACKUP_RETENTION backups; got {}",
             backups.len()
         );
+    }
+
+    #[test]
+    fn a_save_that_changes_nothing_keeps_no_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Bard.toml");
+        write_with_backup(&path, "v1\n").unwrap();
+        for _ in 0..3 {
+            write_with_backup(&path, "v1\n").unwrap();
+        }
+        assert_eq!(list_backups(&path), Vec::<PathBuf>::new());
+        write_with_backup(&path, "v2\n").unwrap();
+        assert_eq!(list_backups(&path).len(), 1);
     }
 
     #[test]
