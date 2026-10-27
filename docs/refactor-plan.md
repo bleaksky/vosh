@@ -2136,6 +2136,8 @@ A check of `docs/requirements.md` against the code found promises that were neve
 6. `#list`, TinTin++ style, read as `$name[1]`, `$name[-1]` and `$name[#]`, kept in the profile with `#list <name> keep`.
 7. Text encoding per profile, UTF-8 that reads a stray byte as Windows Latin 1, or Latin 1, read once as bytes leave the telnet layer.
 
+You asked on October 27 to ship all seven in 0.96.0 after a run of the dev app, and feat/pre-1.0 merged into main for it. In that run you heard VoiceOver read new game lines and your prompt once VoiceOver was on in macOS, so the VoiceOver pass over Settings and Help is what remains of the R25 check.
+
 #### October 27. Item 1, command history
 
 - The file. `src-tauri/src/input/history.rs` keeps each session's commands in `history.txt` for the first session and `history-<n>.txt` for the rest, beside the scrollback and named like it. `append` adds each command as it goes out, so a crash loses none. `load` reads the newest 1,000 and cuts a longer file back with `swap_in`. Closing a session deletes the file with its scrollback.
