@@ -2161,6 +2161,14 @@ The review found a leak and five smaller faults, all fixed.
 
 Help 5.1 says how Send it counts and what Or when you send matches. The golden profile files gain both fields.
 
+The review found five faults, all fixed with a test for each in Rust.
+
+- An after send still waiting when the next tick came was replaced and never went, so a long offset on a short tick sent nothing. It goes at that tick now, and the next one waits its turn.
+- `#tick reset` or Or when you send between an early send and the game's tick cleared the mark, so the tick sent the command again. While synced a reset leaves the mark, since the game's tick still ends the cycle.
+- A send left waiting when you cleared Send each tick or moved the offset could go later with no tick behind it. Any setting but an after offset with a command drops it.
+- The card could not keep seconds before while the number was 0, since 0 has no sign. The side now lives on the card, and the number stops 1 second short of Every as the timer does.
+- A match while offline restarted the count though nothing reached the game. Only a connected session counts now.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
