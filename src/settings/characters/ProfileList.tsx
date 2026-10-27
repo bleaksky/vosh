@@ -32,6 +32,8 @@ import {
 import {
   profileExportFile,
   profileImportRead,
+  profileReveal,
+  profileRestore,
   profileSetLogin,
   type SessionIdentity,
 } from '../../ipc/characters';
@@ -47,6 +49,8 @@ import { errorText } from '../../lib/text';
 import { useSelected, useSessions } from '../../stores/session/sessionsStore';
 import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../ui';
 import { ExportDialog } from './ExportDialog';
+import { RestoreDialog } from './RestoreDialog';
+import { revealLabel } from '../../lib/revealLabel';
 import type { ImportFile } from './profileImport';
 
 // The profile list on the Characters page: one 38 px row per profile
@@ -114,6 +118,7 @@ export function ProfileList({
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [exporting, setExporting] = useState<{ name: string; characters: string[] } | null>(null);
+  const [restoring, setRestoring] = useState<string | null>(null);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
@@ -498,10 +503,27 @@ export function ProfileList({
           </MenuItem>
           <MenuItem onSelect={pick(() => exportProfile(menu.name))}>Export to Downloads</MenuItem>
           <MenuSeparator />
+          <MenuItem onSelect={pick(() => void run(() => profileReveal(menu.name)))}>
+            {revealLabel(document.documentElement.dataset.platform)}
+          </MenuItem>
+          <MenuItem onSelect={pick(() => setRestoring(menu.name))}>Restore from a backup…</MenuItem>
+          <MenuSeparator />
           <MenuItem disabled={menuPlayed} onSelect={pick(() => setDeleting(menu.name))}>
             <span className={menuPlayed ? undefined : 'st-menu-danger'}>Delete…</span>
           </MenuItem>
         </MenuSurface>
+      )}
+
+      {restoring && (
+        <RestoreDialog
+          name={restoring}
+          onRestore={(file) => {
+            const name = restoring;
+            setRestoring(null);
+            void run(() => profileRestore(name, file));
+          }}
+          onCancel={() => setRestoring(null)}
+        />
       )}
 
       {exporting && (

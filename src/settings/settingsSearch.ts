@@ -621,7 +621,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   // Characters. No section means the active profile.
   {
     label: 'Profiles',
-    keywords: 'profile character rename duplicate delete switch',
+    keywords:
+      'profile character rename duplicate delete switch backup restore file finder explorer',
     target: at('characters'),
   },
   {

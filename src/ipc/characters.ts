@@ -158,6 +158,33 @@ export interface ImportPreview {
   presets_stay: boolean;
 }
 
+/** One backup Vosh kept of a profile file, newest first. */
+export interface ProfileBackup {
+  /** The backup's file name, which `profile_restore` takes back. */
+  file: string;
+  /** When the file was saved, in ms since the epoch. */
+  saved_ms: number;
+  triggers: number;
+  aliases: number;
+  macros: number;
+  timers: number;
+}
+
+/** The backups of `name` that differ from each other, newest first. */
+export async function profileBackups(name: string): Promise<ProfileBackup[]> {
+  return invoke<ProfileBackup[]>('profile_backups', { name });
+}
+
+/** Put `name` back as `file` holds it. Vosh keeps the file you have now
+ *  as a backup first. */
+export async function profileRestore(name: string, file: string): Promise<void> {
+  await invoke('profile_restore', { name, file });
+}
+
+/** Show the profile's file in Finder, Explorer or the file manager. */
+export async function profileReveal(name: string): Promise<void> {
+  await invoke('profile_reveal', { name });
+}
 /** Read `text`, the file you picked as `fileName`, as a Vosh profile
  *  export, and say what it holds. Changes nothing. A file that is no
  *  export is refused with the sentence to show. */
