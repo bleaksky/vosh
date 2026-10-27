@@ -162,7 +162,8 @@ pub(crate) async fn profile_backups(
     name: String,
 ) -> Result<Vec<ProfileBackup>, String> {
     let path = profile_file(state.inner(), &name).await?;
-    Ok(backups::list(&path))
+    let loadout_mode = state.global_catalog.lock().await.is_some();
+    Ok(backups::list(&path, loadout_mode))
 }
 
 /// Put the profile `name` back as its backup `file` holds it, see
@@ -188,7 +189,10 @@ pub(crate) async fn profile_reveal(
     let shown = if path.is_file() {
         crate::app::plugins::reveal::reveal_file(&path)
     } else {
-        crate::app::plugins::reveal::reveal(path.parent().unwrap_or(&path))
+        // A profile that never saved shows the profiles folder, made
+        // first when no profile saved yet.
+        let folder = path.parent().unwrap_or(&path);
+        std::fs::create_dir_all(folder).and_then(|()| crate::app::plugins::reveal::reveal(folder))
     };
     shown.map_err(|e| {
         warn!(profile = %name, error = %e, "could not open the file manager");

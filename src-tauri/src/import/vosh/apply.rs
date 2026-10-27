@@ -158,7 +158,7 @@ pub(crate) async fn restore_profile<R: tauri::Runtime>(
     name: &str,
     file: &str,
 ) -> Result<(), String> {
-    let after = {
+    let after = 'restore: {
         let _persist_guard = PERSIST_LOCK.lock().await;
         if state.relaunch_pending.load(Ordering::Acquire) {
             return Err(RESTORE_MIGRATION_PENDING.into());
@@ -175,10 +175,39 @@ pub(crate) async fn restore_profile<R: tauri::Runtime>(
         let shown_name = crate::profile::set::display_name(name);
         let backup = crate::profile::backups::backup_of(&path, file)
             .ok_or_else(|| format!("Vosh has no such backup of {shown_name}."))?;
-        let config = ProfileConfig::load(&backup).map_err(|e| {
+        let mut config = ProfileConfig::load(&backup).map_err(|e| {
             warn!(path = %backup.display(), error = %e, "profile backup unreadable");
             format!("Vosh could not read that backup of {shown_name}, so nothing changed.")
         })?;
+        let loadout_mode = state.global_catalog.lock().await.is_some();
+        if loadout_mode && crate::profile::backups::holds_catalog_items(&config) {
+            return Err(format!(
+                "That backup of {shown_name} is from before the move to loadouts. Its aliases, \
+                 triggers and macros would go into the shared catalog, so Vosh leaves it."
+            ));
+        }
+        let Some(open) = state.open_profile(name) else {
+            // No session plays it, so its file takes the backup at once,
+            // with the plugins it lists now when it still reads. A file
+            // that does not read is what a restore is for, so it never
+            // stops one, and it stays as a backup.
+            let _set = state.loaded_profile_set().await?;
+            if let Ok(now) = ProfileConfig::load(&path) {
+                config.plugins = now.plugins;
+            }
+            crate::disk::atomic::release_unread(&path);
+            config.save(&path).map_err(|e| {
+                warn!(path = %path.display(), error = %e, "profile restore failed");
+                format!("Vosh could not save the {shown_name} profile file.")
+            })?;
+            break 'restore After::default();
+        };
+        // What the profile holds now goes to its file first, edits that
+        // wait for their save included, so the save after the restore
+        // keeps it as a backup.
+        if !open.held() {
+            persist_state(state, &open).await;
+        }
         let sessions = state.all_sessions();
         let selected = state.selected_session();
         let shown = selected.profile();

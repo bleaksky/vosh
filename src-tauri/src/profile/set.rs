@@ -513,6 +513,7 @@ impl ProfileSet {
         if path.exists() {
             std::fs::remove_file(&path)?;
         }
+        crate::profile::backups::delete_all(&path);
         crate::profile::layout_history::delete(&self.root, name);
         self.save_index()?;
         Ok(())
@@ -533,6 +534,9 @@ impl ProfileSet {
             // A file Vosh could not read at launch stays refused under
             // its new name.
             crate::disk::atomic::follow_unread(&old_path, &new_path);
+        }
+        if old_path != new_path {
+            crate::profile::backups::follow_rename(&old_path, &new_path);
         }
         crate::profile::layout_history::rename(&self.root, old, &new);
         if self.index.active == old {
