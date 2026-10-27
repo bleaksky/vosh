@@ -63,6 +63,9 @@ async fn a_burst_from_a_trigger_goes_at_the_pace() {
 async fn the_same_command_from_a_trigger_stops_at_the_fortieth() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::New)).await;
+    // The stop looks as each line leaves, so a quick pace keeps the wait
+    // short.
+    h.state.selected_profile().await.ui.send_pace_per_sec = 20;
     h.connect().await;
     answer_pings(&h, "kick").await;
     h.servers[0].push(&pings(45));

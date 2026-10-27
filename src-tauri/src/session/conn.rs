@@ -820,7 +820,7 @@ async fn walk_command<R: tauri::Runtime>(
         let key = matches!(command, WalkCommand::Stop { key: true, .. });
         let out = conn.walker.command(command, Instant::now());
         if !out.send.is_empty() {
-            let wrote = match conn.stream.write_all(&out.send).await {
+            let wrote = match conn.stream.write_step(&out.send).await {
                 Ok(()) => conn.stream.flush().await,
                 Err(e) => Err(e),
             };

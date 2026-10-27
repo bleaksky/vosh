@@ -8,13 +8,18 @@
 //! waiting means automation sends faster than any game reads, so Vosh
 //! drops them all and says so.
 //!
-//! Aabahran counts the same command sent many times in a row. It warns
-//! at 25, holds you at 50 and freezes the character at 75, and a
-//! trigger that answers each game line with the same command walks into
-//! that at the game's own pace, which no pace stops. So the
-//! [`REPEAT_STOP`]th line of automation that repeats the line before it
-//! is held back, and so is each one after it, until you type a command
-//! or automation sends another line. What you type is never held back.
+//! Aabahran counts the same command sent many times in a row
+//! (`comm.c`, `read_from_buffer`). Past 25 repeats it warns and lags you,
+//! past 50 it warns again, and past 75 it leaves the character mortally
+//! wounded. A trigger that answers each game line with the same command
+//! walks into that at the game's own pace, which no pace stops. So the
+//! [`REPEAT_STOP`]th line of automation in a row that repeats the one
+//! before is held back, dropped with a line that says so, and so is each
+//! one after it, until another command goes. The count follows the
+//! game's: it counts lines as they leave, what you type and `#walk`
+//! steps among them, a line of one character neither counts nor ends a
+//! run but sets the line to compare with, and `!` repeats the last line.
+//! What you type is never held back.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -101,34 +106,47 @@ impl Pace {
         self.refilled = Some(now);
     }
 
+    /// Whether `line` repeats the last, as the game counts: `!` always,
+    /// and a line of two characters or more that matches it. None for a
+    /// line the game does not count, one of a single character.
+    fn repeats_last(&self, line: &[u8]) -> Option<bool> {
+        let line = text(line);
+        if line == b"!" {
+            return Some(true);
+        }
+        (line.len() >= 2).then(|| line == self.last.as_slice())
+    }
+
     /// Count `line` as gone to the game, for the repeat stop.
     fn went(&mut self, line: &[u8]) {
+        match self.repeats_last(line) {
+            Some(true) => self.repeats = self.repeats.saturating_add(1),
+            Some(false) => {
+                self.repeats = 1;
+                self.held_back = false;
+            }
+            None => {}
+        }
         let line = text(line);
-        if line == self.last.as_slice() {
-            self.repeats = self.repeats.saturating_add(1);
-        } else {
+        if line != b"!" {
             self.last = line.to_vec();
-            self.repeats = 1;
-            self.held_back = false;
         }
     }
 
-    /// Lines you typed went out: the count starts again from them, and a
-    /// repeat stop lets go.
-    pub(crate) fn typed(&mut self, buf: &[u8]) {
+    /// Lines that went past the pace, what you type and `#walk` steps:
+    /// they count as the game counts them, and nothing holds them back.
+    pub(crate) fn passed(&mut self, buf: &[u8]) {
         for line in lines(buf) {
             if line.ends_with(b"\n") {
-                self.last = text(line).to_vec();
-                self.repeats = 1;
-                self.held_back = false;
+                self.went(line);
             }
         }
     }
 
-    /// Whether automation's `line` must wait for you, as the repeat stop
-    /// says, and note it when it starts.
+    /// Whether automation's `line`, about to leave, must stay back as the
+    /// repeat stop says, and note it when the stop starts.
     fn repeat_stops(&mut self, line: &[u8]) -> bool {
-        if text(line) != self.last.as_slice() {
+        if self.repeats_last(line) != Some(true) {
             return false;
         }
         if self.held_back {
@@ -137,7 +155,7 @@ impl Pace {
         if self.repeats + 1 >= REPEAT_STOP {
             self.held_back = true;
             self.notices.push(format!(
-                "Vosh held back `{}`, which your triggers, timers or scripts sent {REPEAT_STOP} times in a row. The game freezes a character that sends one command 75 times in a row. Type any command to let them send it again.",
+                "Vosh held back `{}`, which your triggers, timers or scripts sent {REPEAT_STOP} times in a row, since the game lags you past 25 and wounds you past 75. Send another command to start the count again.",
                 String::from_utf8_lossy(text(line))
             ));
             return true;
@@ -152,11 +170,12 @@ impl Pace {
         self.refill(now);
         let mut now_out = Vec::new();
         for line in lines(buf) {
-            if self.repeat_stops(line) {
-                continue;
-            }
-            self.went(line);
             if self.per_sec.is_none() || (self.waiting.is_empty() && self.tokens >= 1.0) {
+                // The line leaves now, so the repeat stop looks now.
+                if self.repeat_stops(line) {
+                    continue;
+                }
+                self.went(line);
                 if self.per_sec.is_some() {
                     self.tokens -= 1.0;
                 }
@@ -179,15 +198,19 @@ impl Pace {
     pub(crate) fn due(&mut self, now: Instant) -> Vec<u8> {
         self.refill(now);
         let mut out = Vec::new();
-        while let Some(line) = self.waiting.front() {
+        while let Some(line) = self.waiting.pop_front() {
+            if self.repeat_stops(&line) {
+                continue;
+            }
             if self.per_sec.is_some() {
                 if self.tokens < 1.0 {
+                    self.waiting.push_front(line);
                     break;
                 }
                 self.tokens -= 1.0;
             }
-            out.extend_from_slice(line);
-            self.waiting.pop_front();
+            self.went(&line);
+            out.extend_from_slice(&line);
         }
         out
     }
@@ -208,6 +231,12 @@ impl Pace {
     /// How many lines wait.
     pub(crate) fn waiting(&self) -> usize {
         self.waiting.len()
+    }
+
+    /// Every line that waits, in order, taken out of the pace, as the
+    /// writing card's hold takes them.
+    pub(crate) fn take_waiting(&mut self) -> Vec<u8> {
+        self.waiting.drain(..).flatten().collect()
     }
 
     /// Drop every line that waits, as you asked, and say how many.
@@ -309,8 +338,11 @@ mod tests {
             notices[0].starts_with("Vosh held back `kick`"),
             "{notices:?}"
         );
-        // A command you type lets it go, and the count starts again.
-        pace.typed(b"kick\r\n");
+        // Typing the same command counts on, as the game counts it.
+        pace.passed(b"kick\r\n");
+        assert_eq!(count(&pace.offer(b"kick\r\n", t0)), 0);
+        // Another command starts the count again.
+        pace.passed(b"score\r\n");
         assert_eq!(count(&pace.offer(b"kick\r\n", t0)), 1);
         // So does another line from automation.
         let mut pace = Pace::default();
@@ -332,6 +364,53 @@ mod tests {
             ["Dropped the 3 lines that waited to send."]
         );
         assert_eq!(pace.drop_waiting(), 0);
+        assert_eq!(pace.take_notices(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_line_of_one_character_ends_a_run_without_counting_and_bang_repeats() {
+        let t0 = Instant::now();
+        let mut pace = Pace::default();
+        pace.set(None);
+        for _ in 0..30 {
+            let _ = pace.offer(b"kick\r\n", t0);
+        }
+        // A walk step goes past, and the game compares the next kick
+        // with it, so the run starts again.
+        pace.passed(b"n\r\n");
+        let mut sent = 0;
+        for _ in 0..30 {
+            sent += count(&pace.offer(b"kick\r\n", t0));
+        }
+        assert_eq!(sent, 30);
+        // A long walk never counts.
+        let mut steps = 0;
+        for _ in 0..60 {
+            steps += count(&pace.offer(b"n\r\n", t0));
+        }
+        assert_eq!(steps, 60);
+        // `!` repeats the line before it.
+        let _ = pace.offer(b"bash\r\n", t0);
+        let mut bangs = 0;
+        for _ in 0..60 {
+            bangs += count(&pace.offer(b"!\r\n", t0));
+        }
+        assert_eq!(bangs, REPEAT_STOP as usize - 2);
+    }
+
+    #[test]
+    fn the_count_follows_the_order_lines_leave() {
+        let t0 = Instant::now();
+        let mut pace = Pace::default();
+        // Ten kicks go and thirty wait. You type score, which goes first,
+        // so the thirty that leave after it start a run of their own.
+        let _ = pace.offer(&b"kick\r\n".repeat(40), t0);
+        pace.passed(b"score\r\n");
+        let mut later = 0;
+        for second in 1..=20 {
+            later += count(&pace.due(t0 + Duration::from_secs(second)));
+        }
+        assert_eq!(later, 30);
         assert_eq!(pace.take_notices(), Vec::<String>::new());
     }
 }

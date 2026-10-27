@@ -111,7 +111,23 @@ impl Stream {
     /// lines and the lines you type go. Lines you type start the repeat
     /// count of the pace again.
     pub(crate) async fn write_now(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.pace.typed(buf);
+        self.pace.passed(buf);
+        self.write_raw(buf).await
+    }
+
+    /// Write a `#walk` step past the pace, since the walker sends one at
+    /// a time and waits for the room, so a step never waits behind
+    /// automation and runs out its time. The writing card's hold still
+    /// keeps it, as it keeps every line of automation.
+    pub(crate) async fn write_step(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        if let Some(held) = &mut self.held {
+            if buf.ends_with(b"\n") {
+                self.lines_out += lines_in(buf);
+                held.extend_from_slice(buf);
+                return Ok(());
+            }
+        }
+        self.pace.passed(buf);
         self.write_raw(buf).await
     }
 
@@ -120,8 +136,12 @@ impl Stream {
         self.pace.set(per_sec);
     }
 
-    /// When the next line the pace holds gets its turn.
+    /// When the next line the pace holds gets its turn. None while the
+    /// writing card holds the lines, which holds those too.
     pub(crate) fn pace_due(&self) -> Option<Instant> {
+        if self.held.is_some() {
+            return None;
+        }
         self.pace.next_due()
     }
 
@@ -175,7 +195,13 @@ impl Stream {
     /// Hold the lines the session sends from here, the commands triggers,
     /// timers, the tick, Lua and `#walk` send, until [`Stream::release`].
     pub(crate) fn hold(&mut self) {
-        self.held.get_or_insert_with(Vec::new);
+        // The lines the pace holds wait behind the hold too, so none
+        // drains into the game's editor while the card drives it.
+        let waiting = self.pace.take_waiting();
+        self.lines_out += lines_in(&waiting);
+        self.held
+            .get_or_insert_with(Vec::new)
+            .extend_from_slice(&waiting);
     }
 
     /// How many lines wait in the hold.

@@ -415,7 +415,7 @@ pub(super) async fn walked<R: tauri::Runtime>(
         .await?;
     }
     if !send.is_empty() {
-        conn.stream.write_all(&send).await?;
+        conn.stream.write_step(&send).await?;
         conn.stream.flush().await?;
     }
     Ok(())
