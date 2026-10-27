@@ -224,12 +224,17 @@ deletes its file.
 
 The commands each session sent from the command line, one per line,
 oldest first, which Up brings back after a restart. Each one lands at
-the end of the file as it goes out, so a crash loses none. Launch reads
-the newest 1,000 and cuts a longer file back to them with `swap_in`.
-A command that gives the game a password, like `password <old> <new>`,
-never lands. The page keeps what you type in password mode and lines
-for the game's editor out before they get here. The files take the
-scrollback's numbers, and closing a session deletes its file.
+the end of the file as it goes out, so a crash loses none. The page asks
+for a session's newest 1,000 the first time it shows the session, and
+Vosh cuts a longer file back to them with `swap_in`. A command that gives
+the game a password never lands, read as the input pipeline reads it,
+so `look;password a b` and an alias that sends `password` stay out. On a
+game that speaks GMCP, nothing you send before it says you play lands
+either, which keeps out a password typed ahead of the login's prompt.
+The page keeps what you type in password mode and lines for the game's
+editor out before they get here. One lock covers every read, write and
+delete of the files. The files take the scrollback's numbers, and closing
+a session deletes its file.
 
 ### scripts/ and plugins/
 

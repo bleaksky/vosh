@@ -2144,6 +2144,15 @@ A check of `docs/requirements.md` against the code found promises that were neve
 
 Help 2.2 says history comes back after a restart and what it leaves out, and `docs/data-files.md` lists the files.
 
+The review found a leak and five smaller faults, all fixed.
+
+- `history_push` checked the line as typed, so `look;password a b` and an alias that sends `password` reached the file. `keeps` now reads the line as the input pipeline does, variables filled in, split at `;` and aliases expanded, and turns it down when any command gives a password or the aliases run too deep.
+- A password typed before the game hides your typing went out as a plain line and landed. On a game that speaks GMCP, nothing sent before the game says you play joins history now, the lines the log counts as login.
+- A byte that was not UTF-8 or a failed cut made the load fail, so a session lost its history for the run. The load reads past both now.
+- Pushes could reach the file before the load read it, or out of order, which doubled lines. Each session's pushes now wait for its load and for each other.
+- One lock covers every read, write and delete of the files, so a cut never loses a line added while it read, and a line on its way when its session closes makes no file.
+- A refused line cleared the mark of the line sent after it and could leave a command twice in a row. It clears only its own mark now and closes the gap it leaves.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

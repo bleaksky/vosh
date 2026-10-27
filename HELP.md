@@ -257,7 +257,7 @@ Command history records every line you send in a session. You can get the lines 
 - Press `ArrowDown` to go toward newer matches. One step past the newest match puts back exactly what you typed before the search started.
 - You can edit the recalled line at any point. An edit ends the search. The next `ArrowUp` starts a new search from the text that is now in the command line.
 
-History skips a line that is the same as the line before it. It never records what you type in password mode, or a command that gives the game a password, such as `password <old> <new>`. Lines you write in the game's editor stay out too.
+History skips a line that is the same as the line before it. It never records what you type in password mode, or a command that gives the game a password, such as `password <old> <new>`. This is also true when the command is after a `;` or comes from an alias. Lines you write in the game's editor stay out too. On Aabahran, and on other games that tell Vosh when you play, nothing you type while you log in goes into history.
 
 When `Keep last command` is on, the line you just sent stays in the command line, fully selected. `Enter` sends it again, and when you type, your text replaces it.
 
