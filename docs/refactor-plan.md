@@ -2196,6 +2196,14 @@ The review found four faults that broke the sandbox or its limits, and smaller o
 
 Help 7.1 names both menu items and says what a restore brings back, and Help 8.3 says where the backups come from.
 
+The review found two faults and three risks, all fixed with tests.
+
+- In loadout mode a backup from before the move held the old aliases, triggers and macros, and a restore laid them over the catalog for every character, the hazard Help 7.2 warns of. Such a backup no longer lists, and a restore refuses one.
+- A profile no session plays had to read its current file before a restore could write it, so a broken file, the case a restore is for, stopped it. A restore writes such a profile's file at once now, with the plugins it lists when it still reads.
+- Edits that waited for their save were lost in a restore. The profile saves first now, so they land in a backup.
+- Backups stayed under the old name after a rename and stayed on disk after a delete. They move with a rename and go with a delete now, as the layout history does.
+- The dialog showed no backup when the list failed, and the arrows did not move the pick. It shows the error now, and the arrows move through the list.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

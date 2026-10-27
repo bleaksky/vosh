@@ -43,7 +43,10 @@ are the last ten changes. A failed write leaves the old file in place.
 Restore from a backup… under Characters lists a profile file's backups
 through `src-tauri/src/profile/backups.rs` and lays one over the profile
 as an import with Replace does, keeping its world, characters and
-plugins, and in loadout mode the catalog.
+plugins, and in loadout mode the catalog. In loadout mode a backup that
+holds aliases, triggers, macros or preset edits is from before the move
+and neither lists nor restores. A profile's backups move with a rename
+and go with a delete, as its layout history does.
 
 A file Vosh could not read goes on the unread list, and every save to it
 fails until it reads again. So a save never writes the defaults over
