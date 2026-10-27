@@ -642,6 +642,18 @@ Trigger send templates use `${name}` for regex capture groups, not for this stor
 
 Example. `#var potion yellow` and then `quaff $potion` sends `quaff yellow` to the server. When a target is set, `cast dispel $target` aims at your current target.
 
+A list keeps items in order under one name. Make and change lists in the command line with `#list`.
+
+- To add items, type `#list <name> add <items>`. Put braces around an item with spaces, as in `#list foes add Orla {the guard}`.
+- To put an item at a place, type `#list foes insert 1 Maren`. To remove the item at a place, type `#list foes delete 2`. To change it, type `#list foes set 2 Tolliver`.
+- `#list foes find Orla` tells you where the item is. `#list foes sort` sorts the items, and `#list foes clear` empties the list.
+- To see a list, type `#list foes`. To see every list, type `#lists`. To remove a list, type `#unvar foes`.
+- Use an item in a command as `$foes[1]`. `$foes[-1]` is the last item, and `$foes[#]` is the number of items. A place past the end is empty.
+
+A new list has session scope, as `#var` does. To keep it after the connection ends, type `#list foes keep`, and the profile file keeps it. A list holds 500 items at most. A name is a variable or a list, but not both. So `#list` refuses a name that a variable has, and setting a variable with the name of a list takes the list away.
+
+Example. `#list foes add Orla Maren`, and then `kill $foes[1]` sends `kill Orla` to the server.
+
 ### 3.6 Bind keys to macros
 
 <!-- id: automate.macros -->
@@ -677,7 +689,7 @@ Slash commands control Vosh from the command line, without Settings. Vosh handle
 
 - Type `#help` at any time for the full list, or `#help <words>` to open Help on those words.
 - Manage aliases with `#alias <name> <expansion>`, `#unalias <name> [group]`, and `#aliases`.
-- Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
+- Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`. Manage lists with `#list <name> ...` and `#lists`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name> [group]`, and `#triggers`.
 - To tell Vosh how to read your prompt, use `#prompt game {setting}` and `#prompt fight {setting}`, with the codes you type in the game. Or use `#prompt {regex}`, where each named group such as `(?<hp>\d+)` is a value. `#prompt` alone tells you how Vosh reads your prompt. `#unprompt` stops it.
 - To turn the drawing of your design on or off, use `#prompt draw on|off`. With drawing off, you see the prompt of the game, and your design stays. With no design of your own, Vosh draws your prompt as the game does. It follows each change you make to the prompt in the game.
@@ -710,6 +722,8 @@ Lua scripts run inside Vosh. They add automation through the global `mud` table.
 - Run one line of Lua with `#lua <code>`.
 
 Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes directly to the server. `mud.input(text)` goes through the input pipeline again. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` add automation. In the callback, `captures[1]` holds the full match, and `captures[2]` and on hold the groups.
+
+`mud.var(name)` reads a variable, `mud.set_var(name, value)` sets a session variable, `mud.set_profile_var(name, value)` sets a profile variable, and `mud.unset_var(name)` removes one. `mud.list(name)` gives a copy of a list as a table. `mud.set_list(name, items)` and `mud.set_profile_list(name, items)` put a list in place from a table of text, and `mud.unset_list(name)` removes one.
 
 `mud.on_gmcp(package, callback)` gives you server data as a table. `mud.timer(secs, callback)` schedules work that you can cancel with `mud.cancel_timer`. A plugin can draw a pane of its own with `mud.pane`, as Make a pane with Lua at 3.10 shows.
 

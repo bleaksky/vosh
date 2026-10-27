@@ -2213,6 +2213,15 @@ The review found two faults and three risks, all fixed with tests.
 
 Help 2.1 tells the pace and the repeat stop.
 
+#### October 27. Item 6, `#list`
+
+- The store. `VariableStore` in `crates/automation/src/vars.rs` keeps lists beside variables, and a name is one or the other, so setting either takes away the other of its name. `VarView::list` reads the session's list over the profile's, as variables read. `interpolate` reads `$name[1]`, `$name[-1]` and `$name[#]` from a list, a place past the end as empty. A name that is no list, or an index that is no number, passes through as typed, as an unknown variable does. `split_items` reads the items of a command, a run in braces as one.
+- The commands. `#list <name>` with `add`, `insert`, `delete`, `set`, `find`, `sort`, `clear` and `keep`, and `#lists`, in `src-tauri/src/input/vars.rs`. A new list is the session's and `keep` moves it to the profile. `#unvar` removes a list too. A list holds 500 items of 4 KB at most.
+- The file. `profile_lists` in the profile file holds the lists the profile keeps, out of the file while there are none.
+- Lua. `mud.list`, `mud.set_list`, `mud.set_profile_list` and `mud.unset_list`, through a list snapshot and a `SetList` action as variables go. A profile list marks the profile for saving.
+
+Help 3.5 tells the lists, and Help 3.8 names the variable and list calls in Lua, which it never named before.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
