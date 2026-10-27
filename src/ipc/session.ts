@@ -172,7 +172,8 @@ export async function charsetGet(profile?: string | null): Promise<Charset> {
   return invoke<Charset>('charset_get', { profile });
 }
 
-/** Set the charset of `profile`. A connection takes it as it starts. */
+/** Set the charset of `profile`. Each session on it reads by it from
+ *  its next read. */
 export async function charsetSet(charset: Charset, profile?: string | null): Promise<void> {
   await invoke('charset_set', { charset, profile });
 }

@@ -46,7 +46,7 @@ export function CharsetRow({ onError }: { onError: (message: string | null) => v
   return (
     <Row
       label="Text encoding"
-      description="Most worlds use UTF-8, and Vosh still shows an older world's accented letters. Pick Latin 1 when the game garbles the accented letters you send. It applies from your next connect."
+      description="Most worlds use UTF-8, and Vosh still shows an older world's accented letters. Pick Latin 1 when the game garbles the accented letters you send."
       anchor="charset"
     >
       <Select

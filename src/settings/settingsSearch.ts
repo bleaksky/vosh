@@ -61,7 +61,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   {
     label: 'Text encoding',
     description:
-      "Most worlds use UTF-8, and Vosh still shows an older world's accented letters. Pick Latin 1 when the game garbles the accented letters you send. It applies from your next connect.",
+      "Most worlds use UTF-8, and Vosh still shows an older world's accented letters. Pick Latin 1 when the game garbles the accented letters you send.",
     keywords: 'charset encoding utf8 latin1 iso 8859 windows 1252 accents accented letters garbled',
     target: at('general', 'connection', 'charset'),
   },
