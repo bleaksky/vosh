@@ -8,7 +8,7 @@ This file says what 1.0 must do. It started as the kickoff prompt, which now liv
 
 ### Connection and protocol
 
-- TCP and TLS connections, with optional StartTLS.
+- TCP and TLS connections.
 - Telnet option negotiation with RFC 1143 state for each option, covering IAC, SB, SE, GA, EOR, DO, DONT, WILL and WONT.
 - TTYPE answered with MTTS, NAWS, `NEW-ENVIRON`, CHARSET, EOR, ECHO for password lines, SGA and GMCP. Vosh turns down every other option, MSDP, MCCP and MXP among them.
 - ANSI color, 256 color and 24 bit truecolor.
@@ -19,11 +19,11 @@ This file says what 1.0 must do. It started as the kickoff prompt, which now liv
 
 - Command line input with multiline edit, history and prefix search.
 - Aliases with parameter substitution and recursion guards.
-- Triggers using PCRE compatible regex with capture groups, ordered priority and an enable flag for each pattern.
+- Triggers using regular expressions with capture groups, ordered priority and an enable flag for each pattern. The syntax is that of the Rust regex crate, which matches in linear time, so no pattern can hang a session. It has no lookaround and no backreferences.
 - Trigger actions of highlight, gag, replace, send, run script and route to pane.
 - Variables and lists with profile and session scope.
 - Speedwalk with `#walk`, which walks a route one step at a time and stops when the game stops you.
-- Macros bound to keys and key chords, with optional modal sets.
+- Macros bound to keys with their modifiers, in groups you turn on and off.
 - Every line logged with its colors to logs.sqlite, with a log switch for each profile. Save as file writes the logs you pick, one session or a span of days, as plain `.txt`, as ANSI `.log` or as one web page `.html`, with each line's time in front when you check Include times.
 - A scrollback size in lines, set under Logs, from 1,000 to 100,000 lines with 10,000 by default. Regex search runs in the log view, and every line there shows its time.
 - Command queue with a throttle that respects server rate limits.
@@ -40,29 +40,28 @@ This file says what 1.0 must do. It started as the kickoff prompt, which now liv
 
 - On macOS a native surface draws the terminal. Windows and Linux draw it with xterm.js.
 - ANSI 8 and 16 color, the xterm 256 color palette and 24 bit RGB truecolor. All three render correctly when a server mixes them in one stream.
-- A configurable blend mode for trigger highlights, so a highlight composes with the game's color instead of stomping it.
+- Trigger highlights that compose with the game's color instead of stomping it. A base style colors only the text the game left in its default color, and a wash tints the whole line.
 - Full UTF 8 input and output. Vosh renders the Basic Multilingual Plane and the Supplementary Multilingual Plane, emoji, CJK, Cyrillic, Greek and combining characters included.
 - Correct grid handling for CJK double width characters, combining marks and zero width joiner sequences. No column drift after wide glyphs.
-- Font smoothing with grayscale and subpixel options. The default on each platform respects the OS setting, and each profile can override it.
+- Grayscale antialiased glyphs on the native surface. On Windows and Linux the web view draws glyphs as the system does.
 - High DPI and Retina rendering with crisp glyphs at any zoom level.
 - A configurable monospace font with a fallback chain. A missing character draws as a visible replacement glyph, never a silent drop.
 - Font size, line height and letter spacing for each profile.
 - Bold, italic, underline, strikethrough and inverse. Real bold and italic font variants win over synthetic styling.
-- Ligatures off by default to keep the grid aligned, with a toggle for players who want them.
-- Cursor styles of block, underline and bar, with optional blink.
+- Ligatures off, to keep the grid aligned.
+- A caret on the command line drawn as a block, an underline or a bar, with its own color and optional blink.
 - Box drawing and block element characters render flush in the grid.
-- Optional inline images for MUDs that send them. The Kitty graphics protocol and iTerm2 inline images come first, and sixel is a stretch.
 
 ### Out of band data
 
 - GMCP messages routed into a typed event bus that triggers, scripts and the page subscribe to.
-- Built in handlers for common GMCP packages, Char.Vitals, Room.Info, Comm.Channel.Text, Char.Items.List and Char.Skills.List among them.
+- Built in handlers for the GMCP packages Aabahran sends, Char.Vitals, Char.Stats, Char.Affects, Char.Status, Room.Info and Comm.Channel among them.
 - Variables filled from GMCP data and exposed to triggers and scripts under a stable namespace.
 
 ### Map
 
 - A map pane inside the main window, drawn from the rooms and tiles the game sends.
-- Rooms and exits drawn with configurable glyphs, colors and labels, with support for your own glyph sets and bitmap tilesets.
+- Rooms and exits drawn with the glyphs and colors of your theme, or with a bitmap tileset of your own.
 - Click a room on the tiles the game sends to walk there with `#walk`.
 - Vosh stores no map of its own.
 
@@ -76,21 +75,21 @@ This file says what 1.0 must do. It started as the kickoff prompt, which now liv
 ### Scripting
 
 - An embedded Lua engine exposed to triggers, aliases, key bindings and the GMCP event bus.
-- Scripts loaded from files in the profile directory.
-- Sandboxed by default, with explicit permissions for the filesystem and the network.
+- Scripts loaded from Lua files in the scripts folder.
+- Sandboxed, with no access to your files or the network.
 - A small standard library covering string and regex helpers, JSON, time and a logger.
 - Plugins, each a folder of Lua with a manifest. A Plugins page in Settings installs, writes, switches and removes them.
 
 ### Profiles and settings
 
-- A config file for each profile in TOML, versioned with a schema.
+- A config file for each profile in TOML. Vosh records each upgrade it makes to your files, so each one runs once.
 - An import path for TinTin++ aliases and triggers where possible, with a clear list of what it cannot bring over.
 - A Settings window, plus a text editor fallback for power users.
 - Backup, restore and export of profiles.
 
 ### Distribution
 
-- A macOS universal binary, arm64 plus x86_64, signed and notarized.
+- macOS builds for arm64 and x86_64, each signed and notarized.
 - A Windows installer, MSI or NSIS. Windows builds of 1.0 ship unsigned for now, and README says how to get past SmartScreen.
 - A Linux AppImage and a deb plus rpm pair.
 - Opt in auto update.
@@ -159,3 +158,21 @@ The macOS build draws the terminal on a native surface under the page. The same 
 ### Windows ships unsigned for now
 
 Signing on Windows needs a certificate from an outside service, and a certificate costs money. So Windows builds of 1.0 ship unsigned, README says how to get past SmartScreen, and the release workflow keeps a place for the certificate so signing can follow without other changes.
+
+### What waits until after 1.0
+
+The review of October 27 checked every line of this file against the code. The promises below were never built, and no player has asked for them, so they wait until after 1.0.
+
+- StartTLS. Vosh connects over TLS from the first byte, and turns the StartTLS option down as it does every option it does not speak.
+- Inline images. No world Vosh targets sends them.
+- Key chords and modal sets for macros. Groups you switch with `#group` already give one key a job in each set.
+- A ligature switch and font smoothing choices. The native surface draws every glyph in grayscale to keep the grid exact.
+- Glyph sets of your own on the map. A bitmap tileset covers the same need.
+- Lua access to your files and the network. The sandbox stays closed, which suits the anti goals.
+- One universal Mac app. Each chip gets its own build, and the updater fetches the right one.
+
+### Lines that now say what Vosh does
+
+The same review rewrote six lines so they describe what Vosh does rather than what the kickoff guessed. Triggers use the Rust regex syntax, since it can never hang a session. A highlight composes with the game's color through its base and wash choices, not a separate blend mode. The caret styles belong to the command line, where you type. The GMCP line names the packages Aabahran sends, which have no Char.Items.List and no Char.Skills.List. Scripts load from one scripts folder, and plugins from theirs. Profile files carry no schema number, because Vosh records each upgrade it makes and never runs one twice.
+
+The review also put seven items on the plan for 1.0, each one a line this file already holds. They are command history that outlives a restart, a throttle on what Vosh sends, a charset for each profile, a tick offset and a reset from a line you type, JSON and regex helpers in Lua, `#list`, and a way to show your profile file and restore it from a backup.
