@@ -117,15 +117,20 @@ impl Default for Negotiator {
 
 /// The names RFC 2066 servers give Latin 1, from the IANA list, and the
 /// Windows form a profile reads by.
-const LATIN1_NAMES: [&[u8]; 8] = [
+const LATIN1_NAMES: [&[u8]; 13] = [
     b"ISO-8859-1",
     b"ISO_8859-1",
+    b"ISO_8859-1:1987",
     b"ISO8859-1",
+    b"ISO-IR-100",
     b"LATIN1",
     b"LATIN-1",
     b"L1",
+    b"IBM819",
     b"CP819",
+    b"CSISOLATIN1",
     b"WINDOWS-1252",
+    b"CP1252",
 ];
 
 impl Negotiator {
@@ -322,12 +327,21 @@ impl Negotiator {
     }
 
     fn respond_charset(&self, payload: &[u8]) -> Vec<u8> {
-        // CHARSET REQUEST: 0x01 SEP charset1 SEP charset2 ...
-        if payload.first() != Some(&charset::REQUEST) || payload.len() < 3 {
+        // CHARSET REQUEST: 0x01 ["[TTABLE ]" version] SEP charset1 SEP ...
+        if payload.first() != Some(&charset::REQUEST) {
             return Vec::new();
         }
-        let separator = payload[1];
-        let charsets = &payload[2..];
+        let list = &payload[1..];
+        let list = match list.strip_prefix(b"[TTABLE ]") {
+            Some(rest) => rest.get(1..).unwrap_or_default(),
+            None => list,
+        };
+        let Some((&separator, charsets)) = list.split_first() else {
+            return Vec::new();
+        };
+        if charsets.is_empty() {
+            return Vec::new();
+        }
         let mut offered = charsets.split(|&b| b == separator);
         let chosen = if self.latin1 {
             offered.find(|cs| {
@@ -783,6 +797,21 @@ mod tests {
             n.ttype_responses.last().map(String::as_str),
             Some("MTTS 267")
         );
+    }
+
+    #[test]
+    fn a_charset_request_with_a_ttable_version_reads_its_list() {
+        let mut n = Negotiator::new();
+        let mut payload = vec![charset::REQUEST];
+        payload.extend_from_slice(b"[TTABLE ]\x01 US-ASCII UTF-8");
+        let bytes = n.handle(&Event::Subnegotiation {
+            option: option::CHARSET,
+            payload,
+        });
+        let mut expected = vec![IAC, SB, option::CHARSET, charset::ACCEPTED];
+        expected.extend_from_slice(b"UTF-8");
+        expected.extend_from_slice(&[IAC, SE]);
+        assert_eq!(bytes, expected);
     }
 
     #[test]
