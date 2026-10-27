@@ -2169,6 +2169,14 @@ The review found five faults, all fixed with a test for each in Rust.
 - The card could not keep seconds before while the number was 0, since 0 has no sign. The side now lives on the card, and the number stops 1 second short of Every as the timer does.
 - A match while offline restarted the count though nothing reached the game. Only a connected session counts now.
 
+#### October 27. Item 3, JSON and regex in Lua
+
+- `json`. `crates/script/src/json.rs` puts `json.encode`, `json.decode`, `json.null` and `json.array` in the globals. A table with the keys 1 to n encodes as an array and any other as an object, with its keys sorted. `json.null` stands for null both ways, and an array `json.decode` builds carries a mark, as one `json.array` marks does, so an empty one encodes back as `[]`. A function, a table inside itself, a number that is not finite and a key that is not text or a number raise an error at your line. Text is 1 MB at most each way, tables nest 100 deep at most, and each walk looks at the clock every 1,000 values as the hook would.
+- `regex`. `crates/script/src/regexes.rs` puts `regex.match`, `regex.find`, `regex.gmatch`, `regex.gsub` and `regex.split` in the globals, on the bytes regex of the crate triggers use, so a pattern you test on a trigger works there. Positions count bytes from 1 and `init` counts as `string.find` counts it. `gmatch` skips an empty match where the last one ended, as Lua 5.4 does. `gsub` takes a template with `$1` and `$$` or a function, whose nil keeps the match. Each engine keeps the last 64 patterns compiled and turns down one over 1 MB compiled.
+- Both go in before the plugin environments, so a plugin reads them through the read only view it has of `string`. GMCP tables reach Lua as before, null as nil.
+
+Help 3.8 has a table of the calls.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

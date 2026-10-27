@@ -742,7 +742,7 @@ Each plugin row has a menu of its own. `Reload` reads the plugin from its folder
 
 A new install of a plugin starts off for every profile. When you install over a plugin with the same name, it replaces that plugin and turns it off everywhere. So new code never runs until you turn it on. Vosh refuses a plugin with no `manifest.toml`, a plugin with a file outside its own folder, and a plugin over 5 MB or 200 files. It tells you why above the page.
 
-Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other. A plugin can read the standard libraries, such as `string` and `table`, but it can't change them. It starts from new globals each time it loads. A line that it gives to `mud.input` runs no `#` command except `#echo`.
+Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other. A plugin can read the standard libraries, such as `string`, `table`, `json`, and `regex`, but it can't change them. It starts from new globals each time it loads. A line that it gives to `mud.input` runs no `#` command except `#echo`.
 
 An alias that a plugin makes lasts while the plugin runs, and Vosh never saves it. It works only in the session whose plugin made it. It replaces your own aliases with that name, in every group, until the plugin turns off. When you turn a plugin off, Vosh removes its aliases and all else it added.
 
@@ -753,6 +753,24 @@ Every Lua error and every `print` shows in the terminal of its session after a g
 The Console under Scripts in Settings shows the same lines for the session in front, each with its time. It runs the Lua you type in its field in that session, as `#lua` does. `Clear` empties the Console and doesn't change the terminal.
 
 The page of a plugin shows the lines of that plugin under `Output`. Its field runs Lua inside the plugin, where it sees the globals of the plugin and its own `mud` table. The line that its newest error or stop names since it last loaded shows tinted in the editor. Point at it to see the error.
+
+Two tables help with text and data. `json` reads and writes JSON. `regex` matches text with the same regex syntax as triggers. Positions count bytes from 1, as `string.find` does.
+
+| Call                                 | What it does                                                                                                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `json.encode(value)`                 | Gives the JSON text for a value. A table with the keys 1 to n becomes an array, and any other table becomes an object.                                                                                                            |
+| `json.decode(text)`                  | Gives the value that the JSON text holds.                                                                                                                                                                                         |
+| `json.null`                          | Stands for a JSON null, both ways. So an array with a null keeps its length.                                                                                                                                                      |
+| `json.array(t)`                      | Marks a table as an array, so an empty one encodes as `[]`. An array from `json.decode` has the mark already.                                                                                                                     |
+| `regex.match(text, pattern, init)`   | Gives each group of the first match, or the whole match when the pattern has no groups. Gives nil when nothing matches.                                                                                                           |
+| `regex.find(text, pattern, init)`    | Gives where the first match starts and ends, then its groups.                                                                                                                                                                     |
+| `regex.gmatch(text, pattern)`        | Gives each match in turn, for a `for` loop.                                                                                                                                                                                       |
+| `regex.gsub(text, pattern, repl, n)` | Replaces each match, or the first `n`, and gives the new text and the count. `repl` is text where `$1` names a group and `$$` is a dollar sign, or a function that gets the groups. When the function gives nil, the match stays. |
+| `regex.split(text, pattern)`         | Gives a table of the pieces between the matches.                                                                                                                                                                                  |
+
+Example. `regex.match("hp 120/300", [[(\d+)/(\d+)]])` gives `120` and `300`. `json.encode({hp = 120})` gives `{"hp":120}`.
+
+A regex pattern can't run long, because its time grows only with the text. JSON text is 1 MB at most each way. A table that holds itself, a function, or a number that isn't finite is an error.
 
 Lua runs between the lines the game sends, so Vosh keeps each call short. It stops a call that runs longer than 100 ms. It also stops a call that uses 32 MB more than it started with, or that takes your scripts past 128 MB in total. `pcall` can't catch the stop. The time limit also works inside string patterns and the `table` functions. So a pattern that backtracks over a long line stops like a loop.
 
