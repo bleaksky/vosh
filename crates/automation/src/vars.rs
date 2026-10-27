@@ -8,6 +8,7 @@
 //! session value hides the profile value of the same name until it clears.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
@@ -19,11 +20,13 @@ pub enum Scope {
 pub const LIST_ITEMS: usize = 500;
 
 /// The variables and lists of one scope. A name is a variable or a list,
-/// never both, so setting one takes away the other of that name.
+/// never both, so setting one takes away the other of that name. A list
+/// is shared, so the snapshot Lua reads takes it without a copy, and a
+/// change copies it only while a snapshot still holds it.
 #[derive(Debug, Default, Clone)]
 pub struct VariableStore {
     vars: HashMap<String, String>,
-    lists: HashMap<String, Vec<String>>,
+    lists: HashMap<String, Arc<Vec<String>>>,
 }
 
 impl VariableStore {
@@ -48,15 +51,20 @@ impl VariableStore {
     pub fn set_list(&mut self, name: impl Into<String>, items: Vec<String>) {
         let name = name.into();
         self.vars.remove(&name);
-        self.lists.insert(name, items);
+        self.lists.insert(name, Arc::new(items));
     }
 
     pub fn list(&self, name: &str) -> Option<&[String]> {
-        self.lists.get(name).map(Vec::as_slice)
+        self.lists.get(name).map(|items| items.as_slice())
+    }
+
+    /// The shared list `name`, as a snapshot takes it.
+    pub fn shared_list(&self, name: &str) -> Option<&Arc<Vec<String>>> {
+        self.lists.get(name)
     }
 
     pub fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-        self.lists.get_mut(name)
+        self.lists.get_mut(name).map(Arc::make_mut)
     }
 
     /// Every list, by name.
@@ -66,7 +74,14 @@ impl VariableStore {
 
     /// Take the list `name` out of this scope.
     pub fn take_list(&mut self, name: &str) -> Option<Vec<String>> {
-        self.lists.remove(name)
+        self.lists
+            .remove(name)
+            .map(|items| Arc::try_unwrap(items).unwrap_or_else(|shared| (*shared).clone()))
+    }
+
+    /// Whether this scope holds `name`, as a variable or as a list.
+    pub fn holds(&self, name: &str) -> bool {
+        self.vars.contains_key(name) || self.lists.contains_key(name)
     }
 
     pub fn get(&self, name: &str) -> Option<&str> {
@@ -91,18 +106,44 @@ pub struct VarView<'a> {
 }
 
 impl<'a> VarView<'a> {
+    /// The scope that decides `name`: the session when it holds the
+    /// name as a variable or a list, else the profile. So a session
+    /// variable hides a profile list of its name, and the reverse.
+    fn scope_of(self, name: &str) -> &'a VariableStore {
+        if self.session.holds(name) {
+            self.session
+        } else {
+            self.profile
+        }
+    }
+
     /// Resolve a variable. Session wins, then profile.
     pub fn get(self, name: &str) -> Option<&'a str> {
-        self.session.get(name).or_else(|| self.profile.get(name))
+        self.scope_of(name).get(name)
     }
 
     /// Resolve a list, with the scope that holds it. Session wins, then
     /// profile.
     pub fn list(self, name: &str) -> Option<(&'a [String], Scope)> {
-        self.session
-            .list(name)
-            .map(|items| (items, Scope::Session))
-            .or_else(|| self.profile.list(name).map(|items| (items, Scope::Profile)))
+        let scope = if self.session.holds(name) {
+            Scope::Session
+        } else {
+            Scope::Profile
+        };
+        self.scope_of(name).list(name).map(|items| (items, scope))
+    }
+
+    /// Every list a lookup finds, the session's first, each shared.
+    pub fn shared_lists(self) -> impl Iterator<Item = (&'a str, &'a Arc<Vec<String>>)> {
+        let session = self.session;
+        let ours = session.lists.iter().map(|(k, v)| (k.as_str(), v));
+        let theirs = self
+            .profile
+            .lists
+            .iter()
+            .filter(move |(k, _)| !session.holds(k))
+            .map(|(k, v)| (k.as_str(), v));
+        ours.chain(theirs)
     }
 
     /// Every list a lookup finds, the session's first.
@@ -111,7 +152,7 @@ impl<'a> VarView<'a> {
         session.lists().map(|(k, v)| (k, v, Scope::Session)).chain(
             self.profile
                 .lists()
-                .filter(move |(k, _)| session.list(k).is_none())
+                .filter(move |(k, _)| !session.holds(k))
                 .map(|(k, v)| (k, v, Scope::Profile)),
         )
     }
@@ -123,7 +164,7 @@ impl<'a> VarView<'a> {
         session.iter().map(|(k, v)| (k, v, Scope::Session)).chain(
             self.profile
                 .iter()
-                .filter(move |(k, _)| session.get(k).is_none())
+                .filter(move |(k, _)| !session.holds(k))
                 .map(|(k, v)| (k, v, Scope::Profile)),
         )
     }
@@ -474,5 +515,35 @@ mod tests {
         assert_eq!(split_items(r"{a \} b}"), ["a } b"]);
         assert_eq!(split_items("  "), Vec::<String>::new());
         assert_eq!(split_items("{open"), ["open"]);
+    }
+
+    #[test]
+    fn a_session_variable_hides_a_profile_list_of_its_name() {
+        let mut session = VariableStore::new();
+        let mut profile = VariableStore::new();
+        profile.set_list("foes", vec!["Orla".into()]);
+        session.set("foes", "x");
+        let view = VarView {
+            session: &session,
+            profile: &profile,
+        };
+        // The variable reads as a variable does, the brackets after it
+        // left as typed.
+        assert_eq!(view.interpolate("$foes $foes[1]"), "x x[1]");
+        assert_eq!(view.lists().count(), 0);
+        // And the reverse.
+        let mut session = VariableStore::new();
+        let mut profile = VariableStore::new();
+        profile.set("foes", "x");
+        session.set_list("foes", vec!["Orla".into()]);
+        let view = VarView {
+            session: &session,
+            profile: &profile,
+        };
+        assert_eq!(
+            view.interpolate("$foes $foes[1] 日本$foes[#]"),
+            "$foes Orla 日本1"
+        );
+        assert_eq!(view.iter().count(), 0);
     }
 }
