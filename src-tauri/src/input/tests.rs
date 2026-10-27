@@ -2662,3 +2662,110 @@ fn a_timer_group_turned_off_by_lua_stops_its_timers() {
     let _ = process(&mut p, "#lua mud.set_group_enabled('upkeep', false)");
     assert!(!p.timer_fires(&p.timers[0]));
 }
+
+#[test]
+fn a_list_grows_reads_and_changes_by_place() {
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let r = process_on(&mut p, &mut c, "#list foes add Orla {the guard}");
+    assert_eq!(r.echo, ["foes holds 2 items"]);
+    let _ = process_on(&mut p, &mut c, "#list foes insert 1 Maren");
+    assert_eq!(
+        process_on(&mut p, &mut c, "kill $foes[1]").bytes,
+        b"kill Maren\r\n"
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "kill $foes[-1]").bytes,
+        b"kill the guard\r\n"
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "say $foes[#]").bytes,
+        b"say 3\r\n"
+    );
+    let _ = process_on(&mut p, &mut c, "#list foes set 2 Tolliver");
+    assert_eq!(
+        process_on(&mut p, &mut c, "#list foes find Tolliver").echo,
+        ["Tolliver is item 2 of foes"]
+    );
+    let _ = process_on(&mut p, &mut c, "#list foes delete 1");
+    let _ = process_on(&mut p, &mut c, "#list foes sort");
+    assert_eq!(
+        process_on(&mut p, &mut c, "#list foes").echo,
+        [
+            "list foes (session), 2 items:",
+            "  1  the guard",
+            "  2  Tolliver"
+        ]
+    );
+    assert!(ProfileConfig::from_profile(&p).profile_lists.is_empty());
+    // Keep moves it to the profile, whose file saves it.
+    assert_eq!(
+        process_on(&mut p, &mut c, "#list foes keep").echo,
+        ["foes kept in the profile"]
+    );
+    assert_eq!(
+        ProfileConfig::from_profile(&p)
+            .profile_lists
+            .get("foes")
+            .map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["1 list(s):", "  profile foes  2 items"]
+    );
+    let _ = process_on(&mut p, &mut c, "#unvar foes");
+    assert!(ProfileConfig::from_profile(&p).profile_lists.is_empty());
+}
+
+#[test]
+fn a_list_and_a_variable_never_share_a_name() {
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let _ = process_on(&mut p, &mut c, "#var foes Orla");
+    let r = process_on(&mut p, &mut c, "#list foes add Maren");
+    assert!(
+        r.echo.iter().any(|l| l.contains("foes is a variable")),
+        "{:?}",
+        r.echo
+    );
+    let r = process_on(&mut p, &mut c, "#list foes delete 9");
+    assert!(r.echo.iter().any(|l| l.contains("foes is a variable")));
+    let _ = process_on(&mut p, &mut c, "#unvar foes");
+    let _ = process_on(&mut p, &mut c, "#list foes add Maren");
+    let r = process_on(&mut p, &mut c, "#list foes delete 9");
+    assert!(
+        r.echo.iter().any(|l| l.contains("foes has no item 9")),
+        "{:?}",
+        r.echo
+    );
+}
+
+#[test]
+fn lua_writes_a_list_and_reads_it_back() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua mud.set_profile_list('friends', {'Tolliver', 'Orla'})",
+    );
+    assert!(ran.lua.durable_changed);
+    assert_eq!(
+        process_on(&mut p, &mut c, "tell $friends[2] hello").bytes,
+        b"tell Orla hello\r\n"
+    );
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua mud.set_list('friends', {mud.list('friends')[1]})",
+    );
+    let _ = ran;
+    assert_eq!(
+        process_on(&mut p, &mut c, "say $friends[#]").bytes,
+        b"say 1\r\n"
+    );
+}

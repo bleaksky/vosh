@@ -20,6 +20,12 @@ script = "mud.send(\"cast heal \" .. args[1])"
 target = "orc"
 weapon = "sword"
 
+[profile_lists]
+foes = [
+    "Orla",
+    "the guard",
+]
+
 [[triggers]]
 name = "tells"
 pattern = '''^(\w+) tells you '(.*)'$'''

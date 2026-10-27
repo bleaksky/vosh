@@ -41,6 +41,10 @@ pub(crate) struct ProfileConfig {
     pub aliases: Vec<Alias>,
     #[serde(default)]
     pub profile_vars: BTreeMap<String, String>,
+    /// The lists `#list <name> keep` keeps in the profile, each its items
+    /// in order. Out of the file while there are none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profile_lists: BTreeMap<String, Vec<String>>,
     /// Every trigger. Room triggers go under `room_triggers` on disk,
     /// see [`trigger_lists`].
     #[serde(flatten, with = "trigger_lists")]
@@ -234,6 +238,11 @@ impl ProfileConfig {
             .iter()
             .map(|(name, value)| (name.to_string(), value.to_string()))
             .collect();
+        let profile_lists: BTreeMap<String, Vec<String>> = profile
+            .vars
+            .lists()
+            .map(|(name, items)| (name.to_string(), items.to_vec()))
+            .collect();
 
         let triggers = profile.triggers.list();
 
@@ -259,6 +268,7 @@ impl ProfileConfig {
         let mut config = Self {
             aliases,
             profile_vars,
+            profile_lists,
             triggers,
             tick,
             ui,
@@ -349,6 +359,9 @@ impl ProfileConfig {
         let mut vars = vosh_automation::vars::VariableStore::new();
         for (k, v) in &self.profile_vars {
             vars.set(k.clone(), v.clone());
+        }
+        for (k, items) in &self.profile_lists {
+            vars.set_list(k.clone(), items.clone());
         }
         profile.vars = vars;
 

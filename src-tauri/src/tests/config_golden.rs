@@ -687,6 +687,7 @@ fn full_profile() -> ProfileConfig {
             ("target".into(), "orc".into()),
             ("weapon".into(), "sword".into()),
         ]),
+        profile_lists: BTreeMap::from([("foes".into(), vec!["Orla".into(), "the guard".into()])]),
         triggers: full_triggers(),
         tick: full_tick(),
         ui: full_ui(),
