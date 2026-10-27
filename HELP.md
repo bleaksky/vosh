@@ -1350,7 +1350,7 @@ A profile has its own aliases, triggers, macros, and variables, its tracked affe
 - To edit a profile, select it. When you select a profile, the session you play doesn't change.
 - Choose its `World`, then turn on `Use this profile when you log in`. The row names your character after Vosh has seen you log in. When you turn it on, it takes that character from any other profile on the same world. Vosh tells you so under the list.
 - On a port that isn't the own port of the world, such as 1825, something different happens. A profile that claims the character on the whole world keeps it on the own port of the world. The line under the list names each claim that moved.
-- Open the more menu of a profile to choose `Switch to this profile`, `Rename…`, `Duplicate…`, `Export to Downloads`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
+- Open the more menu of a profile to choose `Switch to this profile`, `Rename…`, `Duplicate…`, `Export to Downloads`, `Show in Finder`, `Restore from a backup…`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
 - With two or more sessions open, the line under the list names the sessions on each profile, such as `Default plays in Tolliver's session, Build in Orla's.`
 
 `Duplicate…` copies all of the setup of a profile, but not its world and login. You can't delete a profile that a session plays. So first change that session to another profile, or close it.
@@ -1358,6 +1358,10 @@ A profile has its own aliases, triggers, macros, and variables, its tracked affe
 Settings edits the profile of the session in front, and follows you to the profile of another session. Unsaved changes to a list under Automation keep Settings on their profile until you save or discard them.
 
 `Export to Downloads` saves the profile as a file in your Downloads folder. When a profile has characters, Vosh first asks which ones the file names. Each character starts off. So a profile you share names your characters only when you turn them on.
+
+`Show in Finder` shows the file of the profile in its folder, so you can open it in a text editor. On Windows the item is `Show in Explorer`, and on Linux it is `Show the folder`. Vosh reads the file again only when a session opens the profile. So change the file while no session plays the profile, or Vosh saves over your change.
+
+`Restore from a backup…` lists the backups that Vosh keeps of the profile, newest first. Each one shows when Vosh set it aside and how many triggers, aliases, and macros it holds. Pick one and click `Restore`. The profile goes back to what the backup holds, in every session that plays it. It keeps its world, its characters, and its plugins. Vosh first keeps what you have now as a backup, so you can restore that one if you change your mind. In loadout mode, your triggers, aliases, and macros are in the shared catalog. So a restore brings back the timers, the group switches, and the layouts of the profile, and the list shows how many timers each backup holds.
 
 The file has the presets you have on and your changes to them. So a friend who imports it sees your colors. In loadout mode it has the presets of the catalog, which every character shares. `New profile` copies both from the profile you play. `#profile reset` turns every preset off and clears your changes. `#profile load` reads both back from the file.
 
@@ -1594,7 +1598,7 @@ These are the contents of that folder.
 - `scripts/` holds Lua files for `#script load`.
 - `plugins/` holds plugin folders, each with a `manifest.toml`.
 
-Every TOML save is safe by design. Vosh writes the new text to a temp file. It copies the old file to `<file>.bak.<timestamp>`, with a timestamp in milliseconds. It then puts the temp file in place in one atomic step, and keeps the ten newest backups. A save that fails leaves the old file in place. To undo a bad profile edit, copy the backup you want over the live file.
+Every TOML save is safe by design. Vosh writes the new text to a temp file. It copies the old file to `<file>.bak.<timestamp>`, with a timestamp in milliseconds. It then puts the temp file in place in one atomic step, and keeps the ten newest backups. A save that changes nothing keeps no backup, so the ten backups are your last ten changes. A save that fails leaves the old file in place. To undo a bad profile edit, use `Restore from a backup…` in the menu of the profile under Characters.
 
 A `profile.toml` that is still at the root is the single profile file of the builds before named profiles. Vosh moves it to `profiles/default.toml` the first time a build with named profiles starts.
 

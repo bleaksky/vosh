@@ -37,8 +37,13 @@ Profile files, profiles.toml, global.toml, catalog.toml, loadouts.toml,
 the wizard journal and the copies in `profiles/legacy` go through
 `write_with_backup` in `src-tauri/src/disk/atomic.rs`. It writes
 `<file>.tmp`, copies the old file to `<file>.bak.<unix ms>`, renames the
-temp file over the old one and keeps the ten newest backups. A failed
-write leaves the old file in place.
+temp file over the old one and keeps the ten newest backups. A file
+that already holds the new text is left alone with no backup, so the ten
+are the last ten changes. A failed write leaves the old file in place.
+Restore from a backup… under Characters lists a profile file's backups
+through `src-tauri/src/profile/backups.rs` and lays one over the profile
+as an import with Replace does, keeping its world, characters and
+plugins, and in loadout mode the catalog.
 
 A file Vosh could not read goes on the unread list, and every save to it
 fails until it reads again. So a save never writes the defaults over

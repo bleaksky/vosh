@@ -2177,6 +2177,17 @@ The review found five faults, all fixed with a test for each in Rust.
 
 Help 3.8 has a table of the calls.
 
+#### October 27. Item 4, show the profile file and restore it from a backup
+
+- Fewer, truer backups. `write_with_backup` leaves a file that already holds the new text alone and keeps no backup, so the ten backups are the last ten changes rather than the last ten saves.
+- The list. `src-tauri/src/profile/backups.rs` lists the backups of a profile file newest first, each with when it was set aside and how many triggers, aliases, macros and timers it holds. Two with the same text show once, one equal to the file as it is does not show, and one that does not read is left out. `backup_of` takes only a name of the file's own backups, so no restore reads outside the folder.
+- The restore. `restore_profile` in `src-tauri/src/import/vosh/apply.rs` reads the backup and lays it over the profile through the same `replace` an import with Replace uses. So a profile a session plays takes it in memory as `#profile load` would, each session follows its tick, prompt and plugins, and the profile keeps its world, characters and plugins, and in loadout mode the catalog. The save that follows keeps what the file held as a backup, so a restore can be undone. A backup that does not read changes nothing.
+- Show in Finder. `profile_reveal` shows the file selected in its folder on macOS and Windows and opens the folder on Linux, through `reveal_file`, or the profiles folder for a profile that never saved one.
+- The page. A profile's menu under Characters gains Show in Finder and Restore from a backup…, and `RestoreDialog.tsx` lists the backups as two line rows to pick from, with the counts of timers alone in loadout mode. Search finds both through Profiles.
+- The dialog fix. A confirm dialog rendered inside the sticky profile list drew under the details column beside it. `ConfirmDialog` now renders its layer in the body, so no stacking context can cover it, and in place where no document exists.
+
+Help 7.1 names both menu items and says what a restore brings back, and Help 8.3 says where the backups come from.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
