@@ -22,6 +22,9 @@ beforeEach(() => {
   push.mockReset().mockResolvedValue(true);
 });
 
+/** Let every answer from Rust that is on its way land. */
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
 // Each session keeps its own command history and the line you were
 // composing in it. React DOM mounts a command line on a stand in DOM
 // (src/test/fakeDom.ts) and the test moves the selection under it.
@@ -134,22 +137,33 @@ describe('the command line of each session', () => {
     const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
     await act(async () => root.render(createElement(CommandLine, { session: 1, line })));
     expect(get).toHaveBeenCalledWith(1);
-    // A command goes out while the earlier ones still load, and one of
-    // them reached the file already.
-    await act(async () => line.now?.lines.remember('score', 1));
+    // Two commands go out while the earlier ones still load. Neither
+    // reaches Rust before the load answers, so the file it reads holds
+    // neither.
+    await act(async () => {
+      line.now?.lines.remember('score', 1);
+      line.now?.lines.remember('where', 1);
+    });
+    await settle();
+    expect(push).not.toHaveBeenCalled();
     await act(async () => answer(['look', 'cast armor', 'score']));
-    expect(line.now?.lines.history).toEqual(['look', 'cast armor', 'score']);
+    await settle();
+    expect(line.now?.lines.history).toEqual(['look', 'cast armor', 'score', 'where']);
+    expect(push.mock.calls).toEqual([
+      ['score', 1],
+      ['where', 1],
+    ]);
+    await act(async () => line.now?.lines.recallOlder());
+    expect(line.now?.value).toBe('where');
     await act(async () => line.now?.lines.recallOlder());
     expect(line.now?.value).toBe('score');
-    await act(async () => line.now?.lines.recallOlder());
-    expect(line.now?.value).toBe('cast armor');
     // Showing the session again asks for nothing more.
     await act(async () => root.render(createElement(CommandLine, { session: 1, line })));
     expect(get).toHaveBeenCalledTimes(1);
     await act(async () => root.unmount());
   });
 
-  it('hands each new command to Rust once, and drops one Rust turns down', async () => {
+  it('hands each new command to Rust once, in order, and drops one Rust turns down', async () => {
     push.mockImplementation(async (sent) => !sent.startsWith('password '));
     const line: { now: Line | null } = { now: null };
     const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
@@ -158,12 +172,30 @@ describe('the command line of each session', () => {
       line.now?.lines.remember('look', 1);
       line.now?.lines.remember('look', 1);
       line.now?.lines.remember('password old new', 1);
+      line.now?.lines.remember('look', 1);
     });
+    await settle();
     expect(push.mock.calls).toEqual([
       ['look', 1],
       ['password old new', 1],
+      ['look', 1],
     ]);
+    // The refusal took the password out without leaving look twice.
     expect(line.now?.lines.history).toEqual(['look']);
+    await act(async () => root.unmount());
+  });
+
+  it('reads a session it never showed before adding to it', async () => {
+    get.mockImplementation(async (id) => (id === 1 ? ['kill rat'] : []));
+    const line: { now: Line | null } = { now: null };
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () => root.render(createElement(CommandLine, { session: 2, line })));
+    // A paste that began in session 1 lands after the selection moved.
+    await act(async () => line.now?.lines.remember('look', 1));
+    await settle();
+    expect(get).toHaveBeenCalledWith(1);
+    await act(async () => root.render(createElement(CommandLine, { session: 1, line })));
+    expect(line.now?.lines.history).toEqual(['kill rat', 'look']);
     await act(async () => root.unmount());
   });
 
@@ -174,10 +206,11 @@ describe('the command line of each session', () => {
       act(async () => root.render(createElement(CommandLine, { session, line, open })));
     await show(2, [1, 2]);
     await act(async () => line.now?.lines.remember('where', 2));
+    await settle();
     await show(1, [1, 2]);
     await show(1, [1]);
-    // A new session that takes the same number starts empty and reads
-    // its own file again.
+    // Should the number come back, as it can after a restart, the
+    // session starts empty and reads its own file again.
     await show(2, [1, 2]);
     expect(line.now?.lines.history).toEqual([]);
     expect(get.mock.calls.filter(([id]) => id === 2)).toHaveLength(2);
@@ -203,8 +236,12 @@ describe('the lines a history holds', () => {
     ]);
   });
 
-  it('drops only the newest copy of a line', () => {
+  it('drops only the newest copy of a line, and the repeat it leaves', () => {
     expect(withoutNewest(['look', 'score', 'look'], 'look')).toEqual(['look', 'score']);
+    expect(withoutNewest(['look', 'password a b', 'look', 'where'], 'password a b')).toEqual([
+      'look',
+      'where',
+    ]);
     const lines = ['look'];
     expect(withoutNewest(lines, 'where')).toBe(lines);
   });

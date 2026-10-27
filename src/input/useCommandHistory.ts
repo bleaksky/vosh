@@ -4,7 +4,7 @@
 // scrollback (src-tauri/src/input/history.rs), so a session shows what it
 // sent in earlier runs too.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { historyGet, historyPush } from '../ipc/input';
 
 /** No history yet. */
@@ -34,11 +34,13 @@ export function joinHistory(earlier: readonly string[], now: readonly string[]):
   return joined;
 }
 
-/** `lines` without the newest copy of `line`. The same array when it
- *  holds none. */
+/** `lines` without the newest copy of `line`, and without a repeat that
+ *  leaves where it stood. The same array when it holds none. */
 export function withoutNewest(lines: readonly string[], line: string): readonly string[] {
   const at = lines.lastIndexOf(line);
-  return at < 0 ? lines : [...lines.slice(0, at), ...lines.slice(at + 1)];
+  if (at < 0) return lines;
+  const after = lines[at - 1] === lines[at + 1] ? at + 2 : at + 1;
+  return [...lines.slice(0, at), ...lines.slice(after)];
 }
 
 /** The typed history of the command line, which holds `value`, and the
@@ -93,32 +95,39 @@ export function useCommandHistory(
     return matchingIndices(searchPrefix);
   };
 
-  // The sessions whose earlier commands were asked for, and the newest
-  // line handed to Rust for each, so a repeat never lands in the file.
-  const loaded = useRef(new Set<number>());
+  // For each session, the newest step of its file: the load of its
+  // earlier commands, then each push in the order you sent. A push waits
+  // for the one before it, so the file takes lines in order and the load
+  // never reads a line this run already holds. And the newest line handed
+  // to Rust, so a repeat never lands in the file.
+  const steps = useRef(new Map<number, Promise<void>>());
   const pushed = useRef(new Map<number, string>());
 
-  useEffect(() => {
-    if (loaded.current.has(session)) return;
-    loaded.current.add(session);
-    historyGet(session).then(
+  const load = useCallback((id: number): Promise<void> => {
+    const known = steps.current.get(id);
+    if (known) return known;
+    const loaded = historyGet(id).then(
       (earlier) => {
         if (!Array.isArray(earlier) || earlier.length === 0) return;
-        if (!pushed.current.has(session)) pushed.current.set(session, earlier[earlier.length - 1]!);
-        setHistories((now) =>
-          new Map(now).set(session, joinHistory(earlier, now.get(session) ?? NONE)),
-        );
+        if (!pushed.current.has(id)) pushed.current.set(id, earlier[earlier.length - 1]!);
+        setHistories((now) => new Map(now).set(id, joinHistory(earlier, now.get(id) ?? NONE)));
       },
       () => undefined,
     );
-  }, [session]);
+    steps.current.set(id, loaded);
+    return loaded;
+  }, []);
+
+  useEffect(() => {
+    void load(session);
+  }, [session, load]);
 
   useEffect(() => {
     if (open.length === 0) return;
     const live = new Set(open);
-    for (const id of [...loaded.current]) {
+    for (const id of [...steps.current.keys()]) {
       if (!live.has(id)) {
-        loaded.current.delete(id);
+        steps.current.delete(id);
         pushed.current.delete(id);
       }
     }
@@ -133,7 +142,8 @@ export function useCommandHistory(
 
   /** Add a line submitted to `to`, unless it repeats its newest one, and
    *  hand it to Rust for the next run. A line Rust turns down, one that
-   *  gives the game a password, leaves the history again. */
+   *  gives the game a password or one sent while logging in, leaves the
+   *  history again. */
   const remember = (line: string, to: number) => {
     setHistories((now) => {
       const lines = now.get(to) ?? NONE;
@@ -142,18 +152,21 @@ export function useCommandHistory(
     });
     if (pushed.current.get(to) === line) return;
     pushed.current.set(to, line);
-    historyPush(line, to).then(
-      (kept) => {
+    const forget = () => {
+      if (pushed.current.get(to) === line) pushed.current.delete(to);
+    };
+    const sent = load(to)
+      .then(() => historyPush(line, to))
+      .then((kept) => {
         if (kept !== false) return;
-        pushed.current.delete(to);
+        forget();
         setHistories((now) => {
           const lines = now.get(to) ?? NONE;
           const next = withoutNewest(lines, line);
           return next === lines ? now : new Map(now).set(to, next);
         });
-      },
-      () => undefined,
-    );
+      }, forget);
+    steps.current.set(to, sent);
   };
 
   const resetSearch = () => {
