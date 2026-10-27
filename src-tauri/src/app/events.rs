@@ -202,6 +202,11 @@ pub(crate) const WALK: &str = "session://walk";
 /// and the writing card, the offer notice and the command line follow
 /// it.
 pub(crate) const WRITING: &str = "session://writing";
+
+/// How many lines the pace holds back, when that changed. The payload is
+/// the count. `onPaced` hears it, and the command line shows the lines
+/// that wait.
+pub(crate) const PACED: &str = "session://paced";
 /// What a screen reader reads of one read while Read new game lines is
 /// on: the plain text of each line that shows, up to 500, how many showed,
 /// your prompt's text when the read brought one, and whether Vosh is in

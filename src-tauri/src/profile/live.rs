@@ -106,6 +106,9 @@ pub(crate) struct Profile {
     /// Vosh dials again after the link drops while you play, see
     /// [`crate::session::reconnect`]. On at first.
     pub(crate) reconnect: OnSwitch,
+    /// How the profile reads the game's text, which a connection takes as
+    /// it starts, see [`crate::session::charset`].
+    pub(crate) charset: crate::session::charset::Charset,
     /// The keys at the top of the profile file this build does not know,
     /// which [`crate::profile::file::ProfileConfig::from_profile`] writes
     /// back as they were.

@@ -6,6 +6,7 @@
 //! in it to the walker there.
 
 mod automation;
+pub(crate) mod history;
 pub(crate) mod profile;
 mod prompt;
 mod script;
@@ -303,6 +304,18 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
             [(LineFrom::You, line)],
             shared_layer.as_ref(),
         );
+        // A line it sends that matches Or when you send starts the
+        // tick's count again. Only a line you type counts, since a timer
+        // or the tick itself sending it would restart the count it runs on,
+        // and only while connected, since nothing else reaches the game.
+        if connection.tick.in_session {
+            crate::tick::reset_on_sent(
+                &profile.tick,
+                &mut connection.tick,
+                &run.apply.send_bytes,
+                tokio::time::Instant::now(),
+            );
+        }
         (profile.open().clone(), quick, run)
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at

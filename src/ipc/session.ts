@@ -14,6 +14,7 @@ import {
   SESSIONS_CHANGED,
   STATE,
   TARGET,
+  PACED,
   WALK,
 } from './events';
 
@@ -161,6 +162,22 @@ export async function reconnectSet(on: boolean, profile?: string | null): Promis
   await invoke('reconnect_set', { on, profile });
 }
 
+/** How a profile reads the game's text and writes yours. UTF-8 reads
+ *  a byte that is not UTF-8 as Latin 1. Latin 1 reads and writes every
+ *  byte as Latin 1. */
+export type Charset = 'utf8' | 'latin1';
+
+/** The charset of `profile`, or of the selected session's profile. */
+export async function charsetGet(profile?: string | null): Promise<Charset> {
+  return invoke<Charset>('charset_get', { profile });
+}
+
+/** Set the charset of `profile`. Each session on it reads by it from
+ *  its next read. */
+export async function charsetSet(charset: Charset, profile?: string | null): Promise<void> {
+  await invoke('charset_set', { charset, profile });
+}
+
 /** Where Connect dials. */
 export interface ConnectionTarget {
   host: string;
@@ -288,6 +305,19 @@ export type WalkProgress =
       total: number;
       why: 'plain' | 'lost_sight' | 'lost_track';
     };
+
+/** How many lines the pace holds back in each session, as the count
+ *  changes. Rust sends `{session, data}`. */
+export async function onPaced(cb: (waiting: number, session: number) => void): Promise<UnlistenFn> {
+  return listen<{ session?: number; data: number }>(PACED, (event) => {
+    cb(typeof event.payload.data === 'number' ? event.payload.data : 0, sessionOf(event.payload));
+  });
+}
+
+/** Drop the lines the pace holds in `session`. */
+export async function sessionPacedDrop(session: number): Promise<void> {
+  await invoke('session_paced_drop', { session });
+}
 
 /** Hear each change to where a session's walk stands, with that
  *  session. A walk ends idle when it arrives or the connection drops. */

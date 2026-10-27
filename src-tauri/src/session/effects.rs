@@ -144,7 +144,7 @@ impl ScriptIo<'_, '_> {
             ScriptIo::Session(stream, sink, walker) => {
                 let out = walker.command(command, Instant::now());
                 if !out.send.is_empty() {
-                    stream.write_all(&out.send).await?;
+                    stream.write_step(&out.send).await?;
                     stream.flush().await?;
                 }
                 if !out.lines.is_empty() {

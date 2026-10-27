@@ -21,6 +21,8 @@ You connect from the session button. It sits in the middle of the title band, ov
 
 While you're connected, the button shows your character name and the world. If a saved profile matches the host and port you dialed, Vosh changes to that profile before it connects. A profile set to log in as your character takes over right after login, when the server tells Vosh who you are.
 
+Vosh reads the text of the game as UTF-8, which most worlds send. If a byte isn't UTF-8, Vosh reads it as Latin 1, so the accented letters of an older world show correctly. If the game shows the accented letters you send incorrectly, set `Text encoding` to `Latin 1` in Settings under General, then Connection. Vosh then reads all the text of the game as Latin 1 and sends your text as Latin 1. The change starts immediately. A profile that you keep for one character changes the encoding when that character logs in.
+
 To disconnect, click the session button and choose `Disconnect`.
 
 ### 1.2 Reconnect
@@ -246,18 +248,22 @@ Turn on `Color commands as you type` to color each line by its first word. An al
 
 To set the delay, use `Wait between pasted lines` in Settings under Input, then Advanced. It goes from 0 to 10000 ms.
 
+Vosh also paces what your triggers, timers, the tick, Lua, and plugins send. When they send a burst, the first 10 lines go at once. The rest go at 4 lines each second, the speed at which Aabahran reads commands. What you type, your aliases, and your macros never wait. While lines wait, the right end of the command line shows how many, such as `6 lines wait`. Click it to drop them. When more than 200 lines wait, your automation sends faster than any game reads, so Vosh drops them all and tells you. To change the speed, or to turn the pace off, use `Pace sends from triggers and timers` and `Lines each second` in Settings under Input, then Advanced.
+
+Aabahran counts each command that you send many times in a row. After 25 it warns you and lags you, after 50 it warns you again, and after 75 it leaves your character mortally wounded. So when your triggers, timers, or scripts send the same line 40 times in a row, Vosh drops it and tells you which line it is. It drops each one after it too, until another command goes to the game. Vosh counts as the game does. A command that you type counts, but Vosh never holds it back. A line of one letter, such as a walk step, doesn't count, and `!` counts as the line before it. This check stays on when you turn the pace off. Walk steps never wait for the pace.
+
 ### 2.2 Recall command history
 
 <!-- id: play.reuse-history -->
 
-Command history records every line you send during a session. You can get the lines back in the command line.
+Command history records every line you send in a session. You can get the lines back in the command line. Each session keeps its newest 1,000 lines, and they come back after you quit and open Vosh again, or after a crash. When you close a session, its history goes with it.
 
 - In an empty command line, press `ArrowUp` to go back through the commands you sent, newest first.
 - To search by prefix, type a few characters, then press `ArrowUp`. Only lines that start with that text come up.
 - Press `ArrowDown` to go toward newer matches. One step past the newest match puts back exactly what you typed before the search started.
 - You can edit the recalled line at any point. An edit ends the search. The next `ArrowUp` starts a new search from the text that is now in the command line.
 
-History skips a line that is the same as the line before it. It never records what you type in password mode.
+History skips a line that is the same as the line before it. It never records what you type in password mode, or a command that gives the game a password, such as `password <old> <new>`. This is also true when the command is after a `;` or comes from an alias. Lines you write in the game's editor stay out too. On Aabahran, and on other games that tell Vosh when you play, nothing you type while you log in goes into history.
 
 When `Keep last command` is on, the line you just sent stays in the command line, fully selected. `Enter` sends it again, and when you type, your text replaces it.
 
@@ -638,6 +644,18 @@ Trigger send templates use `${name}` for regex capture groups, not for this stor
 
 Example. `#var potion yellow` and then `quaff $potion` sends `quaff yellow` to the server. When a target is set, `cast dispel $target` aims at your current target.
 
+A list keeps items in order under one name. Make and change lists in the command line with `#list`.
+
+- To add items, type `#list <name> add <items>`. Put braces around an item with spaces, as in `#list foes add Orla {the guard}`.
+- To put an item at a place, type `#list foes insert 1 Maren`. To remove the item at a place, type `#list foes delete 2`. To change it, type `#list foes set 2 Tolliver`.
+- `#list foes find Orla` tells you where the item is. `#list foes sort` sorts the items, and `#list foes clear` empties the list.
+- To see a list, type `#list foes`. To see every list, type `#lists`. To remove a list, type `#unvar foes`.
+- Use an item in a command as `$foes[1]`. `$foes[-1]` is the last item, and `$foes[#]` is the number of items. A place past the end is empty.
+
+A new list has session scope, as `#var` does. To keep it after the connection ends, type `#list foes keep`, and the profile file keeps it. A list holds 500 items at most. A name is a variable or a list, but not both. So `#list` refuses a name that a variable has, and `#var` refuses a name that a list has. When a Lua script sets one in the session and the profile has the other, the name in the session hides the name in the profile.
+
+Example. `#list foes add Orla Maren`, and then `kill $foes[1]` sends `kill Orla` to the server.
+
 ### 3.6 Bind keys to macros
 
 <!-- id: automate.macros -->
@@ -673,7 +691,7 @@ Slash commands control Vosh from the command line, without Settings. Vosh handle
 
 - Type `#help` at any time for the full list, or `#help <words>` to open Help on those words.
 - Manage aliases with `#alias <name> <expansion>`, `#unalias <name> [group]`, and `#aliases`.
-- Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
+- Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`. Manage lists with `#list <name> ...` and `#lists`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name> [group]`, and `#triggers`.
 - To tell Vosh how to read your prompt, use `#prompt game {setting}` and `#prompt fight {setting}`, with the codes you type in the game. Or use `#prompt {regex}`, where each named group such as `(?<hp>\d+)` is a value. `#prompt` alone tells you how Vosh reads your prompt. `#unprompt` stops it.
 - To turn the drawing of your design on or off, use `#prompt draw on|off`. With drawing off, you see the prompt of the game, and your design stays. With no design of your own, Vosh draws your prompt as the game does. It follows each change you make to the prompt in the game.
@@ -706,6 +724,8 @@ Lua scripts run inside Vosh. They add automation through the global `mud` table.
 - Run one line of Lua with `#lua <code>`.
 
 Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes directly to the server. `mud.input(text)` goes through the input pipeline again. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` add automation. In the callback, `captures[1]` holds the full match, and `captures[2]` and on hold the groups.
+
+`mud.var(name)` reads a variable, `mud.set_var(name, value)` sets a session variable, `mud.set_profile_var(name, value)` sets a profile variable, and `mud.unset_var(name)` removes one. `mud.list(name)` gives a copy of a list as a table. `mud.set_list(name, items)` and `mud.set_profile_list(name, items)` put a list in place from a table of text, and `mud.unset_list(name)` removes one.
 
 `mud.on_gmcp(package, callback)` gives you server data as a table. `mud.timer(secs, callback)` schedules work that you can cancel with `mud.cancel_timer`. A plugin can draw a pane of its own with `mud.pane`, as Make a pane with Lua at 3.10 shows.
 
@@ -742,7 +762,7 @@ Each plugin row has a menu of its own. `Reload` reads the plugin from its folder
 
 A new install of a plugin starts off for every profile. When you install over a plugin with the same name, it replaces that plugin and turns it off everywhere. So new code never runs until you turn it on. Vosh refuses a plugin with no `manifest.toml`, a plugin with a file outside its own folder, and a plugin over 5 MB or 200 files. It tells you why above the page.
 
-Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other. A plugin can read the standard libraries, such as `string` and `table`, but it can't change them. It starts from new globals each time it loads. A line that it gives to `mud.input` runs no `#` command except `#echo`.
+Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other. A plugin can read the standard libraries, such as `string`, `table`, `json`, and `regex`, but it can't change them. It starts from new globals each time it loads. A line that it gives to `mud.input` runs no `#` command except `#echo`.
 
 An alias that a plugin makes lasts while the plugin runs, and Vosh never saves it. It works only in the session whose plugin made it. It replaces your own aliases with that name, in every group, until the plugin turns off. When you turn a plugin off, Vosh removes its aliases and all else it added.
 
@@ -753,6 +773,24 @@ Every Lua error and every `print` shows in the terminal of its session after a g
 The Console under Scripts in Settings shows the same lines for the session in front, each with its time. It runs the Lua you type in its field in that session, as `#lua` does. `Clear` empties the Console and doesn't change the terminal.
 
 The page of a plugin shows the lines of that plugin under `Output`. Its field runs Lua inside the plugin, where it sees the globals of the plugin and its own `mud` table. The line that its newest error or stop names since it last loaded shows tinted in the editor. Point at it to see the error.
+
+Two tables help with text and data. `json` reads and writes JSON. `regex` matches text with the same regex syntax as triggers. Positions count bytes from 1, as `string.find` does.
+
+| Call                                 | What it does                                                                                                                                                                                                                                                                                              |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `json.encode(value)`                 | Gives the JSON text for a value. A table with the keys 1 to n becomes an array, and any other table becomes an object.                                                                                                                                                                                    |
+| `json.decode(text)`                  | Gives the value that the JSON text holds.                                                                                                                                                                                                                                                                 |
+| `json.null`                          | Stands for a JSON null, both ways. So an array with a null keeps its length. No script can change it.                                                                                                                                                                                                     |
+| `json.array(t)`                      | Marks a table as an array, so an empty one encodes as `[]`. An array from `json.decode` has the mark already.                                                                                                                                                                                             |
+| `regex.match(text, pattern, init)`   | Gives each group of the first match, or the whole match when the pattern has no groups. Gives nil when nothing matches.                                                                                                                                                                                   |
+| `regex.find(text, pattern, init)`    | Gives where the first match starts and ends, then its groups.                                                                                                                                                                                                                                             |
+| `regex.gmatch(text, pattern)`        | Gives each match in turn, for a `for` loop.                                                                                                                                                                                                                                                               |
+| `regex.gsub(text, pattern, repl, n)` | Replaces each match, or the first `n`, and gives the new text and the count. `repl` is text where `$1` or `${1}` names a group and `$$` is a dollar sign, or a function that gets the groups. Use `${1}` when a letter or digit comes next, as in `${1}hp`. When the function gives nil, the match stays. |
+| `regex.split(text, pattern)`         | Gives a table of the pieces between the matches.                                                                                                                                                                                                                                                          |
+
+Example. `regex.match("hp 120/300", [[(\d+)/(\d+)]])` gives `120` and `300`. `json.encode({hp = 120})` gives `{"hp":120}`.
+
+A regex search can't backtrack without end, because its time grows only with the text and the pattern. One call searches 256 KB of text at most, with a pattern of 4 KB at most, and Vosh checks the time after each match. JSON text is 1 MB at most each way. A table that holds itself, a function, a number that isn't finite, or two keys that read the same, such as `1` and `"1"`, is an error.
 
 Lua runs between the lines the game sends, so Vosh keeps each call short. It stops a call that runs longer than 100 ms. It also stops a call that uses 32 MB more than it started with, or that takes your scripts past 128 MB in total. `pcall` can't catch the stop. The time limit also works inside string patterns and the `table` functions. So a pattern that backtracks over a long line stops like a loop.
 
@@ -1151,7 +1189,9 @@ When the tick comes, the count starts again, the sound plays, and your `Send eac
 - Turn on `Enabled`. Every connection starts the tick. When you change characters, it keeps running until you turn it off. While another session on the profile is connected, a new connection uses the switch setting of that session. `Play a sound` under `Advanced` plays a sound when the tick comes.
 - Set `Every` in seconds, from 1 to 3600. It is how long you expect a tick to take. Aabahran chooses each tick between 25 and 35 seconds. So after the game ticks, the timer waits for the game and doesn't fire at `Every`.
 - To send a command on every tick, put it in `Send each tick`. Leave it blank for no command.
+- To send the command at a different time, use `Send it`. `seconds after` sends it that number of seconds after the tick. `0 seconds after` sends it on the tick. `seconds before` sends it that number of seconds before the expected tick. Vosh counts back from `Every`, because it cannot know when the game will tick. On Aabahran a tick takes from 25 to 35 seconds, so a command before the tick comes a few seconds early or late. When the game ticks before that time, the command goes at the tick. The command goes one time for each tick. `Send it` stays 1 second less than `Every`.
 - Give `Reset on` a regex. A line that matches is the tick. A signal within 2 seconds of a tick counts as that tick. So a matching line and a move of the game hour at the same time fire one time.
+- Give `Or when you send` a regex to start the count again from a command you type or a macro sends. Vosh reads each line that goes to the game after your aliases expand. A match works like `#tick reset`. The count starts again, and nothing fires. The next tick of the game still sets the count. A command from a timer, a trigger, or the tick itself never starts the count again.
 - Before the first tick of the game in a session, the timer fires on its own every `Every` seconds. It does the same on a game that never tells Vosh when it ticks. When the game is quiet for two times `Every`, the timer fires one time on its own. It then keeps its own time until the next tick comes in.
 - In its last 5 seconds, the tick in the status line turns the warn color on a soft background. It stays that way while the game is late.
 - To also print a warning line in the terminal, turn on `Warn before it fires`. Set `Warn at` to the number of seconds of warning you want. The status line then uses the same number. The terminal prints the warning one time for each tick.
@@ -1330,7 +1370,7 @@ A profile has its own aliases, triggers, macros, and variables, its tracked affe
 - To edit a profile, select it. When you select a profile, the session you play doesn't change.
 - Choose its `World`, then turn on `Use this profile when you log in`. The row names your character after Vosh has seen you log in. When you turn it on, it takes that character from any other profile on the same world. Vosh tells you so under the list.
 - On a port that isn't the own port of the world, such as 1825, something different happens. A profile that claims the character on the whole world keeps it on the own port of the world. The line under the list names each claim that moved.
-- Open the more menu of a profile to choose `Switch to this profile`, `Rename…`, `Duplicate…`, `Export to Downloads`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
+- Open the more menu of a profile to choose `Switch to this profile`, `Rename…`, `Duplicate…`, `Export to Downloads`, `Show in Finder`, `Restore from a backup…`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
 - With two or more sessions open, the line under the list names the sessions on each profile, such as `Default plays in Tolliver's session, Build in Orla's.`
 
 `Duplicate…` copies all of the setup of a profile, but not its world and login. You can't delete a profile that a session plays. So first change that session to another profile, or close it.
@@ -1338,6 +1378,10 @@ A profile has its own aliases, triggers, macros, and variables, its tracked affe
 Settings edits the profile of the session in front, and follows you to the profile of another session. Unsaved changes to a list under Automation keep Settings on their profile until you save or discard them.
 
 `Export to Downloads` saves the profile as a file in your Downloads folder. When a profile has characters, Vosh first asks which ones the file names. Each character starts off. So a profile you share names your characters only when you turn them on.
+
+`Show in Finder` shows the file of the profile in its folder, so you can open it in a text editor. On Windows the item is `Show in Explorer`, and on Linux it is `Show the folder`. Vosh reads the file again only when a session opens the profile. So change the file while no session plays the profile, or Vosh saves over your change.
+
+`Restore from a backup…` lists the backups that Vosh keeps of the profile, newest first. Each one shows when Vosh set it aside and how many triggers, aliases, and macros it holds. Pick one and click `Restore`. The profile goes back to what the backup holds, in every session that plays it. It keeps its world, its characters, and its plugins. Vosh first keeps what you have now as a backup, so you can restore that one if you change your mind. In loadout mode, your triggers, aliases, and macros are in the shared catalog. So a restore brings back the timers, the group switches, and the layouts of the profile, and the list shows how many timers each backup holds. The list leaves out a backup from before the move to loadouts, because it would put its old items in the shared catalog. When you rename a profile, its backups move with it. When you delete a profile, its backups go too.
 
 The file has the presets you have on and your changes to them. So a friend who imports it sees your colors. In loadout mode it has the presets of the catalog, which every character shares. `New profile` copies both from the profile you play. `#profile reset` turns every preset off and clears your changes. `#profile load` reads both back from the file.
 
@@ -1574,7 +1618,7 @@ These are the contents of that folder.
 - `scripts/` holds Lua files for `#script load`.
 - `plugins/` holds plugin folders, each with a `manifest.toml`.
 
-Every TOML save is safe by design. Vosh writes the new text to a temp file. It copies the old file to `<file>.bak.<timestamp>`, with a timestamp in milliseconds. It then puts the temp file in place in one atomic step, and keeps the ten newest backups. A save that fails leaves the old file in place. To undo a bad profile edit, copy the backup you want over the live file.
+Every TOML save is safe by design. Vosh writes the new text to a temp file. It copies the old file to `<file>.bak.<timestamp>`, with a timestamp in milliseconds. It then puts the temp file in place in one atomic step, and keeps the ten newest backups. A save that changes nothing keeps no backup, so the ten backups are your last ten changes. A save that fails leaves the old file in place. To undo a bad profile edit, use `Restore from a backup…` in the menu of the profile under Characters.
 
 A `profile.toml` that is still at the root is the single profile file of the builds before named profiles. Vosh moves it to `profiles/default.toml` the first time a build with named profiles starts.
 

@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -14,15 +15,22 @@ import {
   nativeSurfaceScroll,
   nativeSurfaceSelectAll,
 } from '../ipc/nativeSurface';
-import { sendInput, sendMaskedInput, sendRawInput, stopWalk } from '../ipc/session';
+import {
+  sendInput,
+  sendMaskedInput,
+  sendRawInput,
+  sessionPacedDrop,
+  stopWalk,
+} from '../ipc/session';
 import type { LineLook } from '../ipc/uiConfigInput';
 import { writingStart, type WritingKind } from '../ipc/writing';
 import { useWriting, writingOf } from '../stores/session/writingStore';
+import { usePaced } from '../stores/session/pacedStore';
 import { loadWriting, useWritingFile } from '../writing/draftsStore';
 import { cardTakes } from '../writing/kinds';
 import { pasted } from '../writing/text';
 import { looksLikeChat } from './chatLine';
-import { editorLineOf, heldLine, useFieldCell, washPast } from './editorLine';
+import { editorLineOf, heldLine, pacedLine, useFieldCell, washPast } from './editorLine';
 import { EditorMarks } from './EditorMarks';
 import { modeOf, type ModePill as Pill } from './modePill';
 import { LinePill } from './LinePill';
@@ -43,7 +51,7 @@ import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { getPasswordMode, subscribePasswordMode } from '../stores/session/inputModeStore';
-import { getSelected, useSelected } from '../stores/session/sessionsStore';
+import { getSelected, useSelected, useSessions } from '../stores/session/sessionsStore';
 import { getTargetState } from '../stores/session/targetStore';
 import { useWalk } from '../stores/session/walkStore';
 
@@ -150,8 +158,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // whether the server just took echo or just handed it back.
   const passwordModeRef = useRef(passwordMode);
   const maskedNow = () => isMasked(passwordMode, passwordModeRef.current);
+  const sessions = useSessions();
+  const openSessions = useMemo(() => sessions.map((s) => s.id), [sessions]);
   const { history, searchPrefix, remember, resetSearch, recallOlder, recallNewer } =
-    useCommandHistory(value, setValue, session);
+    useCommandHistory(value, setValue, session, openSessions);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   // Line-number gutter next to the multi-line prompt. Kept in its own
   // ref so the textarea's scroll position can be mirrored onto it once a
@@ -241,6 +251,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // the count. The card's Check spelling covers it, since all you type
   // there is your text.
   const writing = useWriting();
+  // The lines the pace holds back in the selected session, which the
+  // command line shows where the writing card's sends that wait show.
+  const paced = usePaced();
+  const showPaced = writing.held === 0 && paced > 0;
   const editor = editorLineOf(writing);
   // The pill's menu opens the card only on a text it takes.
   const editorCard = editor && cardTakes(editor.kind) ? editor.kind : null;
@@ -310,7 +324,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       echoMark: echoMarkRef.current,
       echoDim: echoDimRef.current,
     });
-    if (plan.remember) remember(line, to);
+    // A line for the game's editor is text for a note, not a command, so
+    // it stays out of history.
+    if (plan.remember && !editorRef.current) remember(line, to);
     // #nativesurface is handled here, not in the backend, because the
     // renderer flag lives in localStorage (terminalRenderer.ts reads it
     // at startup). It takes effect on macOS only, where `off` forces
@@ -667,7 +683,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   return (
     <div
-      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}${pill ? ' is-mode' : ''}`}
+      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}${pill ? ' is-mode' : ''}${showPaced ? ' has-paced' : ''}`}
       style={rowStyle}
     >
       {pill ? (
@@ -780,6 +796,20 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           <span className="wr-held-dot dot is-warn" aria-hidden="true" />
           {heldLine(writing.held)}
         </span>
+      )}
+      {showPaced && (
+        <button
+          type="button"
+          aria-live="polite"
+          className="in-paced"
+          title="Drop them"
+          aria-label={`${pacedLine(paced)}. Drop them`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void sessionPacedDrop(session).catch(() => undefined)}
+        >
+          <span className="wr-held-dot dot is-warn" aria-hidden="true" />
+          {pacedLine(paced)}
+        </button>
       )}
       {!passwordMode && caretPos && (
         <span

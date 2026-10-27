@@ -3,6 +3,7 @@ disabled_trigger_groups = ["spam"]
 disabled_macro_groups = ["travel"]
 disabled_timer_groups = ["upkeep"]
 reconnect = false
+charset = "latin1"
 
 [[aliases]]
 name = "kk"
@@ -19,6 +20,12 @@ script = "mud.send(\"cast heal \" .. args[1])"
 [profile_vars]
 target = "orc"
 weapon = "sword"
+
+[profile_lists]
+foes = [
+    "Orla",
+    "the guard",
+]
 
 [[triggers]]
 name = "tells"
@@ -118,8 +125,10 @@ base = true
 enabled = false
 interval_secs = 45
 auto_fire = "score"
+fire_offset_secs = -3
 sound = false
 reset_pattern = '^The day has begun\.$'
+reset_on_send = "^rest$"
 warn_at_secs = 5
 warn_message = "tick soon"
 warn_color = "#ffcc00"
@@ -180,6 +189,8 @@ input_echo_dim = true
 input_line_mark = false
 side_panels_fill_height = true
 paste_line_delay_ms = 250
+send_pace = false
+send_pace_per_sec = 6
 spellcheck_prompt = true
 writing_offer = false
 writing_ask_post = false

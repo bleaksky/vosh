@@ -453,28 +453,36 @@ impl TermGrid {
         cursor.point.column.0 == 0 && !cursor.input_needs_wrap
     }
 
-    /// `bytes` as text, holding back a character split at its end.
-    fn decode(&mut self, bytes: &[u8]) -> String {
+    /// `bytes` as text, holding back a character split at its end. The
+    /// session reads the game's text to UTF-8 before it lands here, so a
+    /// byte that is not UTF-8 is rare, and shows as U+FFFD with the text
+    /// after it kept.
+    pub(super) fn decode(&mut self, bytes: &[u8]) -> String {
         self.pending_utf8.extend_from_slice(bytes);
-        match std::str::from_utf8(&self.pending_utf8) {
-            Ok(s) => {
-                let s = s.to_string();
-                self.pending_utf8.clear();
-                s
-            }
-            Err(e) => {
-                let valid = e.valid_up_to();
-                let s = String::from_utf8_lossy(&self.pending_utf8[..valid]).into_owned();
-                // Keep at most one code point of tail. Longer garbage is
-                // not a split character, so let it through lossily.
-                if self.pending_utf8.len() - valid <= 3 {
-                    self.pending_utf8.drain(..valid);
-                } else {
-                    self.pending_utf8.clear();
+        let mut out = String::with_capacity(self.pending_utf8.len());
+        let mut rest: &[u8] = &self.pending_utf8;
+        while let Err(e) = std::str::from_utf8(rest) {
+            let (good, bad) = rest.split_at(e.valid_up_to());
+            out.push_str(&String::from_utf8_lossy(good));
+            match e.error_len() {
+                Some(len) => {
+                    out.push(char::REPLACEMENT_CHARACTER);
+                    rest = &bad[len..];
                 }
-                s
+                None => {
+                    // The start of a character the next bytes end.
+                    rest = bad;
+                    break;
+                }
             }
         }
+        if std::str::from_utf8(rest).is_ok() {
+            out.push_str(&String::from_utf8_lossy(rest));
+            rest = &[];
+        }
+        let used = self.pending_utf8.len() - rest.len();
+        self.pending_utf8.drain(..used);
+        out
     }
 
     /// Word wrap `text` at the grid width. xterm receives the same

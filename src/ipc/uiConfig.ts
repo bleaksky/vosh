@@ -233,6 +233,8 @@ export interface UiConfig {
    *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
    *  flood filter does not kick. Clamped server-side to [0, 10000]. */
   paste_line_delay_ms: number;
+  send_pace: boolean;
+  send_pace_per_sec: number;
   /** When true, the prompt input enables the webview's native spell
    *  check, but only when the current line starts with a chat verb
    *  (say / tell / chat / gossip / ooc / clan / immtalk / reply /
@@ -498,6 +500,8 @@ export interface RawUiConfig {
   input_echo_dim?: boolean;
   input_line_mark?: boolean;
   paste_line_delay_ms?: number;
+  send_pace?: boolean;
+  send_pace_per_sec?: number;
   spellcheck_prompt?: boolean;
   writing_offer?: boolean;
   writing_ask_post?: boolean;
@@ -659,6 +663,11 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
+    send_pace: cfg.send_pace !== false,
+    send_pace_per_sec:
+      typeof cfg.send_pace_per_sec === 'number' && cfg.send_pace_per_sec >= 1
+        ? Math.min(20, Math.floor(cfg.send_pace_per_sec))
+        : 4,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
     writing_offer: cfg.writing_offer !== false,
     writing_ask_post: cfg.writing_ask_post !== false,

@@ -13,7 +13,7 @@ use super::target::{
     run_target_clear, run_target_cycle, slash_qkey, slash_qkeys_list, slash_target,
 };
 use super::tick::slash_tick;
-use super::vars::{slash_unvar, slash_var, slash_vars_list};
+use super::vars::{slash_list, slash_lists, slash_unvar, slash_var, slash_vars_list};
 use super::walk::{slash_walk, slash_walk_args};
 use super::{split_first_word, InputResult};
 use crate::app::state::AppState;
@@ -31,6 +31,8 @@ pub(crate) const SLASH_COMMANDS: &[&str] = &[
     "var",
     "unvar",
     "vars",
+    "list",
+    "lists",
     "trigger",
     "untrigger",
     "triggers",
@@ -80,6 +82,8 @@ pub(super) fn handle_slash(
         "var" => slash_var(profile, c, args),
         "unvar" => slash_unvar(profile, c, args),
         "vars" => slash_vars_list(profile, c),
+        "list" => slash_list(profile, c, args),
+        "lists" => slash_lists(profile, c),
         "trigger" => slash_trigger(profile, args),
         "untrigger" => slash_untrigger(profile, args),
         "triggers" => slash_triggers_list(profile),
@@ -119,8 +123,13 @@ slash commands:
   #aliases                             list aliases
   #var <name> <value>                  set a session variable
   #var <name>                          show a variable
-  #unvar <name>                        remove a variable
+  #unvar <name>                        remove a variable or a list
   #vars                                list variables
+  #list <name> add <items>             add items to a list, {two words} as one
+  #list <name> insert|delete|set <n>   change the item at place n
+  #list <name> find|sort|clear|keep    find an item, sort, empty, or keep it
+  #list <name>                         show a list, read as $name[1]
+  #lists                               list lists
   #trigger <name> {pattern} <action>   define or replace a trigger
   #untrigger <name>                    remove a trigger
   #triggers                            list triggers

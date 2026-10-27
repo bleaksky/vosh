@@ -3,6 +3,7 @@
 mod alerts;
 mod broadcast;
 mod bundle;
+mod charset;
 mod config_golden;
 mod echo;
 mod fake_mud;
@@ -11,6 +12,7 @@ mod latency;
 mod log_kinds;
 mod log_sessions;
 mod lua_panes;
+mod pace;
 mod reconnect;
 mod screen_reader;
 mod scrollback_size;

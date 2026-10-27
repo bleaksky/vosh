@@ -51,6 +51,12 @@ pub enum Action {
         value: String,
     },
     RemoveVar(String),
+    /// Put a list in place, its items in order.
+    SetList {
+        scope: Scope,
+        name: String,
+        items: Vec<String>,
+    },
     /// Insert or replace a session-scoped "prompt var" — a key/value pair
     /// the vitals template resolver reads with priority over GMCP. Used
     /// by `#prompt`-style triggers to feed hp/mn/mv etc. directly from
@@ -207,6 +213,9 @@ impl Action {
             Action::RemovePluginAlias { plugin, name } => plugin.len() + name.len(),
             Action::SetVar { name, value, .. } | Action::SetPromptVar { name, value } => {
                 name.len() + value.len()
+            }
+            Action::SetList { name, items, .. } => {
+                name.len() + items.iter().map(String::len).sum::<usize>()
             }
             Action::SetGroupEnabled { name, .. } | Action::RemoveLuaTrigger { name, .. } => {
                 name.len()

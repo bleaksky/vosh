@@ -41,6 +41,10 @@ pub(crate) struct ProfileConfig {
     pub aliases: Vec<Alias>,
     #[serde(default)]
     pub profile_vars: BTreeMap<String, String>,
+    /// The lists `#list <name> keep` keeps in the profile, each its items
+    /// in order. Out of the file while there are none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profile_lists: BTreeMap<String, Vec<String>>,
     /// Every trigger. Room triggers go under `room_triggers` on disk,
     /// see [`trigger_lists`].
     #[serde(flatten, with = "trigger_lists")]
@@ -106,6 +110,13 @@ pub(crate) struct ProfileConfig {
     /// you turn it off.
     #[serde(default, skip_serializing_if = "OnSwitch::is_on")]
     pub reconnect: OnSwitch,
+    /// How the profile reads the game's text, UTF-8 at first, so the file
+    /// says `charset = "latin1"` only once you choose Latin 1.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::session::charset::Charset::is_default"
+    )]
+    pub charset: crate::session::charset::Charset,
     /// Keys this build does not know, which a newer build wrote. They
     /// ride along as they are, so a save never drops them. The tables a
     /// profile leaves behind on purpose stay out, see [`DROPPED_KEYS`].
@@ -234,6 +245,11 @@ impl ProfileConfig {
             .iter()
             .map(|(name, value)| (name.to_string(), value.to_string()))
             .collect();
+        let profile_lists: BTreeMap<String, Vec<String>> = profile
+            .vars
+            .lists()
+            .map(|(name, items)| (name.to_string(), items.to_vec()))
+            .collect();
 
         let triggers = profile.triggers.list();
 
@@ -259,6 +275,7 @@ impl ProfileConfig {
         let mut config = Self {
             aliases,
             profile_vars,
+            profile_lists,
             triggers,
             tick,
             ui,
@@ -274,6 +291,7 @@ impl ProfileConfig {
             alerts: profile.alerts.clone(),
             preset_edits: profile.preset_edits.clone(),
             reconnect: profile.reconnect,
+            charset: profile.charset,
             extra: profile.file_extra.clone(),
         };
         config.set_prompt(profile.prompt.clone());
@@ -350,6 +368,34 @@ impl ProfileConfig {
         for (k, v) in &self.profile_vars {
             vars.set(k.clone(), v.clone());
         }
+        // A list from the file keeps to the limits `#list` keeps.
+        for (k, items) in &self.profile_lists {
+            let named = k
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !named {
+                warnings.push(format!(
+                    "list `{k}` skipped: a name is letters, digits and _"
+                ));
+                continue;
+            }
+            let kept: Vec<String> = items
+                .iter()
+                .filter(|item| item.len() <= 4 * 1024)
+                .take(vosh_automation::vars::LIST_ITEMS)
+                .cloned()
+                .collect();
+            if kept.len() < items.len() {
+                warnings.push(format!(
+                    "list `{k}` kept {} of its {} items, the ones within the limits",
+                    kept.len(),
+                    items.len()
+                ));
+            }
+            vars.set_list(k.clone(), kept);
+        }
         profile.vars = vars;
 
         // Triggers: replace, surfacing invalid regex.
@@ -369,12 +415,22 @@ impl ProfileConfig {
                 warnings.push(format!("tick reset pattern rejected: {e}"));
                 None
             });
+        let send_regex = crate::tick::compile_reset_pattern(self.tick.reset_on_send.as_deref())
+            .unwrap_or_else(|e| {
+                warnings.push(format!("tick send pattern rejected: {e}"));
+                None
+            });
         profile.tick = TickSettings {
             config: TickConfig {
                 interval_secs: self.tick.interval_secs.max(1),
+                fire_offset_secs: self.tick.fire_offset_secs.clamp(
+                    -crate::tick::MAX_FIRE_OFFSET_SECS,
+                    crate::tick::MAX_FIRE_OFFSET_SECS,
+                ),
                 ..self.tick.clone()
             },
             reset_regex,
+            send_regex,
         };
 
         // UI preferences carry across as a single clone (see the
@@ -411,6 +467,7 @@ impl ProfileConfig {
         profile.alerts.clone_from(&self.alerts);
         profile.preset_edits.clone_from(&self.preset_edits);
         profile.reconnect = self.reconnect;
+        profile.charset = self.charset;
         profile.file_extra = self.extra.clone();
 
         warnings

@@ -16,11 +16,13 @@ mod api;
 mod budget;
 mod env;
 mod hook;
+mod json;
 mod library;
 mod limits;
 mod owner;
 mod pane;
 mod pattern;
+mod regexes;
 mod report;
 mod state;
 mod strings;
@@ -234,6 +236,8 @@ impl ScriptEngine {
         limits::install(&lua, &limits, lua.create_function(api::mud_log)?)?;
         library::install(&lua)?;
         strings::install(&lua, &limits)?;
+        json::install(&lua, &limits)?;
+        regexes::install(&lua, &limits)?;
         // The plugins read the standard library as it stands now, so
         // before the shared `mud` table joins the globals.
         let envs = Envs::install(&lua)?;
@@ -272,6 +276,14 @@ impl ScriptEngine {
     pub fn set_var_snapshot(&self, snapshot: HashMap<String, String>) {
         if let Ok(mut s) = self.state.cell.lock() {
             s.var_snapshot = snapshot;
+        }
+    }
+
+    /// Replace the list snapshot `mud.list(name)` reads, as
+    /// [`Self::set_var_snapshot`] does for variables.
+    pub fn set_list_snapshot(&self, snapshot: HashMap<String, std::sync::Arc<Vec<String>>>) {
+        if let Ok(mut s) = self.state.cell.lock() {
+            s.list_snapshot = snapshot;
         }
     }
 
@@ -1925,6 +1937,20 @@ mod tests {
         assert_eq!(
             error_lines(&refused),
             ["writer/main.lua:1: string is read only in a plugin"]
+        );
+        // So do json and regex, which a plugin reads as a script does.
+        let data = plugin(
+            &mut e,
+            "data",
+            "mud.echo(json.encode({regex.match('Orla 12', [[(\\d+)]])}))\n\
+             mud.echo(tostring(json.decode('null') == json.null))",
+        )
+        .unwrap();
+        assert_eq!(echoes(&data), ["[\"12\"]", "true"]);
+        let refused = plugin(&mut e, "rewriter", "json.encode = nil");
+        assert_eq!(
+            error_lines(&refused),
+            ["rewriter/main.lua:1: json is read only in a plugin"]
         );
         // A plugin may still put its own table in place of one.
         let shadowed = plugin(

@@ -59,6 +59,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('general', 'connection', 'tls'),
   },
   {
+    label: 'Text encoding',
+    description:
+      "Most worlds use UTF-8, and Vosh still shows an older world's accented letters. Pick Latin 1 when the game garbles the accented letters you send.",
+    keywords: 'charset encoding utf8 latin1 iso 8859 windows 1252 accents accented letters garbled',
+    target: at('general', 'connection', 'charset'),
+  },
+  {
     label: 'Reconnect when the link drops',
     description:
       'Vosh dials up to 8 times over about 5 minutes, and you log in yourself. The game closes its login prompt after about 2 minutes.',
@@ -516,6 +523,11 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'advanced paste pacing delay flood milliseconds',
     target: at('input', 'advanced', 'paste-delay'),
   },
+  {
+    label: 'Pace sends from triggers and timers',
+    keywords: 'advanced pace throttle flood rate burst lines second',
+    target: at('input', 'advanced', 'send-pace'),
+  },
 
   // Prompt, the section that left Input.
   {
@@ -621,7 +633,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   // Characters. No section means the active profile.
   {
     label: 'Profiles',
-    keywords: 'profile character rename duplicate delete switch',
+    keywords:
+      'profile character rename duplicate delete switch backup restore file finder explorer',
     target: at('characters'),
   },
   {

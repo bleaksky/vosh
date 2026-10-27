@@ -97,6 +97,9 @@ pub struct Negotiator {
     server: [Side; 256],
     /// What Vosh performs, by option.
     vosh: [Side; 256],
+    /// The profile reads Latin 1, so CHARSET takes a Latin 1 name and
+    /// MTTS leaves UTF-8 out.
+    latin1: bool,
 }
 
 impl Default for Negotiator {
@@ -107,9 +110,28 @@ impl Default for Negotiator {
             ttype_cycle: 0,
             server: [Side::No; 256],
             vosh: [Side::No; 256],
+            latin1: false,
         }
     }
 }
+
+/// The names RFC 2066 servers give Latin 1, from the IANA list, and the
+/// Windows form a profile reads by.
+const LATIN1_NAMES: [&[u8]; 13] = [
+    b"ISO-8859-1",
+    b"ISO_8859-1",
+    b"ISO_8859-1:1987",
+    b"ISO8859-1",
+    b"ISO-IR-100",
+    b"LATIN1",
+    b"LATIN-1",
+    b"L1",
+    b"IBM819",
+    b"CP819",
+    b"CSISOLATIN1",
+    b"WINDOWS-1252",
+    b"CP1252",
+];
 
 impl Negotiator {
     pub fn new() -> Self {
@@ -157,6 +179,17 @@ impl Negotiator {
     /// after NAWS has been agreed.
     pub fn set_window_size(&mut self, cols: u16, rows: u16) {
         self.window_size = (cols, rows);
+    }
+
+    /// Read Latin 1 on this connection: CHARSET takes a Latin 1 name the
+    /// server offers in place of UTF-8, and the MTTS answer leaves out
+    /// the UTF-8 bit.
+    pub fn use_latin1(&mut self) {
+        self.latin1 = true;
+        let bits = DEFAULT_MTTS_BITS & !4;
+        if let Some(mtts) = self.ttype_responses.last_mut() {
+            *mtts = format!("MTTS {bits}");
+        }
     }
 
     /// Rewind the TTYPE cycle so the next SEND answers from the first
@@ -294,22 +327,38 @@ impl Negotiator {
     }
 
     fn respond_charset(&self, payload: &[u8]) -> Vec<u8> {
-        // CHARSET REQUEST: 0x01 SEP charset1 SEP charset2 ...
-        if payload.first() != Some(&charset::REQUEST) || payload.len() < 3 {
+        // CHARSET REQUEST: 0x01 ["[TTABLE ]" version] SEP charset1 SEP ...
+        if payload.first() != Some(&charset::REQUEST) {
             return Vec::new();
         }
-        let separator = payload[1];
-        let charsets = &payload[2..];
-        let utf8 = b"UTF-8";
-        let accepted = charsets
-            .split(|&b| b == separator)
-            .any(|cs| cs.eq_ignore_ascii_case(utf8));
-        if accepted {
-            let mut reply = vec![charset::ACCEPTED];
-            reply.extend_from_slice(utf8);
-            subnegotiation(option::CHARSET, &reply)
+        let list = &payload[1..];
+        let list = match list.strip_prefix(b"[TTABLE ]") {
+            Some(rest) => rest.get(1..).unwrap_or_default(),
+            None => list,
+        };
+        let Some((&separator, charsets)) = list.split_first() else {
+            return Vec::new();
+        };
+        if charsets.is_empty() {
+            return Vec::new();
+        }
+        let mut offered = charsets.split(|&b| b == separator);
+        let chosen = if self.latin1 {
+            offered.find(|cs| {
+                LATIN1_NAMES
+                    .iter()
+                    .any(|name| cs.eq_ignore_ascii_case(name))
+            })
         } else {
-            subnegotiation(option::CHARSET, &[charset::REJECTED])
+            offered.find(|cs| cs.eq_ignore_ascii_case(b"UTF-8"))
+        };
+        match chosen {
+            Some(name) => {
+                let mut reply = vec![charset::ACCEPTED];
+                reply.extend_from_slice(name);
+                subnegotiation(option::CHARSET, &reply)
+            }
+            None => subnegotiation(option::CHARSET, &[charset::REJECTED]),
         }
     }
 }
@@ -728,6 +777,41 @@ mod tests {
         // A refused offer leaves the option off.
         let _ = n.handle(&Event::Will(option::MCCP2));
         assert!(!n.server_does(option::MCCP2));
+    }
+
+    #[test]
+    fn a_latin1_profile_takes_latin1_and_leaves_utf8_out_of_mtts() {
+        let mut n = Negotiator::new();
+        n.use_latin1();
+        let mut payload = vec![charset::REQUEST, b';'];
+        payload.extend_from_slice(b"UTF-8;iso-8859-1");
+        let bytes = n.handle(&Event::Subnegotiation {
+            option: option::CHARSET,
+            payload,
+        });
+        let mut expected = vec![IAC, SB, option::CHARSET, charset::ACCEPTED];
+        expected.extend_from_slice(b"iso-8859-1");
+        expected.extend_from_slice(&[IAC, SE]);
+        assert_eq!(bytes, expected);
+        assert_eq!(
+            n.ttype_responses.last().map(String::as_str),
+            Some("MTTS 267")
+        );
+    }
+
+    #[test]
+    fn a_charset_request_with_a_ttable_version_reads_its_list() {
+        let mut n = Negotiator::new();
+        let mut payload = vec![charset::REQUEST];
+        payload.extend_from_slice(b"[TTABLE ]\x01 US-ASCII UTF-8");
+        let bytes = n.handle(&Event::Subnegotiation {
+            option: option::CHARSET,
+            payload,
+        });
+        let mut expected = vec![IAC, SB, option::CHARSET, charset::ACCEPTED];
+        expected.extend_from_slice(b"UTF-8");
+        expected.extend_from_slice(&[IAC, SE]);
+        assert_eq!(bytes, expected);
     }
 
     #[test]

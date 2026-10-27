@@ -415,6 +415,8 @@ fn full_ui() -> UiConfig {
         input_line_mark: false,
         side_panels_fill_height: true,
         paste_line_delay_ms: 250,
+        send_pace: false,
+        send_pace_per_sec: 6,
         spellcheck_prompt: true,
         writing_offer: false,
         writing_ask_post: false,
@@ -496,8 +498,10 @@ fn full_tick() -> TickConfig {
         enabled: false,
         interval_secs: 45,
         auto_fire: Some("score".into()),
+        fire_offset_secs: -3,
         sound: false,
         reset_pattern: Some(r"^The day has begun\.$".into()),
+        reset_on_send: Some("^rest$".into()),
         warn_at_secs: Some(5),
         warn_message: Some("tick soon".into()),
         warn_color: Some("#ffcc00".into()),
@@ -683,6 +687,7 @@ fn full_profile() -> ProfileConfig {
             ("target".into(), "orc".into()),
             ("weapon".into(), "sword".into()),
         ]),
+        profile_lists: BTreeMap::from([("foes".into(), vec!["Orla".into(), "the guard".into()])]),
         triggers: full_triggers(),
         tick: full_tick(),
         ui: full_ui(),
@@ -715,6 +720,7 @@ fn full_profile() -> ProfileConfig {
         preset_edits: full_preset_edits(),
         // Reconnect when the link drops, turned off.
         reconnect: OnSwitch(false),
+        charset: crate::session::charset::Charset::Latin1,
         extra: BTreeMap::new(),
     };
     config.set_prompt(full_prompt());

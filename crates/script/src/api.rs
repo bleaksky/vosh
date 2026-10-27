@@ -86,6 +86,14 @@ pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
     mud.set("set_profile_var", lua.create_function(mud_set_profile_var)?)?;
     mud.set("unset_var", lua.create_function(mud_unset_var)?)?;
 
+    mud.set("list", lua.create_function(mud_list)?)?;
+    mud.set("set_list", lua.create_function(mud_set_list)?)?;
+    mud.set(
+        "set_profile_list",
+        lua.create_function(mud_set_profile_list)?,
+    )?;
+    mud.set("unset_list", lua.create_function(mud_unset_var)?)?;
+
     mud.set("set_prompt_var", lua.create_function(mud_set_prompt_var)?)?;
     mud.set(
         "unset_prompt_var",
@@ -262,6 +270,7 @@ fn mud_set_var(lua: &Lua, (name, value): (mlua::String, mlua::String)) -> LuaRes
             value: value.clone(),
         });
         if queued {
+            s.list_snapshot.remove(&name);
             s.var_snapshot.insert(name, value);
         }
         Ok(())
@@ -279,6 +288,7 @@ fn mud_set_profile_var(lua: &Lua, (name, value): (mlua::String, mlua::String)) -
             value: value.clone(),
         });
         if queued {
+            s.list_snapshot.remove(&name);
             s.var_snapshot.insert(name, value);
         }
         Ok(())
@@ -292,9 +302,87 @@ fn mud_unset_var(lua: &Lua, name: mlua::String) -> LuaResult<()> {
     with_state(lua, |s| {
         if s.queue(Action::RemoveVar(name.clone())) {
             s.var_snapshot.remove(&name);
+            s.list_snapshot.remove(&name);
         }
         Ok(())
     })
+}
+
+/// `mud.list(name)`: a copy of the list, its items in order, or nil.
+fn mud_list(lua: &Lua, name: String) -> LuaResult<Option<Table>> {
+    let items = with_state(lua, |s| Ok(s.list_snapshot.get(&name).cloned()))?;
+    items
+        .map(|items| lua.create_sequence_from(items.iter().map(String::as_str)))
+        .transpose()
+}
+
+/// The items of `items`, a table of text, each within the cap, at most
+/// [`vosh_automation::vars::LIST_ITEMS`] of them. None, with the call's
+/// note, when one is too long, and an error for anything else.
+fn list_items(lua: &Lua, items: &Table) -> LuaResult<Option<Vec<String>>> {
+    let len = items.raw_len();
+    if len > vosh_automation::vars::LIST_ITEMS {
+        return Err(mlua::Error::RuntimeError(format!(
+            "a list holds at most {} items",
+            vosh_automation::vars::LIST_ITEMS
+        )));
+    }
+    let mut out = Vec::with_capacity(len);
+    for i in 1..=len {
+        let item: Value = items.raw_get(i)?;
+        let Some(item) = lua.coerce_string(item.clone())? else {
+            return Err(mlua::Error::RuntimeError(format!(
+                "a list item must be text, and item {i} is a {}",
+                item.type_name()
+            )));
+        };
+        let Some([item]) = all_capped(lua, [(&item, NAME_BYTES)])? else {
+            return Ok(None);
+        };
+        out.push(item);
+    }
+    Ok(Some(out))
+}
+
+fn set_list(lua: &Lua, scope: Scope, name: &mlua::String, items: &Table) -> LuaResult<()> {
+    let Some([name]) = all_capped(lua, [(name, NAME_BYTES)])? else {
+        return Ok(());
+    };
+    let mut chars = name.chars();
+    let named = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !named {
+        return Err(mlua::Error::RuntimeError(format!(
+            "a list name is letters, digits and _, starting with a letter or _, not `{name}`"
+        )));
+    }
+    let Some(items) = list_items(lua, items)? else {
+        return Ok(());
+    };
+    with_state(lua, |s| {
+        let queued = s.queue(Action::SetList {
+            scope,
+            name: name.clone(),
+            items: items.clone(),
+        });
+        if queued {
+            s.var_snapshot.remove(&name);
+            s.list_snapshot.insert(name, std::sync::Arc::new(items));
+        }
+        Ok(())
+    })
+}
+
+/// `mud.set_list(name, items)`: a list of the session.
+fn mud_set_list(lua: &Lua, (name, items): (mlua::String, Table)) -> LuaResult<()> {
+    set_list(lua, Scope::Session, &name, &items)
+}
+
+/// `mud.set_profile_list(name, items)`: a list the profile keeps.
+fn mud_set_profile_list(lua: &Lua, (name, items): (mlua::String, Table)) -> LuaResult<()> {
+    set_list(lua, Scope::Profile, &name, &items)
 }
 
 fn mud_set_prompt_var(lua: &Lua, (name, value): (mlua::String, mlua::String)) -> LuaResult<()> {

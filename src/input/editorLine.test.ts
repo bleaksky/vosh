@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WRITING_IDLE } from '../stores/session/writingStore';
-import { editorLineOf, heldLine, washPast } from './editorLine';
+import { editorLineOf, heldLine, pacedLine, washPast } from './editorLine';
 
 describe('the command line in the game’s editor', () => {
   it('shows the tick while the editor holds a text Vosh names and the card does not drive it', () => {
@@ -34,5 +34,7 @@ describe('the command line in the game’s editor', () => {
   it('says how many sends wait', () => {
     expect(heldLine(1)).toBe('1 send waits');
     expect(heldLine(3)).toBe('3 sends wait');
+    expect(pacedLine(1)).toBe('1 line waits');
+    expect(pacedLine(12)).toBe('12 lines wait');
   });
 });

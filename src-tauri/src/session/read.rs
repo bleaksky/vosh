@@ -49,7 +49,8 @@ impl<R: tauri::Runtime> Conn<R> {
     pub(super) async fn handle_read(&mut self, bytes: &[u8], log_sink: &LogSink) -> ReadBatch {
         self.perf.socket_reads += 1;
         self.perf.bytes_in += bytes.len() as u64;
-        let events = self.parser.feed(bytes);
+        self.follow_charset();
+        let events = self.decoder.events(self.parser.feed(bytes));
         let mut batch = ReadBatch::new(self.others_wrote());
         // The text of the read, for the writer, which counts a `> ` that
         // came alone in it.
@@ -287,6 +288,12 @@ fn end_refused_stops<R: tauri::Runtime>(conn: &Conn<R>, plain: &str, batch: &mut
 }
 
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
+    // No byte came to end a character the partial ended on, so it was
+    // never one. It shows as it stands.
+    let rest = conn.decoder.flush();
+    if !rest.is_empty() {
+        let _ = conn.accumulator.feed(&rest);
+    }
     let out = {
         let mut c = conn.session.connection.lock();
         let mut out = Output::new(conn.others_wrote());
@@ -415,7 +422,7 @@ pub(super) async fn walked<R: tauri::Runtime>(
         .await?;
     }
     if !send.is_empty() {
-        conn.stream.write_all(&send).await?;
+        conn.stream.write_step(&send).await?;
         conn.stream.flush().await?;
     }
     Ok(())

@@ -97,6 +97,7 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
     }
     if let Some(app_data) = state.app_data.get() {
         let _ = std::fs::remove_file(crate::disk::paths::scrollback_path(app_data, closed.id));
+        crate::input::history::remove(&crate::disk::paths::history_path(app_data, closed.id));
     }
     let persist_guard = PERSIST_LOCK.lock().await;
     let open = closed.profile();
@@ -278,6 +279,24 @@ pub(crate) async fn session_send_raw<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Drop the lines the pace holds in `session`, or the selected one, as a
+/// click on the command line's count asks. Says nothing when the session
+/// has no connection, since the lines went with it.
+#[tauri::command]
+pub(crate) async fn session_paced_drop(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
+    let current = session.slot.lock().await;
+    if let Some(handle) = current.as_ref() {
+        if !handle.drop_paced() {
+            return Err("session task gone".to_string());
+        }
+    }
+    Ok(())
+}
+
 /// Walk the path you clicked on the map: `steps` as a `#walk` string,
 /// planned from room `start`, with the room each step should reach in
 /// `rooms`. A walk under way gives way once its step in flight lands,
@@ -396,6 +415,39 @@ pub(crate) async fn reconnect_set<R: tauri::Runtime>(
     let open = {
         let mut p = state.lock_named(profile).await?;
         p.reconnect = crate::profile::file::OnSwitch(on);
+        p.open().clone()
+    };
+    crate::disk::save::save_by(&app, &state, &open, crate::disk::save::SavePolicy::Now).await;
+    Ok(())
+}
+
+/// How `profile`, or the profile the selected session plays when it
+/// names none, reads the game's text.
+#[tauri::command]
+pub(crate) async fn charset_get(
+    state: State<'_, SharedState>,
+    profile: Option<String>,
+) -> Result<crate::session::charset::Charset, String> {
+    Ok(state.lock_named(profile).await?.charset)
+}
+
+/// Set how `profile`, or the profile the selected session plays when it
+/// names none, reads the game's text and writes yours, and save. Each
+/// session on the profile reads by it from its next read.
+#[tauri::command]
+pub(crate) async fn charset_set<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    charset: crate::session::charset::Charset,
+    profile: Option<String>,
+) -> Result<(), String> {
+    let sessions = state.all_sessions();
+    let open = {
+        let mut p = state.lock_named(profile).await?;
+        p.charset = charset;
+        for session in p.players(&sessions) {
+            session.connection.lock().charset = charset;
+        }
         p.open().clone()
     };
     crate::disk::save::save_by(&app, &state, &open, crate::disk::save::SavePolicy::Now).await;

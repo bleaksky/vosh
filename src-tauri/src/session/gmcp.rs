@@ -69,7 +69,9 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     payload: &[u8],
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
-    let msg = match vosh_protocol::gmcp::parse(payload) {
+    // GMCP is UTF-8, but a game may copy a Latin 1 line into a packet.
+    let payload = super::charset::read_whole(payload);
+    let msg = match vosh_protocol::gmcp::parse(&payload) {
         Ok(m) => m,
         Err(e) => {
             warn!(error = %e, "failed to parse GMCP payload");

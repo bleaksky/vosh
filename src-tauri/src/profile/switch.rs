@@ -273,14 +273,16 @@ pub(crate) async fn leave_file(state: &SharedState, left: &OpenProfile) {
 
 /// Hand the connection `c` the two things it takes from the profile that
 /// a switch, `#profile load`, `#profile reset` or launch just laid over
-/// `p`, or that a new session plays: the tick settings and the `[prompt]`
-/// table. The tick keeps its count under the new settings, which replaced
+/// `p`, or that a new session plays: the tick settings, the `[prompt]`
+/// table and the pace of what automation sends. The tick keeps its count under the new settings, which replaced
 /// `tick_before`, so the status line counts on from the last tick. The
 /// prompt engine takes the table, and the profile keeps it as the engine
 /// then holds it.
 pub(crate) fn hand_to_connection(p: &mut Profile, c: &mut Connection, tick_before: &TickConfig) {
     c.tick
         .adopt(&mut p.tick, tick_before, tokio::time::Instant::now());
+    c.send_pace = crate::session::pace::pace_of(&p.ui);
+    c.charset = p.charset;
     let table = p.prompt.clone();
     crate::prompt::take_config(p, c, table);
 }

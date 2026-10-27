@@ -43,6 +43,7 @@ import { startVitalsStore } from './gmcp/vitalsStore';
 import { startVitalsTextStore } from './session/vitalsTextStore';
 import { startWalkStore } from './session/walkStore';
 import { startWritingStore } from './session/writingStore';
+import { startPacedStore } from './session/pacedStore';
 import { startWorldStore } from './gmcp/worldStore';
 import { startCheckWatch } from '../writing/checkWatch';
 
@@ -101,6 +102,7 @@ export function startStores(): void {
   startWalkStore();
   startCharStatusStore();
   startWritingStore();
+  startPacedStore();
   startCheckWatch();
   startScreenReaderStore();
   startReaderStore();

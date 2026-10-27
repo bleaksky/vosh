@@ -18,6 +18,16 @@ pub(crate) fn reveal(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Show the file at `path` the same way, selected in its folder on
+/// macOS and Windows. Linux opens its folder, since `xdg-open` on a file
+/// would open the file itself.
+pub(crate) fn reveal_file(path: &Path) -> std::io::Result<()> {
+    if cfg!(all(unix, not(target_os = "macos"))) {
+        return reveal(path.parent().unwrap_or(path));
+    }
+    reveal(path)
+}
+
 #[cfg(target_os = "macos")]
 fn command(dir: &Path) -> Command {
     let mut command = Command::new("/usr/bin/open");

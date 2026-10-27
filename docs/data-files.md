@@ -37,8 +37,16 @@ Profile files, profiles.toml, global.toml, catalog.toml, loadouts.toml,
 the wizard journal and the copies in `profiles/legacy` go through
 `write_with_backup` in `src-tauri/src/disk/atomic.rs`. It writes
 `<file>.tmp`, copies the old file to `<file>.bak.<unix ms>`, renames the
-temp file over the old one and keeps the ten newest backups. A failed
-write leaves the old file in place.
+temp file over the old one and keeps the ten newest backups. A file
+that already holds the new text is left alone with no backup, so the ten
+are the last ten changes. A failed write leaves the old file in place.
+Restore from a backup… under Characters lists a profile file's backups
+through `src-tauri/src/profile/backups.rs` and lays one over the profile
+as an import with Replace does, keeping its world, characters and
+plugins, and in loadout mode the catalog. In loadout mode a backup that
+holds aliases, triggers, macros or preset edits is from before the move
+and neither lists nor restores. A profile's backups move with a rename
+and go with a delete, as its layout history does.
 
 A file Vosh could not read goes on the unread list, and every save to it
 fails until it reads again. So a save never writes the defaults over
@@ -73,6 +81,7 @@ it the same way.
 | `layouts/<name>.toml`, `layouts/.seen.toml` | TOML                | `src-tauri/src/profile/layout_history.rs`                      |
 | `logs.sqlite`                               | SQLite in WAL mode  | `crates/log/src/sqlite.rs`                                     |
 | `scrollback.txt`, `scrollback-<n>.txt`      | Raw bytes, CRLF     | `src-tauri/src/logs.rs`                                        |
+| `history.txt`, `history-<n>.txt`            | Text, one per line  | `src-tauri/src/input/history.rs`                               |
 | `scripts/`                                  | A folder            | `create_scripts_dir` in `src-tauri/src/app/launch.rs`          |
 | `plugins/<name>/manifest.toml` and its Lua  | TOML and Lua        | `src-tauri/src/app/plugins.rs` and its folder                  |
 | `maps.sqlite`                               | SQLite              | Nothing now                                                    |
@@ -103,6 +112,12 @@ aliases, triggers and macros live in catalog.toml instead, and the
 profile file keeps the rest. Room triggers sit in `[[room_triggers]]`,
 apart from `[[triggers]]`, since 0.8.0 fails a whole file on a trigger
 target it does not know.
+
+The top level `charset` key says how the profile reads the game's text
+and writes yours. It writes `charset = "latin1"` for Latin 1 and
+nothing for UTF-8, the default. A name it does not know, such as
+`"cp437"`, reads as UTF-8 and the profile still loads. Builds before it
+keep the key among the keys they do not know and read UTF-8.
 
 A pane in `[ui.panes]` writes `folded = true` while it is folded down
 to its header, and nothing while it is open. Builds before 0.95.6 drop
@@ -218,6 +233,22 @@ scrollback.txt, which an older build reads too. Each other session
 keeps a file with its number. Vosh writes each one every 3 minutes while
 it changes, when a connection ends and as you quit. Closing a session
 deletes its file.
+
+### history.txt and history-<n>.txt
+
+The commands each session sent from the command line, one per line,
+oldest first, which Up brings back after a restart. Each one lands at
+the end of the file as it goes out, so a crash loses none. The page asks
+for a session's newest 1,000 the first time it shows the session, and
+Vosh cuts a longer file back to them with `swap_in`. A command that gives
+the game a password never lands, read as the input pipeline reads it,
+so `look;password a b` and an alias that sends `password` stay out. On a
+game that speaks GMCP, nothing you send before it says you play lands
+either, which keeps out a password typed ahead of the login's prompt.
+The page keeps what you type in password mode and lines for the game's
+editor out before they get here. One lock covers every read, write and
+delete of the files. The files take the scrollback's numbers, and closing
+a session deletes its file.
 
 ### scripts/ and plugins/
 

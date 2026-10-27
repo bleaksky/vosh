@@ -796,7 +796,9 @@ async fn a_switch_moves_one_session_and_each_profile_saves_to_its_own_file() {
         shows(h, two, "profile saved to")
     })
     .await;
-    assert_eq!(backups(&healer_file), healer_backups + 1);
+    // The file already held what the save writes, so it kept no backup.
+    assert_eq!(backups(&healer_file), healer_backups);
+    assert_eq!(saved_aliases(&healer_file, "hh"), 1);
     assert_eq!(backups(&default_file), default_backups);
 
     h.disconnect_session(two).await;
@@ -855,7 +857,9 @@ async fn a_session_on_its_own_profile_saves_only_that_file_and_closing_it_closes
         shows(h, two, "profile saved to")
     })
     .await;
-    assert_eq!(backups(&healer_file), healer_backups + 1);
+    // The file already held what the save writes, so it kept no backup.
+    assert_eq!(backups(&healer_file), healer_backups);
+    assert_eq!(saved_aliases(&healer_file, "hh"), 1);
     assert_eq!(saved_aliases(&default_file, "hh"), 0);
     assert_eq!(backups(&default_file), default_backups);
 
@@ -1755,7 +1759,9 @@ async fn an_import_over_the_profile_two_sessions_play_reaches_both_and_prints_no
     prompt.draw = !draw;
     export.set_prompt(prompt);
     let text = export.to_toml().expect("the export");
-    let result = crate::ipc::characters::profile_import_apply(
+    // Boxed, since the import's future is larger than clippy lets a
+    // test hold on its stack.
+    let result = Box::pin(crate::ipc::characters::profile_import_apply(
         h.app.handle().clone(),
         h.app.state(),
         "Default profile.toml".into(),
@@ -1763,7 +1769,7 @@ async fn an_import_over_the_profile_two_sessions_play_reaches_both_and_prints_no
         AddAs::Replace,
         DEFAULT_PROFILE_NAME.into(),
         Vec::new(),
-    )
+    ))
     .await
     .expect("the import");
     assert_eq!(result.name, DEFAULT_PROFILE_NAME);
@@ -3205,4 +3211,167 @@ async fn removing_a_plugin_clears_every_list_and_its_folder() {
     );
 
     h.finish(grid).await;
+}
+
+/// Write `config` as a backup of the profile file `file`, set aside at
+/// `ms`, and hand back its name.
+fn write_backup(
+    file: &std::path::Path,
+    ms: u64,
+    config: &crate::profile::file::ProfileConfig,
+) -> String {
+    let name = format!(
+        "{}.bak.{ms}",
+        file.file_name().expect("a file name").to_string_lossy()
+    );
+    config
+        .save(&file.with_file_name(&name))
+        .expect("the backup");
+    name
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_restore_lays_a_backup_over_the_profile_two_sessions_play_and_keeps_the_file_it_replaced()
+{
+    use crate::profile::file::ProfileConfig;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, _one, two) = two_sessions_on_two_games().await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    ProfileConfig::default().save(&file).expect("the file");
+    let mut backup = ProfileConfig::default();
+    backup
+        .aliases
+        .push(vosh_automation::alias::Alias::new("ww", "spam 3"));
+    let name = write_backup(&file, 100, &backup);
+    let listed = crate::profile::backups::list(&file, false);
+    assert!(listed.iter().any(|b| b.file == name && b.aliases == 1));
+
+    Box::pin(crate::ipc::characters::profile_restore(
+        h.app.handle().clone(),
+        h.app.state(),
+        DEFAULT_PROFILE_NAME.into(),
+        name,
+    ))
+    .await
+    .expect("the restore");
+
+    // The alias expands in the second session and the file saved it.
+    h.type_in(two, "ww").await;
+    h.until("the alias", |h| shows(h, two, "Line 3 of 3 of the spam."))
+        .await;
+    assert_eq!(saved_aliases(&file, "ww"), 1);
+    // The file it replaced waits in a backup of its own.
+    assert!(crate::profile::backups::list(&file, false)
+        .iter()
+        .any(|b| b.aliases == 0));
+    // A name that is not a backup of the file restores nothing.
+    let refused = crate::ipc::characters::profile_restore(
+        h.app.handle().clone(),
+        h.app.state(),
+        DEFAULT_PROFILE_NAME.into(),
+        "../profiles.toml".into(),
+    )
+    .await;
+    assert!(refused.is_err());
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test]
+async fn a_restore_in_loadout_mode_brings_back_the_profile_file_and_keeps_the_catalog() {
+    use crate::profile::file::ProfileConfig;
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = loadout_mode().await;
+    let one = h.first;
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    let open = h.state.session(Some(one)).expect("the session").profile();
+    crate::disk::save::persist_profile(&h.state, &open).await;
+    let mut backup = ProfileConfig::load(&file).expect("the file");
+    backup.tick.interval_secs = 47;
+    let name = write_backup(&file, 100, &backup);
+
+    Box::pin(crate::ipc::characters::profile_restore(
+        h.app.handle().clone(),
+        h.app.state(),
+        DEFAULT_PROFILE_NAME.into(),
+        name,
+    ))
+    .await
+    .expect("the restore");
+
+    assert_eq!(open.lock().await.tick.config.interval_secs, 47);
+    assert_eq!(aliases_of(&h, one).await, ["hh", "kk"]);
+    assert_eq!(catalog_aliases(&h), ["hh", "kk"]);
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test]
+async fn a_restore_in_loadout_mode_refuses_a_backup_from_before_the_move() {
+    use crate::profile::file::ProfileConfig;
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = loadout_mode().await;
+    let one = h.first;
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    let open = h.state.session(Some(one)).expect("the session").profile();
+    crate::disk::save::persist_profile(&h.state, &open).await;
+    let mut before = ProfileConfig::load(&file).expect("the file");
+    before
+        .aliases
+        .push(vosh_automation::alias::Alias::new("old", "spam 1"));
+    let name = write_backup(&file, 100, &before);
+    assert!(crate::profile::backups::list(&file, true)
+        .iter()
+        .all(|b| b.file != name));
+
+    let refused = Box::pin(crate::ipc::characters::profile_restore(
+        h.app.handle().clone(),
+        h.app.state(),
+        DEFAULT_PROFILE_NAME.into(),
+        name,
+    ))
+    .await;
+    assert!(refused.is_err());
+    assert_eq!(aliases_of(&h, one).await, ["hh", "kk"]);
+    assert_eq!(catalog_aliases(&h), ["hh", "kk"]);
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test]
+async fn a_restore_of_a_profile_no_session_plays_writes_over_a_file_that_does_not_read() {
+    use crate::profile::file::ProfileConfig;
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    // The harness has Healer, and no session plays it.
+    let file = h.profile_file("Healer").await;
+    let mut backup = ProfileConfig::default();
+    backup.tick.interval_secs = 47;
+    let name = write_backup(&file, 100, &backup);
+    std::fs::write(&file, "not = [toml").expect("a broken file");
+
+    Box::pin(crate::ipc::characters::profile_restore(
+        h.app.handle().clone(),
+        h.app.state(),
+        "Healer".into(),
+        name,
+    ))
+    .await
+    .expect("the restore");
+    assert_eq!(
+        ProfileConfig::load(&file)
+            .expect("the file reads")
+            .tick
+            .interval_secs,
+        47
+    );
 }

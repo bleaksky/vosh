@@ -2124,6 +2124,140 @@ The second item you approved on October 23, after mockups. You chose that a rena
 
 Help 3.13 Rename a group is new, and the keyboard list says the menu key opens a heading's menu.
 
+#### October 27. Before 1.0
+
+A check of `docs/requirements.md` against the code found promises that were never built. You chose on October 27 to build seven of them before 1.0 and to move the rest past it, and you approved the review page with every pick it recommends (https://claude.ai/artifact/HqEQQtp3B4yyk1Bkft72dy). The rewritten requirements are 90996e89. The items run in this order on feat/pre-1.0 from main 5a6878ef, each its own stop.
+
+1. Command history that outlives a restart, kept for each session beside its scrollback, the newest 1,000, with password changes kept out.
+2. The tick sends its command a set number of seconds after or before the tick, and a pattern for a line you send resets it as `#tick reset` does.
+3. `json` and `regex` tables in Lua, with the trigger regex syntax and `json.null`.
+4. Show in Finder and Restore from a backup… on a profile's menu. A save that changes nothing makes no backup, a restore in loadout mode brings back the profile file alone, and every confirm dialog draws at the top of the window.
+5. Vosh paces what triggers, timers, the tick, Lua and plugins send, 10 at once and then 4 a second, never what you type. Over 200 waiting drops them, and automation stops at the 40th identical line in a row.
+6. `#list`, TinTin++ style, read as `$name[1]`, `$name[-1]` and `$name[#]`, kept in the profile with `#list <name> keep`.
+7. Text encoding per profile, UTF-8 that reads a stray byte as Windows Latin 1, or Latin 1, read once as bytes leave the telnet layer.
+
+#### October 27. Item 1, command history
+
+- The file. `src-tauri/src/input/history.rs` keeps each session's commands in `history.txt` for the first session and `history-<n>.txt` for the rest, beside the scrollback and named like it. `append` adds each command as it goes out, so a crash loses none. `load` reads the newest 1,000 and cuts a longer file back with `swap_in`. Closing a session deletes the file with its scrollback.
+- The commands. `history_get` hands a session's earlier commands to the page, and `history_push` adds one. It answers false for a line that gives the game a password, by `carries_password`, which `crates/log` now exports from the rule its password wipe uses.
+- The page. `useCommandHistory` loads a session's earlier commands the first time it shows, puts them before what it sent since, and hands each new command to Rust once. A line Rust turns down leaves the history again, so a password change stays in memory only until Rust answers. The history of a session that closes goes, so a new session with its number starts empty. Lines for the game's editor stay out, which they did not before.
+
+Help 2.2 says history comes back after a restart and what it leaves out, and `docs/data-files.md` lists the files.
+
+The review found a leak and five smaller faults, all fixed.
+
+- `history_push` checked the line as typed, so `look;password a b` and an alias that sends `password` reached the file. `keeps` now reads the line as the input pipeline does, variables filled in, split at `;` and aliases expanded, and turns it down when any command gives a password or the aliases run too deep.
+- A password typed before the game hides your typing went out as a plain line and landed. On a game that speaks GMCP, nothing sent before the game says you play joins history now, the lines the log counts as login.
+- A byte that was not UTF-8 or a failed cut made the load fail, so a session lost its history for the run. The load reads past both now.
+- Pushes could reach the file before the load read it, or out of order, which doubled lines. Each session's pushes now wait for its load and for each other.
+- One lock covers every read, write and delete of the files, so a cut never loses a line added while it read, and a line on its way when its session closes makes no file.
+- A refused line cleared the mark of the line sent after it and could leave a command twice in a row. It clears only its own mark now and closes the gap it leaves.
+
+#### October 27. Item 2, the tick's offset and a reset from what you send
+
+- Send it. `fire_offset_secs` on `TickConfig` says when Send each tick goes, from 60 seconds before the tick to 60 after, and `TickSettings::fire_offset` keeps it 1 second inside the interval. `TickRuntime::take_command` holds an after send in `send_at` until it is due. A before send goes once the time left reaches the offset, counted back from the interval, and `sent_early` marks it for the cycle. When the game ticks first, the command goes at the tick, so it goes once each tick either way. The file leaves the field out at 0.
+- Or when you send. `reset_on_send` holds a pattern that `send_regex` compiles. `reset_on_sent` reads the bytes a typed line sends, after its aliases expand and its Lua aliases run, and a line that matches restarts the count as `#tick reset` does. `run_typed_line` hands it those bytes, so a macro counts, and a timer, a trigger or the tick itself never does. A pattern that does not compile turns the Settings save down with its own sentence, and a file that holds one loads with a warning.
+- The card. The Tick card under Automation, Timers gains the Send it row, a number and a choice of seconds after or seconds before, off while Send each tick is empty, and the Or when you send row. `#tick` shows both.
+
+Help 5.1 says how Send it counts and what Or when you send matches. The golden profile files gain both fields.
+
+The review found five faults, all fixed with a test for each in Rust.
+
+- An after send still waiting when the next tick came was replaced and never went, so a long offset on a short tick sent nothing. It goes at that tick now, and the next one waits its turn.
+- `#tick reset` or Or when you send between an early send and the game's tick cleared the mark, so the tick sent the command again. While synced a reset leaves the mark, since the game's tick still ends the cycle.
+- A send left waiting when you cleared Send each tick or moved the offset could go later with no tick behind it. Any setting but an after offset with a command drops it.
+- The card could not keep seconds before while the number was 0, since 0 has no sign. The side now lives on the card, and the number stops 1 second short of Every as the timer does.
+- A match while offline restarted the count though nothing reached the game. Only a connected session counts now.
+
+#### October 27. Item 3, JSON and regex in Lua
+
+- `json`. `crates/script/src/json.rs` puts `json.encode`, `json.decode`, `json.null` and `json.array` in the globals. A table with the keys 1 to n encodes as an array and any other as an object, with its keys sorted. `json.null` stands for null both ways, and an array `json.decode` builds carries a mark, as one `json.array` marks does, so an empty one encodes back as `[]`. A function, a table inside itself, a number that is not finite and a key that is not text or a number raise an error at your line. Text is 1 MB at most each way and tables nest 100 deep at most.
+- `regex`. `crates/script/src/regexes.rs` puts `regex.match`, `regex.find`, `regex.gmatch`, `regex.gsub` and `regex.split` in the globals, on the bytes regex of the crate triggers use, so a pattern you test on a trigger works there. Positions count bytes from 1 and `init` counts as `string.find` counts it. `gmatch` skips an empty match where the last one ended, as Lua 5.4 does. `gsub` takes a template with `$1` and `$$` or a function, whose nil keeps the match. Each engine keeps the last 64 patterns compiled and turns down one over 1 MB compiled.
+- Both go in before the plugin environments, so a plugin reads them through the read only view it has of `string`. GMCP tables reach Lua as before, null as nil.
+
+Help 3.8 has a table of the calls.
+
+The review found four faults that broke the sandbox or its limits, and smaller ones, all fixed with tests.
+
+- Every decoded array shared one mark table that any script could reach with `getmetatable` and fill, with a `__gc` that ran forever with the hook off, or an `__index` that changed every other plugin's arrays. The mark's metatable is locked now, and `json.null` is a light userdata, which has nothing to change.
+- `json.encode` gathered every pair of a table before it looked at the clock, so a table of a million strings ran the Lua reference stack out and aborted the app, and copied text it would turn down anyway. It walks each table twice now, once to count and once to write, looks at the clock every 100 values, and counts its output as it goes, so it stops at 1 MB before it builds more.
+- A memory stop in `regex.gsub` was an ordinary error a `pcall` could catch. It is a failed allocation now, as `string.gsub` raises, so the call stops, and the size of each replacement is counted before it is written.
+- One regex search cannot stop part way, and a large text with a hard pattern ran for seconds. A call takes text of 256 KB and a pattern of 4 KB at most, compiles to 512 KB at most, and looks at the clock after each match and once more as it ends.
+- `regex.gsub` with a function runs its loop in Lua a step at a time, so an error the function raises reaches the script as it was raised, a table included. An empty match never lands inside a character in `gsub` or `split`, `^` anchors at `init` as `string.find` has it, a whole number in a string counts as one, and two keys that read the same are an error.
+
+#### October 27. Item 4, show the profile file and restore it from a backup
+
+- Fewer, truer backups. `write_with_backup` leaves a file that already holds the new text alone and keeps no backup, so the ten backups are the last ten changes rather than the last ten saves.
+- The list. `src-tauri/src/profile/backups.rs` lists the backups of a profile file newest first, each with when it was set aside and how many triggers, aliases, macros and timers it holds. Two with the same text show once, one equal to the file as it is does not show, and one that does not read is left out. `backup_of` takes only a name of the file's own backups, so no restore reads outside the folder.
+- The restore. `restore_profile` in `src-tauri/src/import/vosh/apply.rs` reads the backup and lays it over the profile through the same `replace` an import with Replace uses. So a profile a session plays takes it in memory as `#profile load` would, each session follows its tick, prompt and plugins, and the profile keeps its world, characters and plugins, and in loadout mode the catalog. The save that follows keeps what the file held as a backup, so a restore can be undone. A backup that does not read changes nothing.
+- Show in Finder. `profile_reveal` shows the file selected in its folder on macOS and Windows and opens the folder on Linux, through `reveal_file`, or the profiles folder for a profile that never saved one.
+- The page. A profile's menu under Characters gains Show in Finder and Restore from a backup…, and `RestoreDialog.tsx` lists the backups as two line rows to pick from, with the counts of timers alone in loadout mode. Search finds both through Profiles.
+- The dialog fix. A confirm dialog rendered inside the sticky profile list drew under the details column beside it. `ConfirmDialog` now renders its layer in the body, so no stacking context can cover it, and in place where no document exists.
+
+Help 7.1 names both menu items and says what a restore brings back, and Help 8.3 says where the backups come from.
+
+The review found two faults and three risks, all fixed with tests.
+
+- In loadout mode a backup from before the move held the old aliases, triggers and macros, and a restore laid them over the catalog for every character, the hazard Help 7.2 warns of. Such a backup no longer lists, and a restore refuses one.
+- A profile no session plays had to read its current file before a restore could write it, so a broken file, the case a restore is for, stopped it. A restore writes such a profile's file at once now, with the plugins it lists when it still reads.
+- Edits that waited for their save were lost in a restore. The profile saves first now, so they land in a backup.
+- Backups stayed under the old name after a rename and stayed on disk after a delete. They move with a rename and go with a delete now, as the layout history does.
+- The dialog showed no backup when the list failed, and the arrows did not move the pick. It shows the error now, and the arrows move through the list.
+
+#### October 27. Item 5, pacing what automation sends
+
+- The pace. `src-tauri/src/session/pace.rs` holds `Pace`, a bucket of 10 lines that refills at the profile's lines a second, 4 at first and 1 to 20 in Settings. `Stream::write_all`, which every automation send takes, the lines of triggers, timers, the tick, Lua, plugins and `#walk`, offers its lines to it, sends what the bucket allows and keeps the rest in order. `Stream::write_now`, which what you type, your aliases, your macros and the writing card's lines take, goes past it. The lines the writing card held go through the pace when it lets go of them. A telnet answer, which ends no line, never waits.
+- The loop. `io_loop` sleeps until the next line's turn and sends it, takes the pace from `Connection::send_pace` on each 250 ms poll, and drops what waits when the link ends. `hand_to_connection` and a Settings save hand each session the profile's pace, and the link takes it as it starts.
+- Runaway and repeats. Over 200 lines waiting drops them all with a line that says so. Automation's 40th line in a row that repeats the one before is held back with a line that names it, and so is each after it until you type a command or automation sends another line. The line names the command, not the trigger or timer that sent it, since the stream does not know which one did. That departs from the review page.
+- The page. `session://paced` carries the count, `pacedStore.ts` keeps it for each session, and the command line shows `6 lines wait` at its right where the writing card's sends that wait show. A click calls `session_paced_drop`. Settings under Input, Advanced gains Pace sends from triggers and timers and Lines each second. The review page called the first Pace what automation sends, and the search test that keeps every hit for automation in the Automation group asked for the new name.
+
+Help 2.1 tells the pace and the repeat stop.
+
+The review found two faults and smaller ones, fixed with tests.
+
+- Lines that waited in the pace drained into the game's editor while the writing card held the session's lines. The hold now takes the lines that wait, in order, and the pace waits while it holds.
+- The repeat stop counted apart from the game. Typing the same command started the count again where the game counts on, lines counted as they joined the queue rather than as they left, and a walk step of one letter counted where the game skips it, so a long walk lost its 40th step. The stop now counts each line as it leaves, what you type and walk steps included, by the game's rule in `read_from_buffer`, where a line of one character neither counts nor ends a run but sets the line to compare with, and `!` repeats the last.
+- A `#walk` step waited behind automation and could run out its time. Walk steps go through `Stream::write_step`, past the pace and held only by the writing card.
+- The chip lay over the end of a long command. The field leaves room for it now, and it reads out as it changes.
+- Two things stay as they are. A line you type goes ahead of lines that wait, so `note write` typed while automation lines wait lets them land in the editor, and plugin sends made outside the session loop, at load or from the Console, go past the pace as before.
+
+#### October 27. Item 6, `#list`
+
+- The store. `VariableStore` in `crates/automation/src/vars.rs` keeps lists beside variables, and a name is one or the other, so setting either takes away the other of its name. `VarView::list` reads the session's list over the profile's, as variables read. `interpolate` reads `$name[1]`, `$name[-1]` and `$name[#]` from a list, a place past the end as empty. A name that is no list, or an index that is no number, passes through as typed, as an unknown variable does. `split_items` reads the items of a command, a run in braces as one.
+- The commands. `#list <name>` with `add`, `insert`, `delete`, `set`, `find`, `sort`, `clear` and `keep`, and `#lists`, in `src-tauri/src/input/vars.rs`. A new list is the session's and `keep` moves it to the profile. `#unvar` removes a list too. A list holds 500 items of 4 KB at most.
+- The file. `profile_lists` in the profile file holds the lists the profile keeps, out of the file while there are none.
+- Lua. `mud.list`, `mud.set_list`, `mud.set_profile_list` and `mud.unset_list`, through a list snapshot and a `SetList` action as variables go. A profile list marks the profile for saving.
+
+Help 3.5 tells the lists, and Help 3.8 names the variable and list calls in Lua, which it never named before.
+
+The review found two faults and smaller ones, all fixed with tests.
+
+- `mud.unset_list` was not there, since a format pass moved the line the edit looked for. It is now.
+- "Never both" held only within one scope. A session variable and a profile list of one name read apart, `$foes` the variable and `$foes[1]` the list, and the advice to `#unvar` the variable took the kept list with it. Each name now reads from the session when the session holds it, as a variable or a list, and from the profile only otherwise. `#var` refuses a name a list has in either scope, as `#list` refuses a variable's.
+- Every game line copied every list into the Lua snapshot while any handler ran. The store keeps each list shared, so the snapshot takes it without a copy, and a change copies it only while a snapshot still holds it.
+- A refused add or insert left an empty list. The checks run first now. A delete or set with no place gives the usage line, `#unvar` names what it removed without calling a list a var, a list from the file keeps to the limits, and a Lua list needs a name `$` can read.
+- The import preview still counts variables alone, and a session list named `target` goes with your target as the variable does.
+
+#### October 27. Item 7, text encoding per profile
+
+- The reader. `src-tauri/src/session/charset.rs` holds `Charset`, UTF-8 or Latin 1, and the `Decoder` each connection keeps. `handle_read` passes the parser's events through it, so the accumulator, the triggers, the log, the scrollback and both renderers read one text. UTF-8 that is valid goes through untouched, with no copy. A byte that is not UTF-8 reads as Windows Latin 1, which maps 0x80 to 0x9F to the curly quotes, the euro and the rest browsers read the name Latin 1 as. A character split across two reads waits for the next read, or for a GA or EOR, which let it out as it stands. Latin 1 reads every byte as Windows Latin 1.
+- The writer. `Stream::write_raw` passes each buffer through `encode`, which for Latin 1 writes each character as its byte, a `?` for one Latin 1 lacks, and doubles a 0xFF. A buffer that is not UTF-8, a telnet command, goes as it is.
+- Negotiation. `Negotiator::use_latin1` makes CHARSET take the first Latin 1 name the server offers, ISO-8859-1 among them, in place of UTF-8, and drops the UTF-8 bit from MTTS, 267 in place of 271.
+- The profile. A top level `charset` key, out of the file for UTF-8. `charset_get` and `charset_set` read and save it for the profile Settings shows, and Settings under General, Connection gains Text encoding. `Connection::charset` carries it to the session loop, which reads it at each read and each poll, so a pick in Settings, a switch to a character's profile at login and a restore all take hold at the next read. The CHARSET and MTTS answers keep what the connect said.
+- The grid. `TermGrid::decode` in `src-tauri/src/native/grid/regions.rs` dropped the rest of a feed after a byte that was not UTF-8, and held a short bad tail forever. It now shows U+FFFD for the byte and keeps the text after it, and holds only the start of a character.
+
+Help 1.1 tells the setting.
+
+The review found three faults and smaller ones, fixed with tests.
+
+- A character's profile never read by its charset. The connect reads the profile the session plays before login, the world's, and the switch to the character's profile at login changed nothing on the link. The loop now follows `Connection::charset`, which every switch sets, and a pick in Settings reaches every session on the profile at once.
+- The five places Windows Latin 1 leaves open, 0x81, 0x8D, 0x8F, 0x90 and 0x9D, read as C1 controls, and xterm.js takes 0x90 and 0x9D as the start of a DCS or an OSC, which hid the rest of the line and the lines after it on Windows and Linux. They read as U+FFFD now.
+- One `charset` value Vosh did not know, a hand edit such as `"UTF-8"` among them, failed the whole profile file. The key now reads any case and spelling of the names it knows and reads any other as UTF-8.
+- GMCP packets skipped the reader, so a packet with a Latin 1 byte was dropped and a snooped line showed U+FFFD. Each packet now reads as UTF-8 with a stray byte read as Windows Latin 1.
+- The start of a character a partial ended on waited for the next read when the prompt hold ran out. The hold now lets it out.
+- The CHARSET answer reads a request with the `[TTABLE ]` version RFC 2066 allows, and knows more Latin 1 names.
+- Two things stay as they are. `charset_set`, like `reconnect_set`, says it saved when the file failed to write, since `save_by` reports nothing, and up to three bytes of a character that waits when the link ends are lost.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

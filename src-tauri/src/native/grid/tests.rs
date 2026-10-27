@@ -2002,3 +2002,18 @@ fn the_echo_of_a_command_vosh_draws_itself_stays_after_the_prompt() {
     g.session_output(&text(b"kick goblin\r\n"));
     assert_eq!(screen(&g), ["<1020hp 800m> kick goblin"]);
 }
+
+#[test]
+fn a_byte_that_is_not_utf8_keeps_the_text_after_it() {
+    let mut g = TermGrid::new(80, 24);
+    assert_eq!(
+        g.decode(b"caf\xe9 au lait, Maren"),
+        "caf\u{FFFD} au lait, Maren"
+    );
+    // A character split across two feeds waits for its end.
+    let text = "Orla, 日本".as_bytes();
+    let (first, second) = text.split_at(text.len() - 2);
+    assert_eq!(g.decode(first), "Orla, 日");
+    assert_eq!(g.decode(second), "本");
+    assert_eq!(g.decode(b"\xe9ab"), "\u{FFFD}ab");
+}

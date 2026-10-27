@@ -31,7 +31,7 @@ mod search;
 mod sessions;
 mod sqlite;
 
-pub use forget::{Forgotten, PasswordLines};
+pub use forget::{carries_password, Forgotten, PasswordLines};
 pub use kind::LineKind;
 pub use lookup::{CharacterScope, ScopedLine, ScopedSession};
 pub use scene::{SceneLine, SceneLog, ScopedLogSpan};

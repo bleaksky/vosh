@@ -374,6 +374,15 @@ pub(crate) struct UiConfig {
     /// 500ms = ~2 lines/sec, safe for most worlds.
     #[serde(default = "default_paste_line_delay_ms")]
     pub paste_line_delay_ms: u32,
+    /// Pace what triggers, timers, the tick, Lua and plugins send, so a
+    /// burst goes out at the pace the game reads commands at. What you
+    /// type never waits. See `session/pace.rs`.
+    #[serde(default = "default_true")]
+    pub send_pace: bool,
+    /// The lines a second the pace lets out after a burst of 10, from 1
+    /// to 20.
+    #[serde(default = "default_send_pace_per_sec")]
+    pub send_pace_per_sec: u32,
     /// Enable the webview's native spell check on the prompt input,
     /// but only when the current line starts with a chat verb (say,
     /// tell, chat, gossip, ooc, clan, immtalk, reply, `'`, `"`).
@@ -1515,6 +1524,15 @@ fn default_paste_line_delay_ms() -> u32 {
     500
 }
 
+fn default_send_pace_per_sec() -> u32 {
+    4
+}
+
+/// Hold the pace to 1 to 20 lines a second.
+pub(crate) fn coerce_send_pace_per_sec(n: u32) -> u32 {
+    n.clamp(1, 20)
+}
+
 /// Hold the paste delay to at most 10 seconds a line, so a malformed
 /// value cannot freeze the paste indicator.
 pub(crate) fn coerce_paste_line_delay_ms(ms: u32) -> u32 {
@@ -1606,6 +1624,8 @@ impl Default for UiConfig {
             input_line_mark: true,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
+            send_pace: true,
+            send_pace_per_sec: default_send_pace_per_sec(),
             spellcheck_prompt: false,
             writing_offer: true,
             writing_ask_post: true,

@@ -55,6 +55,10 @@ pub(crate) struct Stream {
     /// The lines held back while the writing card drives the game's
     /// editor, see [`Stream::hold`].
     held: Option<Vec<u8>>,
+    /// The pace of what automation sends, see [`super::pace`].
+    pace: super::pace::Pace,
+    /// How the profile writes what you send, see [`super::charset`].
+    charset: super::charset::Charset,
 }
 
 enum Io {
@@ -70,7 +74,19 @@ impl Stream {
             waits: Waits::default(),
             lines_out: 0,
             held: None,
+            pace: super::pace::Pace::default(),
+            charset: super::charset::Charset::default(),
         }
+    }
+
+    /// Write by `charset` from here.
+    pub(crate) fn set_charset(&mut self, charset: super::charset::Charset) {
+        self.charset = charset;
+    }
+
+    /// How the stream writes, and so how the game's text reads.
+    pub(crate) fn charset(&self) -> super::charset::Charset {
+        self.charset
     }
 
     pub(crate) async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -84,9 +100,39 @@ impl Stream {
         read
     }
 
-    /// Write `buf`, or hold it while [`Stream::hold`] holds the lines of
-    /// the session. A telnet answer ends no line, so it never waits.
+    /// Write `buf`, what automation sends, or hold it while
+    /// [`Stream::hold`] holds the lines of the session. Otherwise the
+    /// lines go at the pace, see [`super::pace`]. A telnet answer ends no
+    /// line, so it never waits.
     pub(crate) async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        if !buf.ends_with(b"\n") {
+            return self.write_raw(buf).await;
+        }
+        if let Some(held) = &mut self.held {
+            self.lines_out += lines_in(buf);
+            held.extend_from_slice(buf);
+            return Ok(());
+        }
+        let now = self.pace.offer(buf, Instant::now());
+        if now.is_empty() {
+            return Ok(());
+        }
+        self.write_raw(&now).await
+    }
+
+    /// Write `buf` past the hold and the pace, as the writing card's own
+    /// lines and the lines you type go. Lines you type start the repeat
+    /// count of the pace again.
+    pub(crate) async fn write_now(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.pace.passed(buf);
+        self.write_raw(buf).await
+    }
+
+    /// Write a `#walk` step past the pace, since the walker sends one at
+    /// a time and waits for the room, so a step never waits behind
+    /// automation and runs out its time. The writing card's hold still
+    /// keeps it, as it keeps every line of automation.
+    pub(crate) async fn write_step(&mut self, buf: &[u8]) -> std::io::Result<()> {
         if let Some(held) = &mut self.held {
             if buf.ends_with(b"\n") {
                 self.lines_out += lines_in(buf);
@@ -94,17 +140,57 @@ impl Stream {
                 return Ok(());
             }
         }
-        self.write_now(buf).await
+        self.pace.passed(buf);
+        self.write_raw(buf).await
     }
 
-    /// Write `buf` past the hold, as the writing card's own lines and the
-    /// lines you type go.
-    pub(crate) async fn write_now(&mut self, buf: &[u8]) -> std::io::Result<()> {
+    /// Take the pace a profile sets, lines a second or none.
+    pub(crate) fn set_pace(&mut self, per_sec: Option<u32>) {
+        self.pace.set(per_sec);
+    }
+
+    /// When the next line the pace holds gets its turn. None while the
+    /// writing card holds the lines, which holds those too.
+    pub(crate) fn pace_due(&self) -> Option<Instant> {
+        if self.held.is_some() {
+            return None;
+        }
+        self.pace.next_due()
+    }
+
+    /// Send the lines the pace held whose turn came.
+    pub(crate) async fn send_paced(&mut self) -> std::io::Result<()> {
+        let due = self.pace.due(Instant::now());
+        if due.is_empty() {
+            return Ok(());
+        }
+        self.write_raw(&due).await?;
+        self.flush().await
+    }
+
+    /// How many lines the pace holds.
+    pub(crate) fn paced_lines(&self) -> usize {
+        self.pace.waiting()
+    }
+
+    /// Drop the lines the pace holds, as you asked.
+    pub(crate) fn drop_paced(&mut self) {
+        self.pace.drop_waiting();
+    }
+
+    /// What the pace says once the pass ends.
+    pub(crate) fn pace_notices(&mut self) -> Vec<String> {
+        self.pace.take_notices()
+    }
+
+    /// Write `buf` to the socket as the profile's charset writes it.
+    async fn write_raw(&mut self, buf: &[u8]) -> std::io::Result<()> {
         let line = buf.ends_with(b"\n");
         let reached = line && self.kernel().is_some_and(|k| !k.in_flight);
+        let bytes = super::charset::encode(self.charset, buf);
         match &mut self.io {
-            Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await?,
-            Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
+            Io::Tcp(s) => AsyncWriteExt::write_all(s, &bytes).await?,
+            Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), &bytes).await?,
         }
         if line {
             let now = Instant::now();
@@ -123,7 +209,13 @@ impl Stream {
     /// Hold the lines the session sends from here, the commands triggers,
     /// timers, the tick, Lua and `#walk` send, until [`Stream::release`].
     pub(crate) fn hold(&mut self) {
-        self.held.get_or_insert_with(Vec::new);
+        // The lines the pace holds wait behind the hold too, so none
+        // drains into the game's editor while the card drives it.
+        let waiting = self.pace.take_waiting();
+        self.lines_out += lines_in(&waiting);
+        self.held
+            .get_or_insert_with(Vec::new)
+            .extend_from_slice(&waiting);
     }
 
     /// How many lines wait in the hold.
@@ -142,7 +234,12 @@ impl Stream {
             return Ok(());
         }
         self.lines_out -= lines_in(&held);
-        self.write_now(&held).await?;
+        // They are automation's lines, so they go at the pace too.
+        let now = self.pace.offer(&held, Instant::now());
+        if now.is_empty() {
+            return Ok(());
+        }
+        self.write_raw(&now).await?;
         self.flush().await
     }
 

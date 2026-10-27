@@ -63,10 +63,21 @@ pub(crate) struct TickConfig {
     pub interval_secs: u64,
     #[serde(default)]
     pub auto_fire: Option<String>,
+    /// When Send each tick goes, in whole seconds against the tick. Above
+    /// 0 it goes that long after the tick. Below 0 it goes that long
+    /// before the expected tick, counted back from the interval, and at
+    /// the tick when the game ticks first. 0 sends it on the tick. Each
+    /// side stops one second short of the interval.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub fire_offset_secs: i64,
     #[serde(default = "default_true")]
     pub sound: bool,
     #[serde(default)]
     pub reset_pattern: Option<String>,
+    /// A pattern for a line a command you type sends, after its aliases
+    /// expand. A match starts the count again, as `#tick reset` does.
+    #[serde(default)]
+    pub reset_on_send: Option<String>,
     /// Seconds before the next fire at which the warning echo should
     /// land. None disables the warning.
     #[serde(default)]
@@ -96,8 +107,10 @@ impl Default for TickConfig {
             enabled: true,
             interval_secs: DEFAULT_INTERVAL_SECS,
             auto_fire: None,
+            fire_offset_secs: 0,
             sound: true,
             reset_pattern: None,
+            reset_on_send: None,
             warn_at_secs: None,
             warn_message: None,
             warn_color: None,
@@ -113,14 +126,23 @@ fn default_interval_secs() -> u64 {
     DEFAULT_INTERVAL_SECS
 }
 
+fn is_zero(n: &i64) -> bool {
+    *n == 0
+}
+
+/// The furthest Send it reaches either side of the tick.
+pub(crate) const MAX_FIRE_OFFSET_SECS: i64 = 60;
+
 /// The tick settings the profile keeps: the `[tick]` table and its
-/// compiled Reset on pattern.
+/// compiled Reset on and Or when you send patterns.
 #[derive(Debug, Default)]
 pub(crate) struct TickSettings {
     pub config: TickConfig,
     /// Compiled form of `config.reset_pattern`. Recompiled when the pattern
     /// changes via the slash command.
     pub reset_regex: Option<Regex>,
+    /// Compiled form of `config.reset_on_send`.
+    pub send_regex: Option<Regex>,
 }
 
 impl TickSettings {
@@ -146,6 +168,28 @@ impl TickSettings {
 
     pub(crate) fn check_reset_match(&self, line: &str) -> bool {
         self.reset_regex.as_ref().is_some_and(|r| r.is_match(line))
+    }
+
+    /// Install an Or when you send pattern that [`compile_reset_pattern`]
+    /// already compiled.
+    pub(crate) fn set_compiled_send_pattern(
+        &mut self,
+        pattern: Option<String>,
+        regex: Option<Regex>,
+    ) {
+        self.config.reset_on_send = pattern;
+        self.send_regex = regex;
+    }
+
+    /// The Send it offset in force, kept one second inside the interval
+    /// on either side, so an after send lands before the next tick and a
+    /// before send after the last one.
+    pub(crate) fn fire_offset(&self) -> i64 {
+        let reach = i64::try_from(self.config.interval_secs.max(1))
+            .unwrap_or(i64::MAX)
+            .saturating_sub(1)
+            .min(MAX_FIRE_OFFSET_SECS);
+        self.config.fire_offset_secs.clamp(-reach, reach)
     }
 }
 
@@ -177,6 +221,11 @@ pub(crate) struct TickRuntime {
     /// Resets each time the count restarts: on each tick, on `reset()`,
     /// and on an interval change while unsynced.
     pub warned_this_cycle: bool,
+    /// When Send each tick goes, while a Send it after the tick waits.
+    pub send_at: Option<Instant>,
+    /// Send each tick went before the expected tick this cycle. Resets
+    /// with the count, as the warning does.
+    pub sent_early: bool,
     /// A session is connected. A profile switch arms a timer its new
     /// config turns on only while one is.
     pub in_session: bool,
@@ -350,6 +399,8 @@ impl TickRuntime {
     fn stop(&mut self) {
         self.last_tick = None;
         self.warned_this_cycle = false;
+        self.send_at = None;
+        self.sent_early = false;
         self.forget_sync();
     }
 
@@ -367,6 +418,11 @@ impl TickRuntime {
             self.last_tick = Some(now);
         }
         self.warned_this_cycle = false;
+        // Synced, the game's tick still ends the cycle, so a command that
+        // went early for it does not go again.
+        if !self.synced {
+            self.sent_early = false;
+        }
     }
 
     /// Set the interval. Unsynced it restarts the count and opens a new
@@ -450,6 +506,7 @@ impl TickRuntime {
     fn restart(&mut self, now: Instant) {
         self.last_tick = Some(now);
         self.warned_this_cycle = false;
+        self.sent_early = false;
         self.interval_changed_at = None;
     }
 
@@ -510,13 +567,66 @@ impl TickRuntime {
     /// timer when [`try_consume_fire`](Self::try_consume_fire) says so,
     /// takes the warning, and reports.
     pub(crate) fn poll(&mut self, settings: &TickSettings, now: Instant) -> TickStep {
+        let sent_early = self.sent_early;
         let fired = self.try_consume_fire(settings, now);
         let warned = self.try_consume_warn(settings, now);
         TickStep {
             payload: TickPayload::from_runtime(settings, self, now, fired),
-            command: fire_command(settings, fired),
+            command: self.take_command(settings, fired, sent_early, now),
             warn_echo: warned.then(|| warn_echo(&settings.config)),
         }
+    }
+
+    /// The Send each tick command due now, if any. `fired` says the
+    /// timer fired on this step and `sent_early` whether the command
+    /// went early in the cycle that tick ended. With no offset it goes on
+    /// the tick. After the tick it waits the offset and then goes, or
+    /// goes at the next tick when that comes first. Before the tick it
+    /// goes once the time left reaches the offset, and at the tick when
+    /// the game ticked first. So it goes once each tick either way.
+    fn take_command(
+        &mut self,
+        settings: &TickSettings,
+        fired: bool,
+        sent_early: bool,
+        now: Instant,
+    ) -> Option<String> {
+        let offset = settings.fire_offset();
+        // A send that waits belongs only to an after offset with a
+        // command to send, so any other setting drops it.
+        if offset <= 0 {
+            self.send_at = None;
+        }
+        let Some(command) = settings.config.auto_fire.as_ref() else {
+            self.send_at = None;
+            return None;
+        };
+        let go = if offset == 0 {
+            fired
+        } else if offset > 0 {
+            let waiting = self.send_at.is_some();
+            let due = self.send_at.is_some_and(|at| now >= at) || (fired && waiting);
+            if due {
+                self.send_at = None;
+            }
+            if fired {
+                self.send_at = Some(now + Duration::from_secs(offset.unsigned_abs()));
+            }
+            due
+        } else if fired {
+            !sent_early
+        } else {
+            let early = Duration::from_secs(offset.unsigned_abs());
+            let due = !self.sent_early
+                && self
+                    .remaining(settings, now)
+                    .is_some_and(|left| left > Duration::ZERO && left <= early);
+            if due {
+                self.sent_early = true;
+            }
+            due
+        };
+        go.then(|| command.clone())
     }
 
     /// A real tick from the game: a `World.Time` hour change or a line
@@ -540,25 +650,45 @@ impl TickRuntime {
             return None;
         }
         let fired = !within(self.last_local_fire);
+        let sent_early = self.sent_early;
         self.synced = true;
         self.last_signal = Some(now);
         self.last_local_fire = None;
         self.restart(now);
         Some(TickStep {
             payload: TickPayload::from_runtime(settings, self, now, fired),
-            command: fire_command(settings, fired),
+            command: self.take_command(settings, fired, sent_early, now),
             warn_echo: None,
         })
     }
 }
 
-/// The Send each tick command to run, when the timer fired.
-fn fire_command(settings: &TickSettings, fired: bool) -> Option<String> {
-    if fired {
-        settings.config.auto_fire.clone()
-    } else {
-        None
+/// Start the count of `tick` again when a line in `sent`, the bytes a
+/// command you typed sends, matches the Or when you send pattern, as
+/// `#tick reset` does. Says whether it did.
+pub(crate) fn reset_on_sent(
+    settings: &TickSettings,
+    tick: &mut TickRuntime,
+    sent: &[u8],
+    now: Instant,
+) -> bool {
+    if settings.send_regex.is_none() || sent.is_empty() {
+        return false;
     }
+    let text = String::from_utf8_lossy(sent);
+    let matched = text
+        .split("\r\n")
+        .filter(|line| !line.is_empty())
+        .any(|line| {
+            settings
+                .send_regex
+                .as_ref()
+                .is_some_and(|r| r.is_match(line))
+        });
+    if matched {
+        tick.reset(settings, now);
+    }
+    matched
 }
 
 /// Bring the count of every session on `open` but `session` to the tick
@@ -731,6 +861,11 @@ impl TickPayload {
 const TICK_RESET_PATTERN_ERROR: &str =
     "Vosh could not read the Reset on pattern. Check it and save again.";
 
+/// The error `tick_set_config` returns for an Or when you send pattern
+/// that does not compile.
+const TICK_SEND_PATTERN_ERROR: &str =
+    "Vosh could not read the Or when you send pattern. Check it and save again.";
+
 /// Apply a tick configuration from Settings to `settings` and the count
 /// `tick`. Checks the Reset on pattern before it changes anything, so a
 /// pattern that does not compile leaves the running tick exactly as it
@@ -756,6 +891,11 @@ pub(crate) fn apply_tick_config(
         .as_ref()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
+    let reset_on_send = config
+        .reset_on_send
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     let warn_message = config
         .warn_message
         .as_ref()
@@ -773,6 +913,10 @@ pub(crate) fn apply_tick_config(
             warn!(error = %e, "tick reset pattern did not compile");
             TICK_RESET_PATTERN_ERROR.to_string()
         })?;
+    let send_regex = crate::tick::compile_reset_pattern(reset_on_send.as_deref()).map_err(|e| {
+        warn!(error = %e, "tick send pattern did not compile");
+        TICK_SEND_PATTERN_ERROR.to_string()
+    })?;
 
     if config.enabled {
         if !settings.config.enabled {
@@ -786,7 +930,11 @@ pub(crate) fn apply_tick_config(
         settings.config.interval_secs = config.interval_secs.max(1);
     }
     settings.set_compiled_reset_pattern(reset_pattern, reset_regex);
+    settings.set_compiled_send_pattern(reset_on_send, send_regex);
     settings.config.auto_fire = auto_fire;
+    settings.config.fire_offset_secs = config
+        .fire_offset_secs
+        .clamp(-MAX_FIRE_OFFSET_SECS, MAX_FIRE_OFFSET_SECS);
     settings.config.sound = config.sound;
     settings.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
     settings.config.warn_message = warn_message;
@@ -1573,8 +1721,10 @@ mod tests {
             enabled: false,
             interval_secs: 60,
             auto_fire: Some(" score ".into()),
+            fire_offset_secs: 0,
             sound: false,
             reset_pattern: Some(reset_pattern.into()),
+            reset_on_send: None,
             warn_at_secs: Some(5),
             warn_message: Some("Tick soon".into()),
             warn_color: Some("red".into()),
@@ -1756,5 +1906,176 @@ mod tests {
             data: serde_json::json!({ "sunlight": "light" }),
         };
         assert!(super::observe_world_time_for_tick(&s, &mut tick, &no_hour, at(80)).is_none());
+    }
+
+    /// Poll every 250 ms from `from` up to and not including `to`, with
+    /// a game tick at each of `ticks`, and return the seconds after
+    /// `start` at which Send each tick went.
+    fn sends_between(
+        s: &TickSettings,
+        t: &mut TickRuntime,
+        start: Instant,
+        to: f64,
+        ticks: &[f64],
+    ) -> Vec<f64> {
+        let mut sent = Vec::new();
+        let mut at = 0.0;
+        while at < to {
+            let now = start + secs(at);
+            if ticks.contains(&at) {
+                if let Some(step) = t.on_game_tick(s, now) {
+                    if step.command.is_some() {
+                        sent.push(at);
+                    }
+                }
+            }
+            if t.poll(s, now).command.is_some() {
+                sent.push(at);
+            }
+            at += 0.25;
+        }
+        sent
+    }
+
+    #[test]
+    fn send_it_after_the_tick_waits_the_offset() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = 2;
+        assert_eq!(sends_between(&s, &mut t, t0, 65.0, &[]), [32.0, 62.0]);
+    }
+
+    #[test]
+    fn send_it_before_the_tick_goes_once_the_time_left_reaches_the_offset() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = -3;
+        assert_eq!(sends_between(&s, &mut t, t0, 61.0, &[]), [27.0, 57.0]);
+    }
+
+    #[test]
+    fn a_game_tick_before_the_early_send_sends_it_at_the_tick() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = -3;
+        // The first tick syncs and sends, the next comes at 25 seconds,
+        // ahead of the send at 27, and the one after it comes late, past
+        // the send it already had.
+        assert_eq!(
+            sends_between(&s, &mut t, t0, 70.0, &[10.0, 35.0, 66.0]),
+            [10.0, 35.0, 62.0]
+        );
+    }
+
+    #[test]
+    fn send_it_stays_one_second_inside_the_interval() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = 45;
+        assert_eq!(s.fire_offset(), 29);
+        assert_eq!(sends_between(&s, &mut t, t0, 61.0, &[]), [59.0]);
+        s.config.fire_offset_secs = -45;
+        assert_eq!(s.fire_offset(), -29);
+    }
+
+    #[test]
+    fn a_line_you_send_that_matches_restarts_the_count() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        let regex = compile_reset_pattern(Some("^rest$")).unwrap();
+        s.set_compiled_send_pattern(Some("^rest$".into()), regex);
+        let at = t0 + secs(20.0);
+        assert!(!reset_on_sent(&s, &mut t, b"look\r\nrestore\r\n", at));
+        assert_eq!(t.remaining(&s, at), Some(secs(10.0)));
+        assert!(reset_on_sent(&s, &mut t, b"look\r\nrest\r\n", at));
+        assert_eq!(t.remaining(&s, at), Some(secs(30.0)));
+        // A reset is not a tick, so nothing fires and the timer stays
+        // as unsynced as it was.
+        assert!(!t.synced);
+    }
+
+    #[test]
+    fn settings_check_the_send_pattern_and_bound_the_offset() {
+        let now = Instant::now();
+        let mut s = TickSettings::default();
+        let mut t = TickRuntime::default();
+        let mut bad = TickConfig {
+            reset_on_send: Some("(".into()),
+            ..TickConfig::default()
+        };
+        assert_eq!(
+            apply_tick_config(&mut s, &mut t, &bad, now),
+            Err(TICK_SEND_PATTERN_ERROR.to_string())
+        );
+        assert_eq!(s.config, TickConfig::default());
+        bad.reset_on_send = Some(" ^rest$ ".into());
+        bad.fire_offset_secs = -90;
+        let saved = apply_tick_config(&mut s, &mut t, &bad, now).unwrap();
+        assert_eq!(saved.reset_on_send.as_deref(), Some("^rest$"));
+        assert_eq!(saved.fire_offset_secs, -MAX_FIRE_OFFSET_SECS);
+        assert!(s.send_regex.is_some());
+    }
+
+    #[test]
+    fn an_after_send_still_waiting_goes_at_the_next_tick() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = 26;
+        // The game ticks at 10, then at 35, before the send for 10 was
+        // due at 36. That send goes at 35, and the one for 35 at 61.
+        assert_eq!(
+            sends_between(&s, &mut t, t0, 63.0, &[10.0, 35.0]),
+            [35.0, 61.0]
+        );
+    }
+
+    #[test]
+    fn a_reset_while_synced_never_sends_a_tick_twice() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = -3;
+        assert_eq!(sends_between(&s, &mut t, t0, 1.0, &[0.5]), [0.5]);
+        // The early send for the tick due at 30.5 goes at 27.5. You reset
+        // at 28 and the game ticks at 31. Steps count quarter seconds.
+        let mut sent = Vec::new();
+        for quarter in 4..136_u32 {
+            let at = f64::from(quarter) / 4.0;
+            let now = t0 + secs(at);
+            if quarter == 112 {
+                t.reset(&s, now);
+            }
+            if quarter == 124 {
+                if let Some(step) = t.on_game_tick(&s, now) {
+                    if step.command.is_some() {
+                        sent.push(at);
+                    }
+                }
+            }
+            if t.poll(&s, now).command.is_some() {
+                sent.push(at);
+            }
+        }
+        assert_eq!(sent, [27.5]);
+    }
+
+    #[test]
+    fn a_waiting_send_goes_when_its_setting_changes() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = 10;
+        assert!(t.on_game_tick(&s, t0 + secs(1.0)).is_some());
+        assert!(t.send_at.is_some());
+        // Clearing the command drops the send, so turning it back on
+        // later sends nothing until the next tick.
+        s.config.auto_fire = None;
+        assert!(t.poll(&s, t0 + secs(5.0)).command.is_none());
+        assert!(t.send_at.is_none());
+        s.config.auto_fire = Some("score".into());
+        assert!(t.poll(&s, t0 + secs(20.0)).command.is_none());
+        // So does a move to before the tick.
+        assert!(t.on_game_tick(&s, t0 + secs(25.0)).is_some());
+        s.config.fire_offset_secs = -3;
+        t.poll(&s, t0 + secs(26.0));
+        assert!(t.send_at.is_none());
     }
 }

@@ -2662,3 +2662,181 @@ fn a_timer_group_turned_off_by_lua_stops_its_timers() {
     let _ = process(&mut p, "#lua mud.set_group_enabled('upkeep', false)");
     assert!(!p.timer_fires(&p.timers[0]));
 }
+
+#[test]
+fn a_list_grows_reads_and_changes_by_place() {
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let r = process_on(&mut p, &mut c, "#list foes add Orla {the guard}");
+    assert_eq!(r.echo, ["foes holds 2 items"]);
+    let _ = process_on(&mut p, &mut c, "#list foes insert 1 Maren");
+    assert_eq!(
+        process_on(&mut p, &mut c, "kill $foes[1]").bytes,
+        b"kill Maren\r\n"
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "kill $foes[-1]").bytes,
+        b"kill the guard\r\n"
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "say $foes[#]").bytes,
+        b"say 3\r\n"
+    );
+    let _ = process_on(&mut p, &mut c, "#list foes set 2 Tolliver");
+    assert_eq!(
+        process_on(&mut p, &mut c, "#list foes find Tolliver").echo,
+        ["Tolliver is item 2 of foes"]
+    );
+    let _ = process_on(&mut p, &mut c, "#list foes delete 1");
+    let _ = process_on(&mut p, &mut c, "#list foes sort");
+    assert_eq!(
+        process_on(&mut p, &mut c, "#list foes").echo,
+        [
+            "list foes (session), 2 items:",
+            "  1  the guard",
+            "  2  Tolliver"
+        ]
+    );
+    assert!(ProfileConfig::from_profile(&p).profile_lists.is_empty());
+    // Keep moves it to the profile, whose file saves it.
+    assert_eq!(
+        process_on(&mut p, &mut c, "#list foes keep").echo,
+        ["foes kept in the profile"]
+    );
+    assert_eq!(
+        ProfileConfig::from_profile(&p)
+            .profile_lists
+            .get("foes")
+            .map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["1 list(s):", "  profile foes  2 items"]
+    );
+    let _ = process_on(&mut p, &mut c, "#unvar foes");
+    assert!(ProfileConfig::from_profile(&p).profile_lists.is_empty());
+}
+
+#[test]
+fn a_list_and_a_variable_never_share_a_name() {
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let _ = process_on(&mut p, &mut c, "#var foes Orla");
+    let r = process_on(&mut p, &mut c, "#list foes add Maren");
+    assert!(
+        r.echo.iter().any(|l| l.contains("foes is a variable")),
+        "{:?}",
+        r.echo
+    );
+    let r = process_on(&mut p, &mut c, "#list foes delete 9");
+    assert!(r.echo.iter().any(|l| l.contains("foes is a variable")));
+    let _ = process_on(&mut p, &mut c, "#unvar foes");
+    let _ = process_on(&mut p, &mut c, "#list foes add Maren");
+    let r = process_on(&mut p, &mut c, "#list foes delete 9");
+    assert!(
+        r.echo.iter().any(|l| l.contains("foes has no item 9")),
+        "{:?}",
+        r.echo
+    );
+}
+
+#[test]
+fn lua_writes_a_list_and_reads_it_back() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua mud.set_profile_list('friends', {'Tolliver', 'Orla'})",
+    );
+    assert!(ran.lua.durable_changed);
+    assert_eq!(
+        process_on(&mut p, &mut c, "tell $friends[2] hello").bytes,
+        b"tell Orla hello\r\n"
+    );
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua mud.set_list('friends', {mud.list('friends')[1]})",
+    );
+    let _ = ran;
+    assert_eq!(
+        process_on(&mut p, &mut c, "say $friends[#]").bytes,
+        b"say 1\r\n"
+    );
+}
+
+#[test]
+fn a_session_name_hides_the_profile_name_of_either_kind() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let _ = process_on(&mut p, &mut c, "#list foes add Orla");
+    let _ = process_on(&mut p, &mut c, "#list foes keep");
+    // #var refuses a name a list has, in either scope.
+    let r = process_on(&mut p, &mut c, "#var foes x");
+    assert!(
+        r.echo.iter().any(|l| l.contains("foes is a list")),
+        "{:?}",
+        r.echo
+    );
+    // Lua can still set one, and then the session's name decides both
+    // readings, so the variable hides the profile list.
+    let _ = run_line(&state, &mut p, &mut c, "#lua mud.set_var('foes', 'x')");
+    assert_eq!(
+        process_on(&mut p, &mut c, "say $foes $foes[1]").bytes,
+        b"say x x[1]\r\n"
+    );
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["no lists defined"]
+    );
+}
+
+#[test]
+fn unset_list_removes_a_list_and_a_refused_insert_makes_none() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let r = process_on(&mut p, &mut c, "#list newl insert 5 x");
+    assert!(r.echo.iter().any(|l| l.contains("newl has no place 5")));
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["no lists defined"]
+    );
+    let _ = process_on(&mut p, &mut c, "#list foes add Orla");
+    let _ = run_line(&state, &mut p, &mut c, "#lua mud.unset_list('foes')");
+    assert_eq!(
+        process_on(&mut p, &mut c, "#lists").echo,
+        ["no lists defined"]
+    );
+    let r = process_on(&mut p, &mut c, "#list foes delete");
+    assert!(
+        r.echo.iter().any(|l| l.contains("usage #list")),
+        "{:?}",
+        r.echo
+    );
+}
+
+#[test]
+fn a_list_holds_five_hundred_items_from_any_path() {
+    let state = AppState::default();
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    let many = vec!["x"; 500].join(" ");
+    let _ = process_on(&mut p, &mut c, &format!("#list foes add {many}"));
+    let r = process_on(&mut p, &mut c, "#list foes add one");
+    assert!(r.echo.iter().any(|l| l.contains("at most 500 items")));
+    let ran = run_line(
+        &state,
+        &mut p,
+        &mut c,
+        "#lua local t = {} for i = 1, 501 do t[i] = 'x' end mud.set_list('big', t)",
+    );
+    let _ = ran;
+    assert!(c.vars.list("big").is_none());
+}

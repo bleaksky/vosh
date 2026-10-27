@@ -530,8 +530,13 @@ export function normalizeTick(raw: TickConfig): TickConfig {
     enabled: raw.enabled !== false,
     interval_secs: secs(raw.interval_secs) ?? 60,
     auto_fire: text(raw.auto_fire),
+    fire_offset_secs:
+      typeof raw.fire_offset_secs === 'number' && Number.isFinite(raw.fire_offset_secs)
+        ? Math.max(-60, Math.min(60, Math.trunc(raw.fire_offset_secs)))
+        : 0,
     sound: raw.sound === true,
     reset_pattern: text(raw.reset_pattern),
+    reset_on_send: text(raw.reset_on_send),
     warn_at_secs: secs(raw.warn_at_secs),
     warn_message: text(raw.warn_message),
     warn_color: text(raw.warn_color),
