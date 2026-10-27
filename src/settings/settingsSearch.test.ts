@@ -291,7 +291,7 @@ describe('searchSettingsRows', () => {
       SETTINGS_ROWS.filter(
         (r) => r.target.group === 'input' && r.target.section === 'advanced',
       ).map((r) => r.label),
-    ).toEqual(['Wait between pasted lines']);
+    ).toEqual(['Wait between pasted lines', 'Pace sends from triggers and timers']);
   });
 
   it('finds the Layout and Vitals rows', () => {

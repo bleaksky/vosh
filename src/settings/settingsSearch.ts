@@ -516,6 +516,11 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'advanced paste pacing delay flood milliseconds',
     target: at('input', 'advanced', 'paste-delay'),
   },
+  {
+    label: 'Pace sends from triggers and timers',
+    keywords: 'advanced pace throttle flood rate burst lines second',
+    target: at('input', 'advanced', 'send-pace'),
+  },
 
   // Prompt, the section that left Input.
   {

@@ -360,7 +360,7 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
         <Card>
           <Disclosure
             label="Advanced"
-            description="Pace long pastes."
+            description="Pace long pastes and what triggers and timers send."
             expanded={advanced}
             aria-controls={advanced ? advancedId : undefined}
             onClick={() => setAdvanced((open) => !open)}
@@ -376,6 +376,23 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
                   step={50}
                   unit="ms"
                   unitName="milliseconds"
+                />
+              </Row>
+              <Row
+                label="Pace sends from triggers and timers"
+                description="When triggers, timers or scripts send a burst, the first 10 lines go at once and the rest follow at the pace below. What you type never waits."
+                anchor="send-pace"
+              >
+                <Toggle checked={config.send_pace} onChange={(on) => update({ send_pace: on })} />
+              </Row>
+              <Row label="Lines each second" anchor="send-pace-rate">
+                <NumberField
+                  value={config.send_pace_per_sec}
+                  onChange={(n) => update({ send_pace_per_sec: n })}
+                  min={1}
+                  max={20}
+                  unit="lines"
+                  disabled={!config.send_pace}
                 />
               </Row>
             </DisclosurePanel>
