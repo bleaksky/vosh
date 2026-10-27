@@ -26,6 +26,7 @@ import {
   Select,
   Toggle,
 } from '../../ui';
+import { CharsetRow } from './CharsetRow';
 import { ReconnectRow } from './ReconnectRow';
 import { OTHER, worldChoice, worldValue } from './worldChoice';
 
@@ -176,6 +177,7 @@ function ConnectionSection({ onError }: { onError: (message: string | null) => v
       <Row label="Use TLS" anchor="tls">
         <Toggle checked={target.tls} onChange={(tls) => saveTarget({ ...latest.current, tls })} />
       </Row>
+      <CharsetRow onError={onError} />
       <ReconnectRow onError={onError} />
     </Section>
   );

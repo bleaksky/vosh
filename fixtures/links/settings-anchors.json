@@ -4,6 +4,7 @@
     "general:connection#world",
     "general:connection#host",
     "general:connection#tls",
+    "general:connection#charset",
     "general:connection#reconnect",
     "general:updates",
     "general:updates#auto-update",
@@ -219,6 +220,7 @@
     "general": [
       "advanced",
       "auto-update",
+      "charset",
       "connection",
       "gpu",
       "host",

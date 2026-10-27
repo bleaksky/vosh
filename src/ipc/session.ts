@@ -162,6 +162,21 @@ export async function reconnectSet(on: boolean, profile?: string | null): Promis
   await invoke('reconnect_set', { on, profile });
 }
 
+/** How a profile reads the game's text and writes yours. UTF-8 reads
+ *  a byte that is not UTF-8 as Latin 1. Latin 1 reads and writes every
+ *  byte as Latin 1. */
+export type Charset = 'utf8' | 'latin1';
+
+/** The charset of `profile`, or of the selected session's profile. */
+export async function charsetGet(profile?: string | null): Promise<Charset> {
+  return invoke<Charset>('charset_get', { profile });
+}
+
+/** Set the charset of `profile`. A connection takes it as it starts. */
+export async function charsetSet(charset: Charset, profile?: string | null): Promise<void> {
+  await invoke('charset_set', { charset, profile });
+}
+
 /** Where Connect dials. */
 export interface ConnectionTarget {
   host: string;
