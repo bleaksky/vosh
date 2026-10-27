@@ -3,6 +3,7 @@
 mod alerts;
 mod broadcast;
 mod bundle;
+mod charset;
 mod config_golden;
 mod echo;
 mod fake_mud;

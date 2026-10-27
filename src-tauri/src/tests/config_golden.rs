@@ -720,6 +720,7 @@ fn full_profile() -> ProfileConfig {
         preset_edits: full_preset_edits(),
         // Reconnect when the link drops, turned off.
         reconnect: OnSwitch(false),
+        charset: crate::session::charset::Charset::Latin1,
         extra: BTreeMap::new(),
     };
     config.set_prompt(full_prompt());

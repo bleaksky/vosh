@@ -3,6 +3,7 @@ disabled_trigger_groups = ["spam"]
 disabled_macro_groups = ["travel"]
 disabled_timer_groups = ["upkeep"]
 reconnect = false
+charset = "latin1"
 
 [[aliases]]
 name = "kk"

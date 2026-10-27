@@ -67,6 +67,8 @@ pub(super) struct Conn<R: tauri::Runtime> {
     pub(super) stream: Stream,
     pub(super) negotiator: Negotiator,
     pub(super) parser: Parser,
+    /// Reads the text the parser lets out as the profile's charset says.
+    pub(super) decoder: super::charset::Decoder,
     pub(super) accumulator: LineAccumulator,
     /// Who echoes your input on this connection. Every read updates it
     /// in wire order before the loop takes the next outgoing line, so
@@ -202,11 +204,13 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     let mut timer_next: HashMap<u32, Instant> = HashMap::new();
 
     let seen_output = session.output_count();
+    let decoder = super::charset::Decoder::new(stream.charset());
     let mut conn = Conn {
         app,
         stream,
         negotiator,
         parser: Parser::new(),
+        decoder,
         accumulator: LineAccumulator::new(),
         server_echo: ServerEcho::default(),
         session,

@@ -421,6 +421,35 @@ pub(crate) async fn reconnect_set<R: tauri::Runtime>(
     Ok(())
 }
 
+/// How `profile`, or the profile the selected session plays when it
+/// names none, reads the game's text.
+#[tauri::command]
+pub(crate) async fn charset_get(
+    state: State<'_, SharedState>,
+    profile: Option<String>,
+) -> Result<crate::session::charset::Charset, String> {
+    Ok(state.lock_named(profile).await?.charset)
+}
+
+/// Set how `profile`, or the profile the selected session plays when it
+/// names none, reads the game's text, and save. A connection takes it as
+/// it starts, so the next connect reads by it.
+#[tauri::command]
+pub(crate) async fn charset_set<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    charset: crate::session::charset::Charset,
+    profile: Option<String>,
+) -> Result<(), String> {
+    let open = {
+        let mut p = state.lock_named(profile).await?;
+        p.charset = charset;
+        p.open().clone()
+    };
+    crate::disk::save::save_by(&app, &state, &open, crate::disk::save::SavePolicy::Now).await;
+    Ok(())
+}
+
 /// Inform the session of a new terminal size. The backend updates the
 /// telnet negotiator and, when NAWS has already been negotiated with
 /// the server, pushes a NAWS subnegotiation so the MUD re-wraps its

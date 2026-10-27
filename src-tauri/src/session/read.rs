@@ -49,7 +49,7 @@ impl<R: tauri::Runtime> Conn<R> {
     pub(super) async fn handle_read(&mut self, bytes: &[u8], log_sink: &LogSink) -> ReadBatch {
         self.perf.socket_reads += 1;
         self.perf.bytes_in += bytes.len() as u64;
-        let events = self.parser.feed(bytes);
+        let events = self.decoder.events(self.parser.feed(bytes));
         let mut batch = ReadBatch::new(self.others_wrote());
         // The text of the read, for the writer, which counts a `> ` that
         // came alone in it.

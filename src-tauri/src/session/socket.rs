@@ -57,6 +57,8 @@ pub(crate) struct Stream {
     held: Option<Vec<u8>>,
     /// The pace of what automation sends, see [`super::pace`].
     pace: super::pace::Pace,
+    /// How the profile writes what you send, see [`super::charset`].
+    charset: super::charset::Charset,
 }
 
 enum Io {
@@ -73,7 +75,18 @@ impl Stream {
             lines_out: 0,
             held: None,
             pace: super::pace::Pace::default(),
+            charset: super::charset::Charset::default(),
         }
+    }
+
+    /// Write by `charset` from here.
+    pub(crate) fn set_charset(&mut self, charset: super::charset::Charset) {
+        self.charset = charset;
+    }
+
+    /// How the stream writes, and so how the game's text reads.
+    pub(crate) fn charset(&self) -> super::charset::Charset {
+        self.charset
     }
 
     pub(crate) async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -170,13 +183,14 @@ impl Stream {
         self.pace.take_notices()
     }
 
-    /// Write `buf` to the socket as it stands.
+    /// Write `buf` to the socket as the profile's charset writes it.
     async fn write_raw(&mut self, buf: &[u8]) -> std::io::Result<()> {
         let line = buf.ends_with(b"\n");
         let reached = line && self.kernel().is_some_and(|k| !k.in_flight);
+        let bytes = super::charset::encode(self.charset, buf);
         match &mut self.io {
-            Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await?,
-            Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
+            Io::Tcp(s) => AsyncWriteExt::write_all(s, &bytes).await?,
+            Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), &bytes).await?,
         }
         if line {
             let now = Instant::now();

@@ -110,6 +110,13 @@ pub(crate) struct ProfileConfig {
     /// you turn it off.
     #[serde(default, skip_serializing_if = "OnSwitch::is_on")]
     pub reconnect: OnSwitch,
+    /// How the profile reads the game's text, UTF-8 at first, so the file
+    /// says `charset = "latin1"` only once you choose Latin 1.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::session::charset::Charset::is_default"
+    )]
+    pub charset: crate::session::charset::Charset,
     /// Keys this build does not know, which a newer build wrote. They
     /// ride along as they are, so a save never drops them. The tables a
     /// profile leaves behind on purpose stay out, see [`DROPPED_KEYS`].
@@ -284,6 +291,7 @@ impl ProfileConfig {
             alerts: profile.alerts.clone(),
             preset_edits: profile.preset_edits.clone(),
             reconnect: profile.reconnect,
+            charset: profile.charset,
             extra: profile.file_extra.clone(),
         };
         config.set_prompt(profile.prompt.clone());
@@ -459,6 +467,7 @@ impl ProfileConfig {
         profile.alerts.clone_from(&self.alerts);
         profile.preset_edits.clone_from(&self.preset_edits);
         profile.reconnect = self.reconnect;
+        profile.charset = self.charset;
         profile.file_extra = self.extra.clone();
 
         warnings
