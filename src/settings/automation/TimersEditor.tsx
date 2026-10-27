@@ -235,6 +235,15 @@ function TickCard({
   const [advanced, setAdvanced] = useState(false);
   const advancedId = useId();
   const set = (patch: Partial<TickConfig>) => update((prev) => ({ ...prev, ...patch }));
+  // Which side of the tick Send it counts from. A 0 has no sign, so the
+  // side stays where you put it until the number says otherwise, and a
+  // save or a change from elsewhere moves it with the number.
+  const [side, setSide] = useState<'after' | 'before'>(v.fire_offset_secs < 0 ? 'before' : 'after');
+  useEffect(() => {
+    if (v.fire_offset_secs < 0) setSide('before');
+    else if (v.fire_offset_secs > 0) setSide('after');
+  }, [v.fire_offset_secs]);
+  const offsetFor = (n: number, to: 'after' | 'before') => (to === 'before' ? -n : n);
   const text = (s: string) => (s.length > 0 ? s : null);
   const warnOn = v.warn_at_secs !== null && v.warn_at_secs > 0;
 
@@ -266,13 +275,13 @@ function TickCard({
           <NumberField
             value={Math.abs(v.fire_offset_secs)}
             min={0}
-            max={60}
+            max={Math.min(60, Math.max(0, v.interval_secs - 1))}
             disabled={v.auto_fire === null}
             aria-label="Seconds"
-            onChange={(n) => set({ fire_offset_secs: v.fire_offset_secs < 0 ? -n : n })}
+            onChange={(n) => set({ fire_offset_secs: offsetFor(n, side) })}
           />
           <Select
-            value={v.fire_offset_secs < 0 ? 'before' : 'after'}
+            value={side}
             disabled={v.auto_fire === null}
             aria-label="Before or after the tick"
             width={132}
@@ -280,9 +289,10 @@ function TickCard({
               { value: 'after', label: 'seconds after' },
               { value: 'before', label: 'seconds before' },
             ]}
-            onChange={(side) => {
-              const n = Math.abs(v.fire_offset_secs);
-              set({ fire_offset_secs: side === 'before' ? -n : n });
+            onChange={(next) => {
+              const to = next === 'before' ? 'before' : 'after';
+              setSide(to);
+              set({ fire_offset_secs: offsetFor(Math.abs(v.fire_offset_secs), to) });
             }}
           />
         </span>
