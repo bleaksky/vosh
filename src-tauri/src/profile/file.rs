@@ -369,12 +369,22 @@ impl ProfileConfig {
                 warnings.push(format!("tick reset pattern rejected: {e}"));
                 None
             });
+        let send_regex = crate::tick::compile_reset_pattern(self.tick.reset_on_send.as_deref())
+            .unwrap_or_else(|e| {
+                warnings.push(format!("tick send pattern rejected: {e}"));
+                None
+            });
         profile.tick = TickSettings {
             config: TickConfig {
                 interval_secs: self.tick.interval_secs.max(1),
+                fire_offset_secs: self.tick.fire_offset_secs.clamp(
+                    -crate::tick::MAX_FIRE_OFFSET_SECS,
+                    crate::tick::MAX_FIRE_OFFSET_SECS,
+                ),
                 ..self.tick.clone()
             },
             reset_regex,
+            send_regex,
         };
 
         // UI preferences carry across as a single clone (see the

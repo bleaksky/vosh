@@ -147,8 +147,17 @@ fn slash_tick_show(profile: &Profile, c: &Connection, now: Instant) -> InputResu
     } else {
         lines.push("  no reset pattern".to_string());
     }
+    if let Some(p) = &cfg.reset_on_send {
+        lines.push(format!("  reset when you send /{p}/"));
+    }
     if let Some(f) = &cfg.auto_fire {
-        lines.push(format!("  auto-fire: {f}"));
+        let offset = profile.tick.fire_offset();
+        let when = match offset {
+            0 => String::new(),
+            n if n > 0 => format!(", {n}s after the tick"),
+            n => format!(", {}s before the tick", n.unsigned_abs()),
+        };
+        lines.push(format!("  auto-fire: {f}{when}"));
     } else {
         lines.push("  auto-fire: (none)".to_string());
     }

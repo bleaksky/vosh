@@ -1755,7 +1755,9 @@ async fn an_import_over_the_profile_two_sessions_play_reaches_both_and_prints_no
     prompt.draw = !draw;
     export.set_prompt(prompt);
     let text = export.to_toml().expect("the export");
-    let result = crate::ipc::characters::profile_import_apply(
+    // Boxed, since the import's future is larger than clippy lets a
+    // test hold on its stack.
+    let result = Box::pin(crate::ipc::characters::profile_import_apply(
         h.app.handle().clone(),
         h.app.state(),
         "Default profile.toml".into(),
@@ -1763,7 +1765,7 @@ async fn an_import_over_the_profile_two_sessions_play_reaches_both_and_prints_no
         AddAs::Replace,
         DEFAULT_PROFILE_NAME.into(),
         Vec::new(),
-    )
+    ))
     .await
     .expect("the import");
     assert_eq!(result.name, DEFAULT_PROFILE_NAME);
