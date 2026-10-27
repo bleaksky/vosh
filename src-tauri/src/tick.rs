@@ -418,7 +418,11 @@ impl TickRuntime {
             self.last_tick = Some(now);
         }
         self.warned_this_cycle = false;
-        self.sent_early = false;
+        // Synced, the game's tick still ends the cycle, so a command that
+        // went early for it does not go again.
+        if !self.synced {
+            self.sent_early = false;
+        }
     }
 
     /// Set the interval. Unsynced it restarts the count and opens a new
@@ -576,9 +580,10 @@ impl TickRuntime {
     /// The Send each tick command due now, if any. `fired` says the
     /// timer fired on this step and `sent_early` whether the command
     /// went early in the cycle that tick ended. With no offset it goes on
-    /// the tick. After the tick it waits the offset and then goes. Before
-    /// the tick it goes once the time left reaches the offset, and at the
-    /// tick when the game ticked first, so it goes once each tick.
+    /// the tick. After the tick it waits the offset and then goes, or
+    /// goes at the next tick when that comes first. Before the tick it
+    /// goes once the time left reaches the offset, and at the tick when
+    /// the game ticked first. So it goes once each tick either way.
     fn take_command(
         &mut self,
         settings: &TickSettings,
@@ -586,17 +591,26 @@ impl TickRuntime {
         sent_early: bool,
         now: Instant,
     ) -> Option<String> {
-        let command = settings.config.auto_fire.as_ref()?;
         let offset = settings.fire_offset();
+        // A send that waits belongs only to an after offset with a
+        // command to send, so any other setting drops it.
+        if offset <= 0 {
+            self.send_at = None;
+        }
+        let Some(command) = settings.config.auto_fire.as_ref() else {
+            self.send_at = None;
+            return None;
+        };
         let go = if offset == 0 {
             fired
         } else if offset > 0 {
-            if fired {
-                self.send_at = Some(now + Duration::from_secs(offset.unsigned_abs()));
-            }
-            let due = self.send_at.is_some_and(|at| now >= at);
+            let waiting = self.send_at.is_some();
+            let due = self.send_at.is_some_and(|at| now >= at) || (fired && waiting);
             if due {
                 self.send_at = None;
+            }
+            if fired {
+                self.send_at = Some(now + Duration::from_secs(offset.unsigned_abs()));
             }
             due
         } else if fired {
@@ -2000,5 +2014,68 @@ mod tests {
         assert_eq!(saved.reset_on_send.as_deref(), Some("^rest$"));
         assert_eq!(saved.fire_offset_secs, -MAX_FIRE_OFFSET_SECS);
         assert!(s.send_regex.is_some());
+    }
+
+    #[test]
+    fn an_after_send_still_waiting_goes_at_the_next_tick() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = 26;
+        // The game ticks at 10, then at 35, before the send for 10 was
+        // due at 36. That send goes at 35, and the one for 35 at 61.
+        assert_eq!(
+            sends_between(&s, &mut t, t0, 63.0, &[10.0, 35.0]),
+            [35.0, 61.0]
+        );
+    }
+
+    #[test]
+    fn a_reset_while_synced_never_sends_a_tick_twice() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = -3;
+        assert_eq!(sends_between(&s, &mut t, t0, 1.0, &[0.5]), [0.5]);
+        // The early send for the tick due at 30.5 goes at 27.5. You reset
+        // at 28 and the game ticks at 31. Steps count quarter seconds.
+        let mut sent = Vec::new();
+        for quarter in 4..136_u32 {
+            let at = f64::from(quarter) / 4.0;
+            let now = t0 + secs(at);
+            if quarter == 112 {
+                t.reset(&s, now);
+            }
+            if quarter == 124 {
+                if let Some(step) = t.on_game_tick(&s, now) {
+                    if step.command.is_some() {
+                        sent.push(at);
+                    }
+                }
+            }
+            if t.poll(&s, now).command.is_some() {
+                sent.push(at);
+            }
+        }
+        assert_eq!(sent, [27.5]);
+    }
+
+    #[test]
+    fn a_waiting_send_goes_when_its_setting_changes() {
+        let t0 = Instant::now();
+        let (mut s, mut t) = session(t0);
+        s.config.fire_offset_secs = 10;
+        assert!(t.on_game_tick(&s, t0 + secs(1.0)).is_some());
+        assert!(t.send_at.is_some());
+        // Clearing the command drops the send, so turning it back on
+        // later sends nothing until the next tick.
+        s.config.auto_fire = None;
+        assert!(t.poll(&s, t0 + secs(5.0)).command.is_none());
+        assert!(t.send_at.is_none());
+        s.config.auto_fire = Some("score".into());
+        assert!(t.poll(&s, t0 + secs(20.0)).command.is_none());
+        // So does a move to before the tick.
+        assert!(t.on_game_tick(&s, t0 + secs(25.0)).is_some());
+        s.config.fire_offset_secs = -3;
+        t.poll(&s, t0 + secs(26.0));
+        assert!(t.send_at.is_none());
     }
 }
