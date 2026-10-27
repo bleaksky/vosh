@@ -70,6 +70,8 @@ pub(crate) struct UiConfigPayload {
     pub input_echo_dim: bool,
     pub input_line_mark: bool,
     pub paste_line_delay_ms: u32,
+    pub send_pace: bool,
+    pub send_pace_per_sec: u32,
     pub spellcheck_prompt: bool,
     pub writing_offer: bool,
     pub writing_ask_post: bool,
@@ -185,6 +187,8 @@ impl UiConfigPayload {
             input_echo_dim: ui.input_echo_dim,
             input_line_mark: ui.input_line_mark,
             paste_line_delay_ms: ui.paste_line_delay_ms,
+            send_pace: ui.send_pace,
+            send_pace_per_sec: ui.send_pace_per_sec,
             spellcheck_prompt: ui.spellcheck_prompt,
             writing_offer: ui.writing_offer,
             writing_ask_post: ui.writing_ask_post,
@@ -301,6 +305,8 @@ pub(crate) enum UiField {
     InputEchoDim(bool),
     InputLineMark(bool),
     PasteLineDelayMs(u32),
+    SendPace(bool),
+    SendPacePerSec(u32),
     SpellcheckPrompt(bool),
     WritingOffer(bool),
     WritingAskPost(bool),
@@ -389,7 +395,15 @@ async fn set_fields(
         let text = p.ui.vitals_text.clone();
         let lines = p.ui.scrollback_lines;
         let mark = crate::input::echo_mark(&p.ui);
+        let pace = crate::session::pace::pace_of(&p.ui);
         apply_fields(&mut p.ui, fields);
+        // A new pace reaches every session on the profile at its next poll.
+        let paced = crate::session::pace::pace_of(&p.ui);
+        if paced != pace {
+            for session in p.players(&sessions) {
+                session.connection.lock().send_pace = paced;
+            }
+        }
         // A new Scrollback size reaches every session on the profile.
         let resized: Vec<_> = if p.ui.scrollback_lines == lines {
             Vec::new()
@@ -487,6 +501,10 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::InputLineMark(v) => ui.input_line_mark = v,
             UiField::PasteLineDelayMs(v) => {
                 ui.paste_line_delay_ms = cfg::coerce_paste_line_delay_ms(v);
+            }
+            UiField::SendPace(v) => ui.send_pace = v,
+            UiField::SendPacePerSec(v) => {
+                ui.send_pace_per_sec = cfg::coerce_send_pace_per_sec(v);
             }
             UiField::SpellcheckPrompt(v) => ui.spellcheck_prompt = v,
             UiField::WritingOffer(v) => ui.writing_offer = v,

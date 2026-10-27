@@ -415,6 +415,8 @@ fn full_ui() -> UiConfig {
         input_line_mark: false,
         side_panels_fill_height: true,
         paste_line_delay_ms: 250,
+        send_pace: false,
+        send_pace_per_sec: 6,
         spellcheck_prompt: true,
         writing_offer: false,
         writing_ask_post: false,

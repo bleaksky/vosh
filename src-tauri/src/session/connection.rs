@@ -145,6 +145,10 @@ pub(crate) struct Connection {
     /// so the line that completes it reads only the rest. The only thing
     /// the reader keeps between reads. A send or a disconnect drops it.
     pub(crate) reader_heard: Option<String>,
+    /// The pace of what automation sends, lines a second or None for no
+    /// pace, as the profile sets it. The session loop takes it as the
+    /// link starts and on each poll after, see [`super::pace`].
+    pub(crate) send_pace: Option<u32>,
 }
 
 impl Connection {

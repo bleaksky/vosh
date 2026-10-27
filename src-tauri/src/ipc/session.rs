@@ -279,6 +279,24 @@ pub(crate) async fn session_send_raw<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Drop the lines the pace holds in `session`, or the selected one, as a
+/// click on the command line's count asks. Says nothing when the session
+/// has no connection, since the lines went with it.
+#[tauri::command]
+pub(crate) async fn session_paced_drop(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
+    let current = session.slot.lock().await;
+    if let Some(handle) = current.as_ref() {
+        if !handle.drop_paced() {
+            return Err("session task gone".to_string());
+        }
+    }
+    Ok(())
+}
+
 /// Walk the path you clicked on the map: `steps` as a `#walk` string,
 /// planned from room `start`, with the room each step should reach in
 /// `rooms`. A walk under way gives way once its step in flight lands,

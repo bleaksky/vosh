@@ -68,6 +68,7 @@ mod lines;
 pub(crate) mod log_kinds;
 mod log_sink;
 mod lua_timers;
+pub(crate) mod pace;
 mod perf;
 pub(crate) mod prompt_view;
 mod read;
@@ -184,6 +185,8 @@ pub(crate) enum OutgoingMsg {
     Walk(WalkCommand),
     /// What the writing card asks of the game's line editor.
     Writer(writer::WriterCommand),
+    /// Drop the lines the pace holds, as you asked.
+    DropPaced,
 }
 
 pub(crate) struct SessionHandle {
@@ -237,6 +240,12 @@ impl SessionHandle {
     /// false when the session has already been torn down.
     pub(crate) fn prompt_repaint(&self) -> bool {
         self.tx_outgoing.send(OutgoingMsg::PromptRepaint).is_ok()
+    }
+
+    /// Drop the lines the pace holds. Returns false when the session has
+    /// already been torn down.
+    pub(crate) fn drop_paced(&self) -> bool {
+        self.tx_outgoing.send(OutgoingMsg::DropPaced).is_ok()
     }
 
     /// Hand the walker a `#walk` you typed, or Esc. Returns false when

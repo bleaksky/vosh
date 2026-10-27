@@ -89,6 +89,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::session_disconnect,
         session::session_reconnect_now,
         session::session_reconnect_cancel,
+        session::session_paced_drop,
         session::reconnect_get,
         session::reconnect_set,
         input::input_known_words,

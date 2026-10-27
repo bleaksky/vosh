@@ -103,6 +103,9 @@ pub(super) struct Conn<R: tauri::Runtime> {
     /// Where the writer stood when the page last heard, see
     /// [`Conn::tell_writing`].
     pub(super) writing_told: WritingState,
+    /// How many lines the pace held when the page last heard, see
+    /// [`Conn::tell_pace`].
+    pub(super) paced_told: usize,
 }
 
 impl<R: tauri::Runtime> Conn<R> {
@@ -120,6 +123,21 @@ impl<R: tauri::Runtime> Conn<R> {
         if progress != self.walk_told {
             self.session.emit(&self.app, events::WALK, &progress);
             self.walk_told = progress;
+        }
+    }
+
+    /// Print what the pace says, and tell the page how many lines it
+    /// holds when that changed, once at the end of each pass as for the
+    /// walk.
+    fn tell_pace(&mut self) {
+        let notices = self.stream.pace_notices();
+        if !notices.is_empty() {
+            emit_output(&self.app, &self.session, framed_echoes(&notices));
+        }
+        let paced = self.stream.paced_lines();
+        if paced != self.paced_told {
+            self.session.emit_data(&self.app, events::PACED, &paced);
+            self.paced_told = paced;
         }
     }
 
@@ -167,6 +185,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         c.link = super::reconnect::LinkWatch::default();
         c.log_kinds = super::log_kinds::LogKinds::default();
         c.round_trip.connect(chrono::Local::now().time());
+        c.send_pace = super::pace::pace_of(&p.ui);
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
         c.prompt.set_cols(usize::from(negotiator.window_size.0));
@@ -200,7 +219,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         writer: Writer::default(),
         writer_send: Vec::new(),
         writing_told: WritingState::default(),
+        paced_told: 0,
     };
+    let pace = conn.session.connection.lock().send_pace;
+    conn.stream.set_pace(pace);
     // When a partial that can still become your prompt stops waiting for
     // the next read and paints raw.
     let mut hold_until: Option<Instant> = None;
@@ -233,6 +255,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         let walk_until = conn.walker.deadline();
         // When the writer next looks at the time.
         let write_until = conn.writer.deadline();
+        // When the next line the pace holds gets its turn.
+        let pace_until = conn.stream.pace_due();
         tokio::select! {
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
@@ -319,6 +343,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                         break Some(reason);
                     }
                 }
+                Some(OutgoingMsg::DropPaced) => conn.stream.drop_paced(),
                 Some(OutgoingMsg::PromptRepaint) => {
                     // The card asked for it, so its state follows even when
                     // the bytes stay the same, since the pieces in them can
@@ -453,6 +478,12 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     emit_output(&conn.app, &conn.session, framed_echoes(&out.lines));
                 }
             }
+            () = sleep_until_hold(pace_until), if pace_until.is_some() => {
+                if let Err(e) = conn.stream.send_paced().await {
+                    error!(error = %e, "paced send failed");
+                    break Some(format!("write failed: {e}"));
+                }
+            }
             () = sleep_until_hold(write_until), if write_until.is_some() => {
                 let send = conn.writer.poll(Instant::now());
                 conn.writer_send.extend(send);
@@ -484,6 +515,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 emit_prompt_state(&conn.app, &conn.session, state);
             }
             _ = poll.tick() => {
+                // A change to the pace in Settings reaches the loop here.
+                let pace = conn.session.connection.lock().send_pace;
+                conn.stream.set_pace(pace);
                 if let Err(e) = handle_tick(
                     &conn.app,
                     &mut conn.stream,
@@ -548,6 +582,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         }
         conn.tell_walk();
         conn.tell_writing();
+        conn.tell_pace();
     };
     // The walk ends with the connection, and so does the writer's job.
     conn.walker = Walker::default();
@@ -555,6 +590,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     conn.writer.dropped();
     conn.writer.settle();
     conn.tell_writing();
+    // Lines the pace held go with the connection, with nothing to say.
+    conn.stream.drop_paced();
+    let _ = conn.stream.pace_notices();
+    conn.tell_pace();
 
     // A preview the card shows on your prompt goes with the connection,
     // so the live render goes back on the row first.

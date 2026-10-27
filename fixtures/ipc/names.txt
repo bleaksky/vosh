@@ -142,6 +142,7 @@ command session_disconnect(session?)
 command session_identity_get(session?)
 command session_move(session, to)
 command session_open(profile?)
+command session_paced_drop(session?)
 command session_reconnect_cancel(session?)
 command session_reconnect_now(session?)
 command session_rename(session, name?)
@@ -204,6 +205,7 @@ event session://lua-output app heard
 event session://lua-panes app heard
 event session://mark app heard
 event session://output app heard
+event session://paced app heard
 event session://prompt-gag-without-reader app heard
 event session://prompt-state app heard
 event session://prompt-status app heard
