@@ -2230,6 +2230,14 @@ The review found two faults and smaller ones, fixed with tests.
 
 Help 3.5 tells the lists, and Help 3.8 names the variable and list calls in Lua, which it never named before.
 
+The review found two faults and smaller ones, all fixed with tests.
+
+- `mud.unset_list` was not there, since a format pass moved the line the edit looked for. It is now.
+- "Never both" held only within one scope. A session variable and a profile list of one name read apart, `$foes` the variable and `$foes[1]` the list, and the advice to `#unvar` the variable took the kept list with it. Each name now reads from the session when the session holds it, as a variable or a list, and from the profile only otherwise. `#var` refuses a name a list has in either scope, as `#list` refuses a variable's.
+- Every game line copied every list into the Lua snapshot while any handler ran. The store keeps each list shared, so the snapshot takes it without a copy, and a change copies it only while a snapshot still holds it.
+- A refused add or insert left an empty list. The checks run first now. A delete or set with no place gives the usage line, `#unvar` names what it removed without calling a list a var, a list from the file keeps to the limits, and a Lua list needs a name `$` can read.
+- The import preview still counts variables alone, and a session list named `target` goes with your target as the variable does.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.

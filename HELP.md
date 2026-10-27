@@ -650,7 +650,7 @@ A list keeps items in order under one name. Make and change lists in the command
 - To see a list, type `#list foes`. To see every list, type `#lists`. To remove a list, type `#unvar foes`.
 - Use an item in a command as `$foes[1]`. `$foes[-1]` is the last item, and `$foes[#]` is the number of items. A place past the end is empty.
 
-A new list has session scope, as `#var` does. To keep it after the connection ends, type `#list foes keep`, and the profile file keeps it. A list holds 500 items at most. A name is a variable or a list, but not both. So `#list` refuses a name that a variable has, and setting a variable with the name of a list takes the list away.
+A new list has session scope, as `#var` does. To keep it after the connection ends, type `#list foes keep`, and the profile file keeps it. A list holds 500 items at most. A name is a variable or a list, but not both. So `#list` refuses a name that a variable has, and `#var` refuses a name that a list has. When a Lua script sets one in the session and the profile has the other, the name in the session hides the name in the profile.
 
 Example. `#list foes add Orla Maren`, and then `kill $foes[1]` sends `kill Orla` to the server.
 
