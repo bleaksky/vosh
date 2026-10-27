@@ -2153,6 +2153,14 @@ The review found a leak and five smaller faults, all fixed.
 - One lock covers every read, write and delete of the files, so a cut never loses a line added while it read, and a line on its way when its session closes makes no file.
 - A refused line cleared the mark of the line sent after it and could leave a command twice in a row. It clears only its own mark now and closes the gap it leaves.
 
+#### October 27. Item 2, the tick's offset and a reset from what you send
+
+- Send it. `fire_offset_secs` on `TickConfig` says when Send each tick goes, from 60 seconds before the tick to 60 after, and `TickSettings::fire_offset` keeps it 1 second inside the interval. `TickRuntime::take_command` holds an after send in `send_at` until it is due. A before send goes once the time left reaches the offset, counted back from the interval, and `sent_early` marks it for the cycle. When the game ticks first, the command goes at the tick, so it goes once each tick either way. The file leaves the field out at 0.
+- Or when you send. `reset_on_send` holds a pattern that `send_regex` compiles. `reset_on_sent` reads the bytes a typed line sends, after its aliases expand and its Lua aliases run, and a line that matches restarts the count as `#tick reset` does. `run_typed_line` hands it those bytes, so a macro counts, and a timer, a trigger or the tick itself never does. A pattern that does not compile turns the Settings save down with its own sentence, and a file that holds one loads with a warning.
+- The card. The Tick card under Automation, Timers gains the Send it row, a number and a choice of seconds after or seconds before, off while Send each tick is empty, and the Or when you send row. `#tick` shows both.
+
+Help 5.1 says how Send it counts and what Or when you send matches. The golden profile files gain both fields.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
