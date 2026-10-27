@@ -2171,11 +2171,19 @@ The review found five faults, all fixed with a test for each in Rust.
 
 #### October 27. Item 3, JSON and regex in Lua
 
-- `json`. `crates/script/src/json.rs` puts `json.encode`, `json.decode`, `json.null` and `json.array` in the globals. A table with the keys 1 to n encodes as an array and any other as an object, with its keys sorted. `json.null` stands for null both ways, and an array `json.decode` builds carries a mark, as one `json.array` marks does, so an empty one encodes back as `[]`. A function, a table inside itself, a number that is not finite and a key that is not text or a number raise an error at your line. Text is 1 MB at most each way, tables nest 100 deep at most, and each walk looks at the clock every 1,000 values as the hook would.
+- `json`. `crates/script/src/json.rs` puts `json.encode`, `json.decode`, `json.null` and `json.array` in the globals. A table with the keys 1 to n encodes as an array and any other as an object, with its keys sorted. `json.null` stands for null both ways, and an array `json.decode` builds carries a mark, as one `json.array` marks does, so an empty one encodes back as `[]`. A function, a table inside itself, a number that is not finite and a key that is not text or a number raise an error at your line. Text is 1 MB at most each way and tables nest 100 deep at most.
 - `regex`. `crates/script/src/regexes.rs` puts `regex.match`, `regex.find`, `regex.gmatch`, `regex.gsub` and `regex.split` in the globals, on the bytes regex of the crate triggers use, so a pattern you test on a trigger works there. Positions count bytes from 1 and `init` counts as `string.find` counts it. `gmatch` skips an empty match where the last one ended, as Lua 5.4 does. `gsub` takes a template with `$1` and `$$` or a function, whose nil keeps the match. Each engine keeps the last 64 patterns compiled and turns down one over 1 MB compiled.
 - Both go in before the plugin environments, so a plugin reads them through the read only view it has of `string`. GMCP tables reach Lua as before, null as nil.
 
 Help 3.8 has a table of the calls.
+
+The review found four faults that broke the sandbox or its limits, and smaller ones, all fixed with tests.
+
+- Every decoded array shared one mark table that any script could reach with `getmetatable` and fill, with a `__gc` that ran forever with the hook off, or an `__index` that changed every other plugin's arrays. The mark's metatable is locked now, and `json.null` is a light userdata, which has nothing to change.
+- `json.encode` gathered every pair of a table before it looked at the clock, so a table of a million strings ran the Lua reference stack out and aborted the app, and copied text it would turn down anyway. It walks each table twice now, once to count and once to write, looks at the clock every 100 values, and counts its output as it goes, so it stops at 1 MB before it builds more.
+- A memory stop in `regex.gsub` was an ordinary error a `pcall` could catch. It is a failed allocation now, as `string.gsub` raises, so the call stops, and the size of each replacement is counted before it is written.
+- One regex search cannot stop part way, and a large text with a hard pattern ran for seconds. A call takes text of 256 KB and a pattern of 4 KB at most, compiles to 512 KB at most, and looks at the clock after each match and once more as it ends.
+- `regex.gsub` with a function runs its loop in Lua a step at a time, so an error the function raises reaches the script as it was raised, a table included. An empty match never lands inside a character in `gsub` or `split`, `^` anchors at `init` as `string.find` has it, a whole number in a string counts as one, and two keys that read the same are an error.
 
 #### October 27. Item 4, show the profile file and restore it from a backup
 
