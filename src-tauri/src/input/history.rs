@@ -67,6 +67,22 @@ pub(crate) fn keeps(profile: &Profile, c: &Connection, line: &str, connected: bo
     }
 }
 
+/// Whether scrollback keeps `echo`, the echo of a command `session` sent
+/// as the terminal took it, mark and colors included. It keeps none that
+/// history leaves out, by [`keeps`], so a password typed as a command and
+/// the lines of the login never reach the scrollback file.
+pub(crate) async fn keeps_echo(session: &crate::sessions::Session, echo: &[u8]) -> bool {
+    let connected = session.live_address().is_some();
+    let p = session.lock_profile().await;
+    let mark = vosh_protocol::ansi::plain_text(crate::input::echo_mark(&p.ui).as_bytes());
+    let plain = vosh_protocol::ansi::plain_text(echo);
+    let c = session.connection.lock();
+    plain.lines().all(|row| {
+        let command = row.strip_prefix(mark.as_str()).unwrap_or(row);
+        keeps(&p, &c, command, connected)
+    })
+}
+
 /// The newest [`HISTORY_CAP`] commands in `path`, oldest first. A file
 /// that holds more is cut back to them, so it never grows past one run's
 /// worth over the cap. A missing file is an empty history, a byte that is

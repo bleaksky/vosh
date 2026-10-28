@@ -791,6 +791,24 @@ async fn scrollback_keeps_your_commands_where_they_showed() {
     .await
     .expect("the echo");
 
+    // A password typed as a command stays out, as it stays out of
+    // history, and a terminal that took no output since it mounted puts
+    // the echo after everything it loaded.
+    h.type_line("password old new").await;
+    assert!(
+        h.game_hears(b"password old new\r\n", WAIT).await,
+        "the game never heard the password change"
+    );
+    crate::ipc::terminal::terminal_local_write(
+        h.app.state(),
+        "inventory\r\n".to_string(),
+        Some(0),
+        None,
+        Some(true),
+    )
+    .await
+    .expect("the echo");
+
     let kept: Vec<String> = h
         .state
         .selected_session()
@@ -812,4 +830,9 @@ async fn scrollback_keeps_your_commands_where_they_showed() {
         "{kept:#?}"
     );
     assert!(at("east") < at("The Long Hall"), "{kept:#?}");
+    assert!(
+        !kept.iter().any(|line| line.contains("password")),
+        "{kept:#?}"
+    );
+    assert_eq!(kept.last().map(String::as_str), Some("inventory"));
 }

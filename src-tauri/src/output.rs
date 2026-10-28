@@ -187,20 +187,20 @@ pub(crate) fn echo_lines<R: tauri::Runtime>(
 /// Print the echo of a command you send that Vosh draws itself, such as
 /// a quick key's, then the lines after it, in the terminal of `session`.
 /// The echo lands at the cursor, after the game's prompt, as the echo
-/// the command line draws does, and scrollback keeps it where it showed,
-/// as it keeps that one.
+/// the command line draws does, and scrollback keeps the echo where it
+/// showed, as it keeps that one. The lines after it stay out, as the
+/// lines after a typed command's echo do.
 pub(crate) async fn echo_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
     lines: &[String],
 ) {
-    if let Some(after) = emit_lines(app, session, lines, false) {
-        let text = lines.join("\r\n");
-        session
-            .scrollback
-            .lock()
-            .await
-            .keep_echo(after, text.as_bytes());
+    let Some(after) = emit_lines(app, session, lines, false) else {
+        return;
+    };
+    let echo = lines[0].as_bytes();
+    if crate::input::history::keeps_echo(session, echo).await {
+        session.scrollback.lock().await.keep_echo(after, echo);
     }
 }
 

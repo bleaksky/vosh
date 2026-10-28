@@ -229,8 +229,9 @@ launch, once a day and on a change.
 
 The newest terminal lines of each session, as many as Scrollback size
 says, one line per CRLF with its SGR codes. The echo of each command you
-sent sits among them where it showed, its mark included, and a password
-leaves none. The first session keeps
+sent sits among them where it showed, its mark included. An echo that
+history leaves out, a command that gives the game a password or a line
+sent while you log in, stays out here too. The first session keeps
 scrollback.txt, which an older build reads too. Each other session
 keeps a file with its number. Vosh writes each one every 3 minutes while
 it changes, when a connection ends and as you quit. Closing a session

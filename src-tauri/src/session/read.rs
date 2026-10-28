@@ -340,6 +340,9 @@ pub(super) async fn let_go_held_lines<R: tauri::Runtime>(
         if !c.prompt.stage.holds() {
             return Ok(());
         }
+        // Their read painted them, so scrollback keeps them under that
+        // read's output, before an echo that came after them.
+        batch.painted_in = Some(c.prompt.stage.sent());
         let steps = let_go_held(&mut p, &mut c, &mut batch, Instant::now(), log_sink.id());
         (p.open().clone(), steps)
     };
@@ -372,7 +375,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
         conn.perf.routed_emits += result.routes.len() as u64;
     }
     emit_line_routes(&conn.app, &conn.session, &result);
-    let output = batch.out.id();
+    let output = batch.painted_in.unwrap_or_else(|| batch.out.id());
     for text in kept {
         let sb_t0 = std::time::Instant::now();
         // The ring keeps a run of repeated lines once, as the screen shows
@@ -484,6 +487,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         since_prompt: _,
         reader,
         room_ahead: _,
+        painted_in: _,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);

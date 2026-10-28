@@ -387,6 +387,12 @@ impl Stage {
         self.sent > after
     }
 
+    /// The newest output the stage finished with something to write, the
+    /// one that painted whatever already shows.
+    pub fn sent(&self) -> u64 {
+        self.sent
+    }
+
     /// Catch up with `out` before it goes out, so bytes written after
     /// the open row close it, and say whether a pinned prompt's row is
     /// still open after it. The session calls it at the end of every
