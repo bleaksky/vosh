@@ -2,6 +2,13 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.96.1 - 2026-10-28
+
+Your commands stay in the scrollback when you scroll up.
+
+- On Windows and Linux, the commands you send no longer disappear when you scroll up. The history shows each one where you sent it, among the game's lines.
+- The scrollback Vosh brings back when you open it again keeps your commands too, on every platform. A command that gives the game a password stays out, as it stays out of command history.
+
 ## v0.96.0 - 2026-10-27
 
 Change many automation items at once, keep your command history through a restart, pace what your triggers send, and set the text encoding of a world.
