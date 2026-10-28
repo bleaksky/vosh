@@ -29,8 +29,10 @@ import { showLaunchNotices } from './launchNotices';
 export interface SessionTerminals {
   /** The selected session's live terminal, once it is ready. */
   termRef: MutableRefObject<TerminalHandle | null>;
-  /** Write text the page draws itself into the terminal of `session`. */
-  writeTo: (session: number, text: string) => void;
+  /** Write text the page draws itself into the terminal of `session`.
+   *  `keep` says it is the echo of a command you sent, which scrollback
+   *  keeps. */
+  writeTo: (session: number, text: string, keep?: boolean) => void;
   /** Write text the page draws itself into the selected session's
    *  terminal. */
   writeLive: (text: string) => void;
@@ -82,11 +84,11 @@ export function useSessionTerminals(selected: number, opened: readonly number[])
   // came before the newest output the renderer that shows took: xterm
   // names it here, and the native grid names its own as it takes the
   // text, as it does for a session with no terminal here yet.
-  const writeTo = (session: number, text: string) => {
+  const writeTo = (session: number, text: string, keep = false) => {
     const term = terminals.current.get(session);
     term?.write(text);
     const after = nativeSurfaceEnabled() || !term ? null : term.outputTaken();
-    void terminalLocalWrite(text, after, session).catch(() => {});
+    void terminalLocalWrite(text, after, session, keep).catch(() => {});
   };
   const writeLive = (text: string) => writeTo(getSelected(), text);
   // The session it was for shows the error in its title band and its

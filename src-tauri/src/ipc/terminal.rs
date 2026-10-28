@@ -22,12 +22,18 @@ use crate::sessions::SessionId;
 /// the grid names its own as it takes the text. The session can hear of
 /// the text after it sent later output, since your echo and your line
 /// reach it by two calls, and that output stays open.
+///
+/// `keep` says the text is the echo of a command you sent, which
+/// scrollback keeps where it showed, after the output `after` names. So
+/// the history the split loads and the scrollback the next launch
+/// restores show your commands as the screen did.
 #[tauri::command]
 pub(crate) async fn terminal_local_write(
     state: State<'_, SharedState>,
     text: String,
     after: Option<u64>,
     session: Option<SessionId>,
+    keep: Option<bool>,
 ) -> Result<(), String> {
     let session = state.session(session)?;
     #[cfg(native_surface)]
@@ -39,12 +45,17 @@ pub(crate) async fn terminal_local_write(
     // With no grid, text whose renderer named nothing lands after
     // everything.
     #[cfg(not(native_surface))]
-    let taken = {
-        let _ = &text;
-        u64::MAX
-    };
+    let taken = u64::MAX;
+    let after = after.unwrap_or(taken);
+    if keep == Some(true) {
+        session
+            .scrollback
+            .lock()
+            .await
+            .keep_echo(after, text.as_bytes());
+    }
     if let Some(handle) = session.slot.lock().await.as_ref() {
-        let _ = handle.local_write(after.unwrap_or(taken));
+        let _ = handle.local_write(after);
     }
     Ok(())
 }

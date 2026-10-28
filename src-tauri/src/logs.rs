@@ -58,9 +58,23 @@ pub(crate) struct Snapshot {
 /// The number the next [`Snapshot`] takes.
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(0);
 
+/// One line the ring keeps, with the output it came in.
+#[derive(Debug)]
+struct Kept {
+    line: Vec<u8>,
+    /// The id of the prompt stage output that wrote the line, or for a
+    /// line that came another way the newest the ring held then. The ids
+    /// never fall from the oldest line to the newest, so the echo of a
+    /// command finds the place it showed in, see
+    /// [`Scrollback::keep_echo`].
+    output: u64,
+}
+
 #[derive(Debug)]
 pub(crate) struct Scrollback {
-    lines: VecDeque<Vec<u8>>,
+    lines: VecDeque<Kept>,
+    /// The output of the newest line kept.
+    newest: u64,
     /// The run of repeated lines the screen ends on, while Collapse
     /// repeated lines is on.
     run: Option<RingRun>,
@@ -74,6 +88,7 @@ impl Default for Scrollback {
     fn default() -> Self {
         Self {
             lines: VecDeque::new(),
+            newest: 0,
             run: None,
             changed: false,
             cap: SCROLLBACK_CAP,
@@ -124,7 +139,15 @@ impl Scrollback {
         self.changed = true;
     }
 
+    /// Keep `raw_line`, which came after every line the ring holds.
     pub(crate) fn push(&mut self, raw_line: Vec<u8>) {
+        self.push_from(self.newest, raw_line);
+    }
+
+    /// Keep `line`, which output `output` wrote.
+    fn push_from(&mut self, output: u64, line: Vec<u8>) {
+        // The ids never fall toward the newest line.
+        let output = output.max(self.newest);
         self.changed = true;
         if self.lines.len() >= self.cap {
             self.lines.pop_front();
@@ -133,35 +156,79 @@ impl Scrollback {
                 self.run = None;
             }
         }
-        self.lines.push_back(raw_line);
+        self.newest = output;
+        self.lines.push_back(Kept { line, output });
         if let Some(run) = self.run.as_mut() {
             run.after += 1;
         }
     }
 
+    /// Keep the echo of a command you sent, `text` as the terminal took
+    /// it, one line for each row it ends. It goes where it showed: after
+    /// the lines of output `after` and of the outputs before it, and
+    /// before the lines of any output the terminal took after it, since
+    /// your echo and the game's reply reach Vosh apart. An echo with
+    /// nothing to read, as the line end a password leaves, keeps nothing.
+    pub(crate) fn keep_echo(&mut self, after: u64, text: &[u8]) {
+        if vosh_protocol::ansi::plain_text(text).trim().is_empty() {
+            return;
+        }
+        let rows = echo_rows(text);
+        let newer = self
+            .lines
+            .iter()
+            .rev()
+            .take_while(|kept| kept.output > after)
+            .count();
+        let at = self.lines.len() - newer;
+        // The echo comes after the run's line when that line came no
+        // later, so the lines counted after it grow.
+        if let Some(run) = self.run.as_mut() {
+            if run.after >= newer {
+                run.after += rows.len();
+            }
+        }
+        let output = after.min(self.newest);
+        for (i, line) in rows.into_iter().enumerate() {
+            self.lines.insert(at + i, Kept { line, output });
+        }
+        while self.lines.len() > self.cap {
+            // The run's line was the oldest, and leaves with it.
+            if self
+                .run
+                .is_some_and(|run| run.after + 1 >= self.lines.len())
+            {
+                self.run = None;
+            }
+            self.lines.pop_front();
+        }
+        self.changed = true;
+    }
+
     /// Keep `line` as Collapse repeated lines made of it on screen: on its
     /// own while it is off, as the start of a run, or as the run's line
     /// with its count once a line joined the run.
-    pub(crate) fn keep(&mut self, line: Vec<u8>, run: Option<KeptRun>) {
+    /// `output` is the id of the output that wrote it.
+    pub(crate) fn keep(&mut self, output: u64, line: Vec<u8>, run: Option<KeptRun>) {
         match run {
-            None => self.push(line),
+            None => self.push_from(output, line),
             Some(KeptRun {
                 repeat: vosh_prompt::stage::Repeat::Starts,
                 gen,
-            }) => self.start_run(line, gen),
+            }) => self.start_run(output, line, gen),
             Some(KeptRun {
                 repeat: vosh_prompt::stage::Repeat::Joins(_),
                 gen,
-            }) => self.join_run(line, gen),
+            }) => self.join_run(output, line, gen),
         }
     }
 
     /// Keep `line`, the first of a run of repeated lines that shows in
     /// region `gen`, and note it, so the lines that join the run take its
     /// place.
-    pub(crate) fn start_run(&mut self, line: Vec<u8>, gen: u64) {
+    pub(crate) fn start_run(&mut self, output: u64, line: Vec<u8>, gen: u64) {
         self.run = None;
-        self.push(line);
+        self.push_from(output, line);
         self.run = Some(RingRun { after: 0, gen });
     }
 
@@ -172,13 +239,13 @@ impl Scrollback {
     /// run's line goes, and `line` comes after them, so the ring keeps the
     /// order the run's last line came in. A run whose line already left
     /// the ring starts again.
-    pub(crate) fn join_run(&mut self, line: Vec<u8>, gen: u64) {
+    pub(crate) fn join_run(&mut self, output: u64, line: Vec<u8>, gen: u64) {
         if let Some(run) = self.run.take() {
             if let Some(at) = self.lines.len().checked_sub(run.after + 1) {
                 self.lines.remove(at);
             }
         }
-        self.start_run(line, gen);
+        self.start_run(output, line, gen);
     }
 
     /// Keep the line the screen colored again in place, as it shows now.
@@ -193,25 +260,25 @@ impl Scrollback {
         let Some(at) = self.lines.len().checked_sub(row.after + 1) else {
             return;
         };
-        if self.lines.get(at) == Some(was) {
-            self.lines[at].clone_from(now);
+        if self.lines.get(at).map(|kept| &kept.line) == Some(was) {
+            self.lines[at].line.clone_from(now);
             self.changed = true;
         }
     }
 
     /// The kept lines, oldest first, colors included.
     pub(crate) fn lines(&self) -> impl Iterator<Item = &[u8]> {
-        self.lines.iter().map(Vec::as_slice)
+        self.lines.iter().map(|kept| kept.line.as_slice())
     }
 
     /// Concatenate the buffered lines into one byte stream suitable for
     /// writing to disk or replaying into the terminal. Each line is
     /// separated by `\r\n`.
     pub(crate) fn dump(&self) -> Vec<u8> {
-        let total: usize = self.lines.iter().map(|l| l.len() + 2).sum();
+        let total: usize = self.lines.iter().map(|kept| kept.line.len() + 2).sum();
         let mut out = Vec::with_capacity(total);
-        for line in &self.lines {
-            out.extend_from_slice(line);
+        for kept in &self.lines {
+            out.extend_from_slice(&kept.line);
             out.extend_from_slice(b"\r\n");
         }
         out
@@ -229,14 +296,14 @@ impl Scrollback {
             return self.dump();
         };
         let mark = vosh_prompt::stage::mark(gen);
-        let total: usize = self.lines.iter().map(|l| l.len() + 2).sum();
+        let total: usize = self.lines.iter().map(|kept| kept.line.len() + 2).sum();
         let mut out = Vec::with_capacity(total + mark.len());
-        for line in self.lines.range(..self.lines.len() - 1) {
-            out.extend_from_slice(line);
+        for kept in self.lines.range(..self.lines.len() - 1) {
+            out.extend_from_slice(&kept.line);
             out.extend_from_slice(b"\r\n");
         }
         out.extend(mark);
-        out.extend_from_slice(last);
+        out.extend_from_slice(&last.line);
         out.extend_from_slice(b"\r\n");
         out
     }
@@ -245,6 +312,7 @@ impl Scrollback {
     /// them, so the ring reads as unchanged.
     pub(crate) fn load_from_bytes(&mut self, bytes: &[u8]) {
         self.lines.clear();
+        self.newest = 0;
         self.run = None;
         // Keep empty intermediate rows so blank lines in the original
         // output show up again on restore. Splitting on \n always yields
@@ -265,6 +333,15 @@ impl Scrollback {
         }
         self.changed = false;
     }
+}
+
+/// The rows of an echo, each without its line end, as the ring keeps
+/// lines.
+fn echo_rows(text: &[u8]) -> Vec<Vec<u8>> {
+    let text = text.strip_suffix(b"\n").unwrap_or(text);
+    text.split(|b| *b == b'\n')
+        .map(|row| row.strip_suffix(b"\r").unwrap_or(row).to_vec())
+        .collect()
 }
 
 pub(crate) type SharedScrollback = Arc<Mutex<Scrollback>>;
@@ -400,9 +477,9 @@ mod tests {
             s.push(format!("line {i}").into_bytes());
         }
         assert_eq!(s.lines.len(), SCROLLBACK_CAP);
-        assert_eq!(s.lines.front().unwrap(), b"line 5");
+        assert_eq!(s.lines.front().unwrap().line, b"line 5");
         assert_eq!(
-            s.lines.back().unwrap(),
+            s.lines.back().unwrap().line,
             format!("line {}", SCROLLBACK_CAP + 4).as_bytes()
         );
     }
@@ -422,7 +499,7 @@ mod tests {
         assert!(s.take_changed().is_some());
         s.push(b"line 10".to_vec());
         assert_eq!(s.lines.len(), 4);
-        assert_eq!(s.lines.front().unwrap(), b"line 7");
+        assert_eq!(s.lines.front().unwrap().line, b"line 7");
         s.set_cap(20_000);
         for i in 0..15_000 {
             s.push(format!("more {i}").into_bytes());
@@ -598,8 +675,8 @@ mod tests {
         let mut b = Scrollback::default();
         b.load_from_bytes(&bytes);
         assert_eq!(b.lines.len(), 3);
-        assert_eq!(b.lines[0], b"first");
-        assert_eq!(b.lines[2], b"third");
+        assert_eq!(b.lines[0].line, b"first");
+        assert_eq!(b.lines[2].line, b"third");
     }
 
     #[test]
@@ -607,22 +684,22 @@ mod tests {
         let mut s = Scrollback::default();
         s.load_from_bytes(b"alpha\r\nbeta\r\n\r\ngamma\r\n");
         assert_eq!(s.lines.len(), 4);
-        assert_eq!(s.lines[0], b"alpha");
-        assert_eq!(s.lines[1], b"beta");
-        assert_eq!(s.lines[2], b"");
-        assert_eq!(s.lines[3], b"gamma");
+        assert_eq!(s.lines[0].line, b"alpha");
+        assert_eq!(s.lines[1].line, b"beta");
+        assert_eq!(s.lines[2].line, b"");
+        assert_eq!(s.lines[3].line, b"gamma");
     }
 
     #[test]
     fn a_run_of_repeated_lines_keeps_one_line_with_its_count_in_the_order_it_came() {
         let mut s = Scrollback::default();
         s.push(b"You are hungry.".to_vec());
-        s.start_run(b"You dodge Quenby's attack.".to_vec(), 1);
-        s.join_run(b"(2) You dodge Quenby's attack.".to_vec(), 2);
+        s.start_run(0, b"You dodge Quenby's attack.".to_vec(), 1);
+        s.join_run(0, b"(2) You dodge Quenby's attack.".to_vec(), 2);
         // A prompt kept while it shows pinned never showed after the run
         // on screen, so the run comes after it once a line joins.
         s.push(b"[1020/1020hp 800/800mn 930/930mv]".to_vec());
-        s.join_run(b"(3) You dodge Quenby's attack.".to_vec(), 3);
+        s.join_run(0, b"(3) You dodge Quenby's attack.".to_vec(), 3);
         assert_eq!(
             s.lines().collect::<Vec<_>>(),
             [
@@ -632,27 +709,27 @@ mod tests {
             ]
         );
         // The next run starts on a line of its own.
-        s.start_run(b"You parry Quenby's attack.".to_vec(), 4);
-        s.join_run(b"(2) You parry Quenby's attack.".to_vec(), 5);
+        s.start_run(0, b"You parry Quenby's attack.".to_vec(), 4);
+        s.join_run(0, b"(2) You parry Quenby's attack.".to_vec(), 5);
         assert_eq!(s.lines.len(), 4);
-        assert_eq!(s.lines[3], b"(2) You parry Quenby's attack.");
-        assert_eq!(s.lines[2], b"(3) You dodge Quenby's attack.");
+        assert_eq!(s.lines[3].line, b"(2) You parry Quenby's attack.");
+        assert_eq!(s.lines[2].line, b"(3) You dodge Quenby's attack.");
     }
 
     #[test]
     fn a_run_whose_line_left_the_ring_starts_again() {
         let mut s = Scrollback::default();
-        s.start_run(b"You are hungry.".to_vec(), 1);
+        s.start_run(0, b"You are hungry.".to_vec(), 1);
         for i in 0..SCROLLBACK_CAP {
             s.push(format!("line {i}").into_bytes());
         }
-        s.join_run(b"(2) You are hungry.".to_vec(), 2);
+        s.join_run(0, b"(2) You are hungry.".to_vec(), 2);
         assert_eq!(s.lines.len(), SCROLLBACK_CAP);
-        assert_eq!(s.lines.back().unwrap(), b"(2) You are hungry.");
-        assert_eq!(s.lines.front().unwrap(), b"line 1");
+        assert_eq!(s.lines.back().unwrap().line, b"(2) You are hungry.");
+        assert_eq!(s.lines.front().unwrap().line, b"line 1");
         // A restored scrollback holds no run.
         s.load_from_bytes(b"alpha\r\n");
-        s.join_run(b"(3) You are hungry.".to_vec(), 3);
+        s.join_run(0, b"(3) You are hungry.".to_vec(), 3);
         assert_eq!(s.lines.len(), 2);
     }
 
@@ -660,8 +737,8 @@ mod tests {
     fn a_live_dump_marks_the_run_only_while_it_is_the_last_line() {
         let mut s = Scrollback::default();
         s.push(b"You are hungry.".to_vec());
-        s.start_run(b"You dodge Quenby's attack.".to_vec(), 7);
-        s.join_run(b"(2) You dodge Quenby's attack.".to_vec(), 8);
+        s.start_run(0, b"You dodge Quenby's attack.".to_vec(), 7);
+        s.join_run(0, b"(2) You dodge Quenby's attack.".to_vec(), 8);
         let mark = vosh_prompt::stage::mark(8);
         let mut want = b"You are hungry.\r\n".to_vec();
         want.extend(&mark);
@@ -690,11 +767,87 @@ mod tests {
         let mut b = Scrollback::default();
         b.load_from_bytes(&bytes);
         assert_eq!(b.lines.len(), 6);
-        assert_eq!(b.lines[0], b"first");
-        assert_eq!(b.lines[1], b"");
-        assert_eq!(b.lines[2], b"third");
-        assert_eq!(b.lines[3], b"");
-        assert_eq!(b.lines[4], b"");
-        assert_eq!(b.lines[5], b"sixth");
+        assert_eq!(b.lines[0].line, b"first");
+        assert_eq!(b.lines[1].line, b"");
+        assert_eq!(b.lines[2].line, b"third");
+        assert_eq!(b.lines[3].line, b"");
+        assert_eq!(b.lines[4].line, b"");
+        assert_eq!(b.lines[5].line, b"sixth");
+    }
+
+    fn texts(s: &Scrollback) -> Vec<String> {
+        s.lines()
+            .map(|line| String::from_utf8_lossy(line).into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn an_echo_goes_after_the_output_it_followed_and_before_newer_ones() {
+        let mut s = Scrollback::default();
+        s.keep(5, b"Maren waves.".to_vec(), None);
+        s.keep(6, b"Orla nods.".to_vec(), None);
+        // The game answered before Vosh heard of the echo.
+        s.keep_echo(5, b"> look\r\n");
+        // No output named, as a terminal not there yet writes.
+        s.keep_echo(u64::MAX, b"> north\r\n> east\r\n");
+        s.keep(7, b"Tolliver leaves north.".to_vec(), None);
+        assert_eq!(
+            texts(&s),
+            [
+                "Maren waves.",
+                "> look",
+                "Orla nods.",
+                "> north",
+                "> east",
+                "Tolliver leaves north."
+            ]
+        );
+        // The ids stay in order, so a later echo still finds its place.
+        s.keep_echo(6, b"> west\r\n");
+        assert_eq!(texts(&s)[5..], ["> west", "Tolliver leaves north."]);
+    }
+
+    #[test]
+    fn an_echo_with_nothing_to_read_keeps_nothing() {
+        let mut s = Scrollback::default();
+        s.keep(1, b"Password:".to_vec(), None);
+        s.keep_echo(1, b"\r\n");
+        s.keep_echo(1, b"\x1b[90m\x1b[0m\r\n");
+        assert_eq!(texts(&s), ["Password:"]);
+    }
+
+    #[test]
+    fn an_echo_keeps_the_run_of_repeated_lines_in_step() {
+        let mut s = Scrollback::default();
+        // An echo before the run's line leaves the run as it is.
+        s.start_run(7, b"You dodge Quenby's attack.".to_vec(), 1);
+        s.keep_echo(6, b"> kick\r\n");
+        s.join_run(8, b"(2) You dodge Quenby's attack.".to_vec(), 2);
+        assert_eq!(texts(&s), ["> kick", "(2) You dodge Quenby's attack."]);
+        // An echo after it counts among the lines after the run's line.
+        s.start_run(9, b"You are hungry.".to_vec(), 3);
+        s.keep_echo(9, b"> eat bread\r\n");
+        s.join_run(10, b"(2) You are hungry.".to_vec(), 4);
+        assert_eq!(
+            texts(&s),
+            [
+                "> kick",
+                "(2) You dodge Quenby's attack.",
+                "> eat bread",
+                "(2) You are hungry."
+            ]
+        );
+    }
+
+    #[test]
+    fn an_echo_past_the_cap_drops_the_oldest_line() {
+        let mut s = Scrollback::default();
+        s.set_cap(2);
+        s.start_run(1, b"You are hungry.".to_vec(), 1);
+        s.keep(2, b"Orla nods.".to_vec(), None);
+        s.keep_echo(2, b"> eat bread\r\n");
+        assert_eq!(texts(&s), ["Orla nods.", "> eat bread"]);
+        // The run's line left, and the run with it.
+        assert_eq!(s.dump_live(), s.dump());
     }
 }

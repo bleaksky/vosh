@@ -372,11 +372,12 @@ async fn deliver_line_step<R: tauri::Runtime>(
         conn.perf.routed_emits += result.routes.len() as u64;
     }
     emit_line_routes(&conn.app, &conn.session, &result);
+    let output = batch.out.id();
     for text in kept {
         let sb_t0 = std::time::Instant::now();
         // The ring keeps a run of repeated lines once, as the screen shows
-        // it.
-        log_sink.scrollback.lock().await.keep(text, repeat);
+        // it, each line with the output that writes it.
+        log_sink.scrollback.lock().await.keep(output, text, repeat);
         conn.perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
         conn.perf.scrollback_pushes += 1;
     }

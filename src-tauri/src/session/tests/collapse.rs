@@ -142,7 +142,7 @@ fn ring_after(reads: &[Read]) -> crate::logs::Scrollback {
     let mut ring = crate::logs::Scrollback::default();
     for read in reads {
         for (line, repeat) in read.kept.iter().zip(&read.repeats) {
-            ring.keep(line.clone(), *repeat);
+            ring.keep(0, line.clone(), *repeat);
         }
     }
     ring

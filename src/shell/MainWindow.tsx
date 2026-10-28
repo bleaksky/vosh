@@ -436,7 +436,9 @@ function MainWindow() {
       onOpenWriting={openWritingFromEditor}
       onSelectAllTerminal={() => termRef.current?.selectAll()}
       onLocalEcho={(text, session) => {
-        writeTo(session, text);
+        // Scrollback keeps the echo where it showed, so the split's
+        // history shows it when it loads.
+        writeTo(session, text, true);
         // Mirror to the split history pane so typed lines appear
         // there too. Without this, scrolling up in split view
         // shows server output but none of your own commands. The

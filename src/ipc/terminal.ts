@@ -148,13 +148,16 @@ export async function onGameLine(
  *  own. The session can hear of your echo after the reply to your line,
  *  and the prompt that came after the echo stays open. `session` names
  *  the session whose grid takes it, the selected one when it names
- *  none. */
+ *  none. `keep` says the text is the echo of a command you sent, which
+ *  scrollback keeps where it showed, so the split's history and the
+ *  scrollback the next launch restores show it. */
 export async function terminalLocalWrite(
   text: string,
   after: number | null,
   session?: number,
+  keep = false,
 ): Promise<void> {
-  await invoke('terminal_local_write', { text, after, session });
+  await invoke('terminal_local_write', { text, after, session, keep });
 }
 
 /** You started or stopped selecting text or reading back in the xterm

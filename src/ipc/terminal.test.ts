@@ -84,13 +84,33 @@ describe('text the page writes to the terminal itself', () => {
     const sent = vi.mocked(invoke);
     sent.mockClear();
     await terminalLocalWrite('look\r\n', 42);
-    expect(sent).toHaveBeenCalledWith('terminal_local_write', { text: 'look\r\n', after: 42 });
+    expect(sent).toHaveBeenCalledWith('terminal_local_write', {
+      text: 'look\r\n',
+      after: 42,
+      keep: false,
+    });
   });
 
   it('leaves it to the native grid while that renderer shows', async () => {
     const sent = vi.mocked(invoke);
     sent.mockClear();
     await terminalLocalWrite('look\r\n', null);
-    expect(sent).toHaveBeenCalledWith('terminal_local_write', { text: 'look\r\n', after: null });
+    expect(sent).toHaveBeenCalledWith('terminal_local_write', {
+      text: 'look\r\n',
+      after: null,
+      keep: false,
+    });
+  });
+
+  it('asks scrollback to keep the echo of a command', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await terminalLocalWrite('look\r\n', 42, 3, true);
+    expect(sent).toHaveBeenCalledWith('terminal_local_write', {
+      text: 'look\r\n',
+      after: 42,
+      session: 3,
+      keep: true,
+    });
   });
 });

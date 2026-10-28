@@ -305,7 +305,7 @@ Scrollback opens in a split above the live terminal. You can read old output whi
 - To change the size of the split, drag the divider between the history and the live tail. To set its color, go to Settings under Layout, then Split terminal.
 - There are three ways back to live. Scroll or page down to the bottom of the history, and the split closes on its own. Or press `Esc`. Or middle click the terminal.
 
-While the split is open, the live tail never scrolls away. New output continues to come in there. The lines you type also show in the history, so the record has no gaps.
+While the split is open, the live tail never scrolls away. New output continues to come in there. The history also shows the commands that you send, in the place where they showed in the terminal. When you open Vosh again, the scrollback that it restores shows them too.
 
 The terminal keeps 10,000 lines of scrollback. To keep more or fewer, open Settings and choose Logs. Then choose a size from 1,000 to 100,000 lines in `Scrollback size`.
 
