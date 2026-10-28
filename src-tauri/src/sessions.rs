@@ -196,6 +196,9 @@ pub(crate) struct Session {
     /// command's echo, landed after the open row and closed it. Output in
     /// another session never moves it.
     output_count: AtomicU64,
+    /// The id of the newest prompt stage output sent to the renderers,
+    /// which an echo Vosh draws itself follows in scrollback.
+    staged: AtomicU64,
     /// When each alert of the session last rang, for the 10 second cap. A
     /// leaf lock, taken alone once the profile and connection let go.
     alert_caps: std::sync::Mutex<crate::alert::Caps>,
@@ -243,6 +246,7 @@ impl Session {
             reader_busy: AtomicBool::new(false),
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),
+            staged: AtomicU64::new(0),
             alert_caps: std::sync::Mutex::new(crate::alert::Caps::default()),
             logs: std::sync::Mutex::new(Vec::new()),
             redial: std::sync::Mutex::new(None),
@@ -439,6 +443,16 @@ impl Session {
     /// count after it.
     pub(crate) fn count_output(&self) -> u64 {
         self.output_count.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    /// The id of the newest prompt stage output sent to the renderers.
+    pub(crate) fn staged(&self) -> u64 {
+        self.staged.load(Ordering::Acquire)
+    }
+
+    /// Prompt stage output `id` went to the renderers.
+    pub(crate) fn note_staged(&self, id: u64) {
+        self.staged.fetch_max(id, Ordering::AcqRel);
     }
 
     /// The host and port of the live connection, which a drop keeps until

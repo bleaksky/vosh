@@ -352,7 +352,7 @@ async fn deliver_script_result<R: tauri::Runtime>(
         walk,
     } = collect_script_result(app, session, apply).await;
     if quick {
-        output::echo_command(app, session, &echoes);
+        output::echo_command(app, session, &echoes).await;
     } else {
         output::echo_lines(app, session, &echoes);
     }

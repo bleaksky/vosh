@@ -187,25 +187,34 @@ pub(crate) fn echo_lines<R: tauri::Runtime>(
 /// Print the echo of a command you send that Vosh draws itself, such as
 /// a quick key's, then the lines after it, in the terminal of `session`.
 /// The echo lands at the cursor, after the game's prompt, as the echo
-/// the command line draws does.
-pub(crate) fn echo_command<R: tauri::Runtime>(
+/// the command line draws does, and scrollback keeps the echo where it
+/// showed, as it keeps that one. The lines after it stay out, as the
+/// lines after a typed command's echo do.
+pub(crate) async fn echo_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
     lines: &[String],
 ) {
-    emit_lines(app, session, lines, false);
+    let Some(after) = emit_lines(app, session, lines, false) else {
+        return;
+    };
+    let echo = lines[0].as_bytes();
+    if crate::input::history::keeps_echo(session, echo).await {
+        session.scrollback.lock().await.keep_echo(after, echo);
+    }
 }
 
 /// Print `lines`, each ended with a line end. `fresh` starts them on a
-/// row of their own.
+/// row of their own. Returns the id of the newest prompt stage output
+/// they came after, or None when there were none to print.
 fn emit_lines<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
     lines: &[String],
     fresh: bool,
-) {
+) -> Option<u64> {
     if lines.is_empty() {
-        return;
+        return None;
     }
     let mut buf = Vec::new();
     for line in lines {
@@ -215,7 +224,7 @@ fn emit_lines<R: tauri::Runtime>(
     let mut out = Output::new(false);
     out.text(&buf);
     out.fresh = fresh;
-    emit_counted(app, session, &out, true, false, true);
+    Some(emit_ordered(app, session, &out, true, false, true).1)
 }
 
 /// Send a repaint of the open row of `session`. It leaves the output
@@ -241,6 +250,19 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
     staged: bool,
     frame: bool,
 ) -> u64 {
+    emit_ordered(app, session, out, count, staged, frame).0
+}
+
+/// [`emit_counted`], which also returns the id of the newest prompt stage
+/// output the renderers took before `out`, or `out`'s own when it is one.
+fn emit_ordered<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Session,
+    out: &Output,
+    count: bool,
+    staged: bool,
+    frame: bool,
+) -> (u64, u64) {
     let id = staged.then(|| out.id());
     let payload = OutputPayload {
         session: Some(session.id),
@@ -258,6 +280,13 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
     } else {
         session.output_count()
     };
+    let after = match id {
+        Some(id) => {
+            session.note_staged(id);
+            id
+        }
+        None => session.staged(),
+    };
     // Feed the session's native grid the same bytes xterm receives,
     // for every output path, then repaint. This is the single choke point
     // so nothing reaches xterm without also reaching the grid.
@@ -272,7 +301,7 @@ pub(crate) fn emit_counted<R: tauri::Runtime>(
     if let Err(e) = app.emit(events::OUTPUT, payload) {
         warn!(error = %e, "failed to emit session output");
     }
-    seen
+    (seen, after)
 }
 
 /// The test event a frame request sends, so a test can count frames.

@@ -64,6 +64,10 @@ pub(super) struct ReadBatch {
     /// before it, as the event the session is on finds them ahead (see
     /// [`super::gmcp::room_chars_ahead`]).
     pub(super) room_ahead: Option<Arc<[RoomChar]>>,
+    /// The output that painted the lines this batch keeps for scrollback,
+    /// when an earlier read painted them, as it painted the lines a prompt
+    /// held. None keeps them under the batch's own output.
+    pub(super) painted_in: Option<u64>,
 }
 
 impl ReadBatch {
@@ -85,6 +89,7 @@ impl ReadBatch {
             gmcp: false,
             reader: ReaderFeed::default(),
             room_ahead: None,
+            painted_in: None,
         }
     }
 }

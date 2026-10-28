@@ -763,7 +763,7 @@ async fn send_typed<R: tauri::Runtime>(
         }
         From::Card(line) => {
             let echo = crate::input::command_echo(line, &conn.session.lock_profile().await.ui);
-            echo_command(&conn.app, &conn.session, &[echo]);
+            echo_command(&conn.app, &conn.session, &[echo]).await;
             bytes.to_vec()
         }
     };
