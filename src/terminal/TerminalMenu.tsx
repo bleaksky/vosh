@@ -27,6 +27,8 @@ interface Props {
   /** The selected session, whose terminal the menu acts on. */
   session: number;
   termRef: RefObject<TerminalHandle | null>;
+  /** The history pane of the scrollback split, while it shows. */
+  historyTermRef: RefObject<TerminalHandle | null>;
   inputRef: RefObject<InputHandle | null>;
   onOpenFind: () => void;
   /** Open the prompt card over your prompt. */
@@ -66,6 +68,7 @@ export function TerminalMenu({
   y,
   session,
   termRef,
+  historyTermRef,
   inputRef,
   onOpenFind,
   onCustomizePrompt,
@@ -106,12 +109,14 @@ export function TerminalMenu({
 
   const runCopy = () => {
     // Same fork as the Cmd+C path in Input.tsx: the native surface owns
-    // the visible selection when enabled, xterm otherwise.
+    // the visible selection when enabled, xterm otherwise. Scrolled back,
+    // xterm holds the selection in the live pane or the history pane, one
+    // at a time, so the copy takes whichever has it.
     if (nativeSurfaceEnabled()) {
       void nativeSurfaceCopy(session).catch(() => {});
       return;
     }
-    const text = termRef.current?.getSelection() ?? '';
+    const text = termRef.current?.getSelection() || historyTermRef.current?.getSelection() || '';
     if (text.length > 0) {
       void navigator.clipboard.writeText(text).catch(() => {});
     }

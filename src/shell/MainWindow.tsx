@@ -631,6 +631,7 @@ function MainWindow() {
           y={terminalMenu.y}
           session={selected}
           termRef={termRef}
+          historyTermRef={historyTermRef}
           inputRef={inputRef}
           onOpenFind={openFind}
           onCustomizePrompt={() => openPromptCard('design')}
