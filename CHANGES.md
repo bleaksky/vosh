@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.96.2 - 2026-10-29
+
+Copy from the scrollback when you scroll up.
+
+- On Windows and Linux, Copy in the menu you get with a right click now copies the text you select in the scrollback at the top. Before, it copied nothing there, and only Ctrl+C worked.
+
 ## v0.96.1 - 2026-10-28
 
 Your commands stay in the scrollback when you scroll up.
