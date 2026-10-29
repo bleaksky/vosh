@@ -47,6 +47,7 @@ store.set('vosh.nativesurface', '0');
 const props = {
   session: 1,
   termRef: { current: null },
+  historyTermRef: { current: null },
   inputRef: { current: null },
   onOpenFind: () => {},
   onCustomizePrompt: () => {},
@@ -280,7 +281,7 @@ interface Mounted {
 
 const cleanups: (() => Promise<void> | void)[] = [];
 
-async function mount(x = 100, y = 100): Promise<Mounted> {
+async function mount(x = 100, y = 100, over: Partial<typeof props> = {}): Promise<Mounted> {
   calls.log.length = 0;
   const container = doc.createElement('div');
   doc.body.appendChild(container);
@@ -289,7 +290,7 @@ async function mount(x = 100, y = 100): Promise<Mounted> {
   // The main window puts the menu on the escape stack while it is open.
   const unescape = pushEscape(onClose);
   await act(async () => {
-    root.render(createElement(TerminalMenu, { x, y, ...props, onClose }));
+    root.render(createElement(TerminalMenu, { x, y, ...props, ...over, onClose }));
   });
   cleanups.push(async () => {
     unescape();
@@ -588,6 +589,28 @@ describe('the Settings list in the terminal menu', () => {
       // Help shows its shortcut, ⌘/ on macOS.
       'Help⌘/',
     ]);
+  });
+
+  it('copies what you selected in either pane of the scrollback split', async () => {
+    const copied: string[] = [];
+    const page = navigator as { clipboard?: unknown };
+    page.clipboard = { writeText: async (text: string) => void copied.push(text) };
+    const pane = (selection: string) => ({ current: { getSelection: () => selection } });
+    try {
+      for (const [live, history] of [
+        ['', 'Line 12 from up in the history'],
+        ['Line 40 from the live tail', ''],
+      ]) {
+        const m = await mount(100, 100, {
+          termRef: pane(live),
+          historyTermRef: pane(history),
+        } as unknown as Partial<typeof props>);
+        await act(async () => on(m.row('Copy')).onClick());
+      }
+    } finally {
+      delete page.clipboard;
+    }
+    expect(copied).toEqual(['Line 12 from up in the history', 'Line 40 from the live tail']);
   });
 
   it('clears the scrollback through the backend, and xterm clears its own buffer', async () => {
