@@ -2,6 +2,13 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.96.3 - 2026-10-29
+
+Bold text in the terminal keeps one font on Windows and Linux.
+
+- On Windows and Linux, bold text no longer mixes letters from two fonts after you start Vosh. Before, only a theme change put them right.
+- The terminal on Windows and Linux draws with a newer version of its renderer, which fixes several cases where letters could draw wrong.
+
 ## v0.96.2 - 2026-10-29
 
 Copy from the scrollback when you scroll up.
