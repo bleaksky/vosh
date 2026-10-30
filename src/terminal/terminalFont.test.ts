@@ -4,8 +4,8 @@ import { loadDrawnFace, remeasureCell, remeasureWhenLoaded } from './terminalFon
 /** A FontFaceSet as far as the remeasure loads through one. A minted face
  *  of a family on this machine loads when `finish` runs, one for a family
  *  the machine lacks fails, and a family with no minted face resolves at
- *  once with nothing to load. */
-function fakeFonts(installed: string[]) {
+ *  once with nothing to load. The bold face of a family in `noBold` fails. */
+function fakeFonts(installed: string[], noBold: string[] = []) {
   const minted = new Set<string>();
   const loaded = new Set<string>();
   const asked: string[] = [];
@@ -18,9 +18,15 @@ function fakeFonts(installed: string[]) {
     set: {
       load(font: string): Promise<unknown> {
         asked.push(font);
-        const name = font.replace(/^\d+px /, '').replace(/^"|"$/g, '');
+        const bold = font.startsWith('bold ');
+        const name = font
+          .replace(/^bold /, '')
+          .replace(/^\d+px /, '')
+          .replace(/^"|"$/g, '');
         if (!minted.has(name)) return Promise.resolve([]);
         if (!installed.includes(name)) return Promise.reject(new Error('NetworkError'));
+        if (bold && noBold.includes(name)) return Promise.reject(new Error('NetworkError'));
+        if (bold) return new Promise((resolve) => waiting.push(() => resolve([name])));
         return new Promise((resolve) =>
           waiting.push(() => {
             loaded.add(name);
@@ -85,10 +91,31 @@ describe('the terminal cell after a face loads', () => {
     expect(term.row).toBe(21.5);
     expect(fits).toBe(0);
 
+    // The regular face loaded, and the bold one is on its way.
+    fonts.finish();
+    await settle();
+    expect(fonts.asked).toEqual([`14px "${INSTALLED}"`, `bold 14px "${INSTALLED}"`]);
+    expect(fits).toBe(0);
+
     fonts.finish();
     await settle();
     expect(term.row).toBe(19);
     expect(term.options.fontFamily).toBe(LIST);
+    expect(fits).toBe(1);
+  });
+
+  it('measures again after a family with no bold face of its own loads', async () => {
+    const fonts = fakeFonts([INSTALLED], [INSTALLED]);
+    fonts.loaded.add(BUNDLED);
+    fonts.minted.add(INSTALLED);
+    const term = fakeTerm(LIST, fonts.loaded, ROWS);
+    let fits = 0;
+    remeasureWhenLoaded(fonts.set, term, () => fits++);
+    await settle();
+    fonts.finish();
+    await settle();
+    expect(fonts.asked).toEqual([`14px "${INSTALLED}"`, `bold 14px "${INSTALLED}"`]);
+    expect(term.row).toBe(19);
     expect(fits).toBe(1);
   });
 
@@ -112,13 +139,18 @@ describe('the terminal cell after a face loads', () => {
     fonts.minted.add(INSTALLED);
     fonts.minted.add('Fira Code');
     await loadDrawnFace(fonts.set, 14, LIST);
-    expect(fonts.asked).toEqual([`14px "${INSTALLED}"`, '14px "Fira Code"', `14px "${BUNDLED}"`]);
+    expect(fonts.asked).toEqual([
+      `14px "${INSTALLED}"`,
+      '14px "Fira Code"',
+      `14px "${BUNDLED}"`,
+      `bold 14px "${BUNDLED}"`,
+    ]);
   });
 
   it('stops at a generic family', async () => {
     const fonts = fakeFonts([]);
     await loadDrawnFace(fonts.set, 13, 'monospace, Menlo');
-    expect(fonts.asked).toEqual(['13px monospace']);
+    expect(fonts.asked).toEqual(['13px monospace', 'bold 13px monospace']);
   });
 
   it('leaves the list as it was', () => {
