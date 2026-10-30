@@ -794,8 +794,8 @@ describe('a resize while xterm parses a long backlog', () => {
   // warm parser takes this backlog in less. The clock below moves 12 ms
   // each time xterm reads it, so the backlog always fills a slice of its
   // own and the line after it waits for the next one. xterm flushes what
-  // it holds before a resize, and that flush starts from the first write
-  // it still keeps, the parsed backlog included.
+  // it holds before a resize. Before 6.1.0-beta.336 that flush started
+  // from the first write it still kept, the parsed backlog included.
   const backlog = ['BEGIN', ...Array.from({ length: 40_000 }, (_, i) => `line ${i}`), 'END'];
 
   afterEach(() => {
@@ -837,9 +837,10 @@ describe('a resize while xterm parses a long backlog', () => {
     return { term, rows: allRows(term) };
   }
 
-  it('shows the backlog twice when xterm resizes on its own', async () => {
+  it('shows the backlog once when xterm resizes on its own, since 6.1.0-beta.336', async () => {
     const { rows } = await resizeBetweenSlices((term) => term.resize(40, 14));
-    expect(rows.filter((row) => row === 'BEGIN')).toHaveLength(2);
+    expect(rows.filter((row) => row === 'BEGIN')).toHaveLength(1);
+    expect(rows.slice(-2)).toEqual(['END', 'after']);
   });
 
   it('shows the backlog once when the writer holds the resize', async () => {
