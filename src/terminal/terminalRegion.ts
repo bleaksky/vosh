@@ -27,18 +27,19 @@
 // error notice writes, writes nothing (closePinRow). Each output says
 // whether that row is open after it.
 //
-// The wait is a write of nothing with a callback. It has to be an empty
-// byte array, never an empty string. xterm 6.1 parses everything it
-// holds before a resize, and that loop stops at the first empty string,
-// then drops every write and callback after it. The writer would wait
-// for good and xterm would show nothing more. The same loop can parse
-// again what xterm had already parsed, callbacks included, so each wait
-// runs its callback once.
+// The wait is a write of nothing with a callback, an empty byte array
+// and never an empty string. xterm parses everything it holds before a
+// resize. Before 6.1.0-beta.336 that loop stopped at the first empty
+// string and dropped every write and callback after it, and it could
+// parse again what xterm had already parsed, callbacks included. The
+// writer would wait for good and xterm would show nothing more. Each
+// wait still runs its callback once.
 //
-// That loop starts from the first write xterm still keeps, and xterm
-// keeps the writes it parsed in an earlier slice until it has parsed
-// them all. A resize between two slices of a long backlog showed the
-// backlog twice. So every resize goes through the writer too. Each write
+// That loop also started from the first write xterm still kept, the
+// writes it parsed in an earlier slice included, so a resize between two
+// slices of a long backlog showed the backlog twice. xterm fixed both in
+// 6.1.0-beta.336 (xtermjs/xterm.js#6201). The writer keeps its guards,
+// which cost nothing, so every resize still goes through it. Each write
 // counts until xterm calls back for it. Once xterm called back for one
 // while others are left, it is between two slices, and a resize waits
 // until xterm has parsed them all. The writes that come meanwhile wait

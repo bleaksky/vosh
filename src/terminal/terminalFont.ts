@@ -7,6 +7,14 @@
 // JetBrains Mono and the rows sat wider apart than on every later launch.
 // WebKit fires no loadingdone for a face the page loads on its own, so
 // the terminal asks for the face itself and measures once it has loaded.
+//
+// The bold face loads apart from the regular one, and the page asks for
+// it only when something first draws bold. xterm's WebGL renderer keeps
+// each letter it draws for good, until its colors or font change. So a
+// bold letter drawn before the bold face loaded kept the fallback face,
+// Consolas on Windows, beside bold letters drawn later in the right one,
+// until a theme change. The terminal waits for both faces, and the
+// remeasure after them has xterm draw every letter again.
 
 /** The part of an xterm the remeasure reads and sets. */
 export interface FontOptions {
@@ -40,20 +48,24 @@ function familyNames(list: string): string[] {
     .filter(Boolean);
 }
 
-/** Load the face `list` draws with at `px` and settle once it has. That is
- *  the face of the first family that loads. A face that fails to load
- *  falls back to the next family, as the browser does. A family with no
- *  face to load, such as a generic, ends the walk, since the browser has
- *  it at once. */
+/** Load the faces `list` draws with at `px`, regular and bold, and settle
+ *  once they have. Those are the faces of the first family that loads. A
+ *  face that fails to load falls back to the next family, as the browser
+ *  does. A family with no face to load, such as a generic, ends the walk,
+ *  since the browser has it at once. */
 export async function loadDrawnFace(fonts: FaceLoader, px: number, list: string): Promise<void> {
   for (const name of familyNames(list)) {
     const css = /^[a-z-]+$/i.test(name) ? name : JSON.stringify(name);
     try {
       await fonts.load(`${px}px ${css}`);
-      return;
     } catch {
       // The face failed to load, so the next family draws.
+      continue;
     }
+    // A family with no bold face of its own draws bold from its regular
+    // face, so a bold face that fails changes nothing.
+    await fonts.load(`bold ${px}px ${css}`).catch(() => {});
+    return;
   }
 }
 
