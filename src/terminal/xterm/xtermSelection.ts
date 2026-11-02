@@ -30,7 +30,16 @@ export function watchSelection(
   // onScroll lets us notice when the selection range has fallen
   // outside [viewportY, viewportY + rows] and clear it before the
   // ghost can render.
-  const onScrollClearStaleSelection = () => {
+  //
+  // The check waits until xterm is done with the scroll. A drag past the
+  // pane's edge scrolls up to 15 rows a step, and xterm moves the
+  // selection's far end to the new edge only after the scroll. On a pane
+  // of 15 rows or fewer, such as the history pane at its first height,
+  // the selection was out of view for that moment. A clear then made
+  // xterm throw as it moved the end, and the drag lost its selection.
+  let watching = true;
+  const clearStaleSelection = () => {
+    if (!watching) return;
     const sel = term.getSelectionPosition();
     if (!sel) return;
     const top = term.buffer.active.viewportY;
@@ -41,7 +50,13 @@ export function watchSelection(
       term.clearSelection();
     }
   };
-  const scrollDisposable = term.onScroll(onScrollClearStaleSelection);
+  const onScroll = term.onScroll(() => queueMicrotask(clearStaleSelection));
+  const scrollDisposable: IDisposable = {
+    dispose: () => {
+      watching = false;
+      onScroll.dispose();
+    },
+  };
 
   // A clock piece in your design leaves your prompt as it is while you
   // select text here, or while the live pane is off its newest rows.
