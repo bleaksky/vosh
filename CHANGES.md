@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.96.4 - 2026-11-02
+
+Selecting text in the scrollback no longer stops with an error.
+
+- On Windows and Linux, when you drag to select text in the scrollback at the top and move the pointer above it, the selection keeps growing as the text scrolls. Before, Vosh could show an error and drop what you had selected.
+
 ## v0.96.3 - 2026-10-29
 
 Bold text in the terminal keeps one font on Windows and Linux.
