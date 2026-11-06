@@ -137,7 +137,7 @@ Code comments are for developers and follow the same style where it makes sense,
 
 `HELP.md` is the one copy of the in-app help, and the Help window reads it when Vosh is built. A change that alters what you see or do updates the help topic that describes it in the same commit. A new topic needs an `<!-- id: section.topic -->` line under its heading, and the build stops if one is missing or used twice. `fixtures/links/help-topics.json` lists every topic id in rail order, so a new or moved topic updates that file too.
 
-`CHANGES.md` holds the release notes, newest first. Each release adds its entry in the same commits as the version bump, and nothing else touches the file. An entry opens with one summary line, then gives one change per bullet in words a player knows, with no commit hashes, file names or internal names.
+`CHANGES.md` holds the release notes, newest first. Each release adds its entry in the same commits as the version bump, and nothing else touches the file. An entry opens with a heading such as `## 0.96.4, November 2, 2026` and one line that says what you can do now. Then come the groups `### New`, `### Changed` and `### Fixed`, each only when the release has such a change. Each bullet is one sentence in ASD-STE100 Simplified Technical English about what a player sees, with no commit hashes, file names or internal names. A change for one system starts with that system, as in "On Windows and Linux,". Add a sentence that starts with "Before," only when it helps a reader understand a fix. The download page at theforsakenlands.com/client shows this file, with the three newest releases open.
 
 ## Reporting Bugs
 

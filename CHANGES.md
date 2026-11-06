@@ -1,880 +1,1295 @@
 # Changes
 
-All notable changes to Vosh. Newest first.
+What changed in each version of Vosh, with the newest version first.
 
-## v0.96.4 - 2026-11-02
+## 0.96.4, November 2, 2026
 
-Selecting text in the scrollback no longer stops with an error.
+Drag a selection above the scrollback, and the selection continues.
 
-- On Windows and Linux, when you drag to select text in the scrollback at the top and move the pointer above it, the selection keeps growing as the text scrolls. Before, Vosh could show an error and drop what you had selected.
+### Fixed
 
-## v0.96.3 - 2026-10-29
+- On Windows and Linux, a selection in the scrollback continues when you drag it above the top. Before, Vosh showed an error and removed the selection.
 
-Bold text in the terminal keeps one font on Windows and Linux.
+## 0.96.3, October 29, 2026
 
-- On Windows and Linux, bold text no longer mixes letters from two fonts after you start Vosh. Before, only a theme change put them right.
-- The terminal on Windows and Linux draws with a newer version of its renderer, which fixes several cases where letters could draw wrong.
+Bold text in the terminal shows in one font on Windows and Linux.
 
-## v0.96.2 - 2026-10-29
+### Changed
 
-Copy from the scrollback when you scroll up.
+- On Windows and Linux, the terminal uses a new version of the code that draws the text. This version draws letters correctly in more cases.
 
-- On Windows and Linux, Copy in the menu you get with a right click now copies the text you select in the scrollback at the top. Before, it copied nothing there, and only Ctrl+C worked.
+### Fixed
 
-## v0.96.1 - 2026-10-28
+- On Windows and Linux, all bold text uses the same font after you start Vosh. Before, some bold letters used a different font until you changed the theme.
 
-Your commands stay in the scrollback when you scroll up.
+## 0.96.2, October 29, 2026
 
-- On Windows and Linux, the commands you send no longer disappear when you scroll up. The history shows each one where you sent it, among the game's lines.
-- The scrollback Vosh brings back when you open it again keeps your commands too, on every platform. A command that gives the game a password stays out, as it stays out of command history.
+Copy text from the scrollback with the right click menu.
 
-## v0.96.0 - 2026-10-27
+### Fixed
 
-Change many automation items at once, keep your command history through a restart, pace what your triggers send, and set the text encoding of a world.
+- On Windows and Linux, Copy in the right click menu copies the text that you select in the scrollback. Before, it copied nothing there, and only Ctrl+C worked.
 
-- In Triggers, Aliases, Macros, and Timers, you can select many items and move, turn on, turn off, duplicate, or delete them together. Click the select button after the filter, or hold Cmd and click an item. Right click an item for the same changes.
-- Rename a group from the menu on its heading. Vosh renames it in all four lists and in your loadouts, and asks before it merges two groups when you type a name you already have.
-- Your command history comes back after you quit Vosh or after a crash. Each session keeps its newest 1,000 lines, and never keeps a password or what you type while you log in.
-- Vosh paces what your triggers, timers, the tick, Lua, and plugins send. A burst sends 10 lines at once and the rest at 4 a second. What you type never waits. The command line shows how many lines wait, and a click drops them. Change the speed or turn the pace off in Settings › Input › Advanced.
-- When your triggers, timers, or scripts send the same line 40 times in a row, Vosh stops it there and tells you which line it is, long before the 75 that leave your character mortally wounded on Aabahran.
-- The tick can send its command a set number of seconds before or after the tick. Or when you send restarts the count from a command you type.
-- `#list` keeps items in order under one name. Use them as `$foes[1]`, `$foes[-1]` for the last, and `$foes[#]` for how many. `#list foes keep` saves a list with the profile, and Lua can read and write lists too.
-- Lua scripts and plugins get `json` to read and write JSON, and `regex` to match text with the same syntax as triggers.
-- A profile's menu in Settings › Characters can show its file in Finder or Explorer, and Restore from a backup puts back an earlier version. Backups follow a profile when you rename it, and a save that changes nothing no longer uses up a backup.
-- Text encoding in Settings › General › Connection sets Latin 1 for an older world that garbles the accented letters you send. UTF-8, the default, still shows an older world's accented letters.
-- On macOS, a byte from the game that isn't UTF-8 no longer hides the rest of its line.
+## 0.96.1, October 28, 2026
 
-## v0.95.6 - 2026-10-15
+See your commands in the scrollback, between the lines of the game.
 
-Arrange your panes in a mode of their own, fold a pane down to its header, and bring back an earlier layout.
+### Changed
 
-- Arrange mode turns each pane into a tile you drag, and the other panes make room as you go. Drop a tile on the top or bottom half of a pane to stack them, or near its left or right edge to put them side by side. Done saves the layout for that character, and Cancel leaves it as it was.
-- Start arrange mode with the layout button over the panel, or choose Arrange panes in a pane's menu, the View menu, or the command palette.
-- In arrange mode a shelf covers the game text. It holds the panes you put away and the panes you can add, another Chat pane and your plugin panes among them.
-- Click a pane's header to fold it down to its name. The other panes take its space, and the header still shows its counts. Click it again to open the pane.
-- Vosh keeps the last 20 layouts of each character. Earlier layouts in arrange mode or in Settings › Characters › Panel layout puts one back. The first time a new version opens, it saves every character's layout before anything changes.
-- Panes you change just before an update are saved before Vosh restarts, so they're still there afterward.
-- Close pane offers Undo.
-- Split right, Split down, Move to sidebar, and Add a pane are gone from the pane menu, and headers no longer drag. Arrange mode does all of that now.
+- The scrollback that Vosh restores when you open it again also keeps your commands, on all systems. Vosh never keeps a command that sends a password.
 
-## v0.95.5 - 2026-10-14
+### Fixed
 
-Put panes in the sidebar, read your stats in a new pane, and copy a trigger, alias, or macro.
+- On Windows and Linux, each command that you send stays in the scrollback where you sent it. Before, your commands disappeared from the scrollback.
 
-- The sidebar across from the panel holds panes too, under your sessions, or on its own with one session. Drag a pane by its header to move it, or choose Move to sidebar in its menu. Add a pane has Add to the sidebar at the bottom.
-- Settings › Characters › Panel layout draws the sidebar beside the panel. Drag panes there to arrange any character, even one you aren't playing.
-- A new Stats pane shows your stats, luck, hitroll, damroll, armor, and saves as the game sends them. Pick Score sheet, Rows, or Ledger from its menu or in Settings › Layout › Stats.
-- Duplicate alias, Duplicate trigger, and Duplicate macro make a copy you can change and save. The copy's name ends in copy, so it never clashes, and a copied macro waits for its own key.
-- The status bar styles no longer run off the edge in a narrow window. Parts drop out whole before any name gets cut, and the Dashboard captions line up.
+## 0.96.0, October 27, 2026
+
+Change many automation items at once, and keep your command history after a restart.
+
+### New
+
+- Select many triggers, aliases, macros or timers, and move, turn on, turn off, duplicate or delete them together.
+- Rename a group from the menu on its heading, and the new name shows in all four lists and in your loadouts.
+- When you give a group the name of another group, Vosh asks before it merges the two groups.
+- Vosh keeps your command history after you quit or after a crash, with the newest 1,000 lines of each session.
+- Your command history never keeps a password or the text that you type at the login prompts.
+- Vosh stops a line that your triggers, timers or scripts send 40 times in a row, and tells you which line it was.
+- The tick can send its command a set number of seconds before or after the tick.
+- Use Or when you send to start the tick count again from a command that you type.
+- `#list` keeps items in order under one name, such as `$foes[1]`, `$foes[-1]` for the last item and `$foes[#]` for the count.
+- `#list foes keep` saves a list with the profile, and Lua scripts can read and change lists too.
+- Lua scripts and plugins get `json` to read and write JSON, and `regex` to match text as triggers do.
+- The menu of a profile on the Characters page of Settings can show its file in Finder or Explorer.
+- Restore from a backup returns a profile to an earlier version.
+- Set Text encoding to Latin 1 for an older world that shows your accented letters wrong.
+
+### Changed
+
+- Vosh sends the lines from your triggers, timers and scripts at a steady speed, and what you type never waits.
+- A burst sends 10 lines at once, and then 4 lines each second.
+- The command line shows how many lines wait, and a click on the count stops them.
+- Change the speed, or turn the pace off, on the Input page of Settings under Advanced.
+- Backups follow a profile when you rename it, and a save that changes nothing does not use a backup.
+- Text encoding is on the General page of Settings, and the default UTF-8 still shows accented letters from older worlds.
+
+### Fixed
+
+- On macOS, a line from the game shows in full when it holds a byte that is not UTF-8. Before, the rest of the line disappeared.
+
+## 0.95.6, October 15, 2026
+
+Arrange your panes in arrange mode, fold a pane to its header, and use an earlier layout again.
+
+### New
+
+- In arrange mode, each pane is a tile that you drag, and the other panes move to make space.
+- Drop a tile on the top or bottom of a pane to stack the two panes.
+- Drop a tile near the left or right edge of a pane to put the two panes side by side.
+- Done saves the layout for that character, and Cancel keeps the layout as it was.
+- Click the layout button over the panel to open arrange mode.
+- Arrange panes in a pane menu, the View menu and the command palette also opens arrange mode.
+- In arrange mode, a shelf over the game text holds the panes that you removed and the panes that you can add.
+- The shelf includes another Chat pane and your plugin panes.
+- Click a pane header to fold the pane to its name, and click again to open it.
+- When a pane is folded, the other panes use its space, and its header still shows its counts.
+- Vosh keeps the last 20 layouts of each character.
+- Click Earlier layouts, in arrange mode or under Panel layout on the Characters page of Settings, to restore one of them.
+- The first time that a new version opens, it saves the layout of each character before it changes anything.
+- After Close pane, you can click Undo.
+
+### Changed
+
+- Vosh saves the panes that you change shortly before an update, so they are still there after the restart.
+- Split right, Split down, Move to sidebar and Add a pane are not in the pane menu now, and headers do not drag.
+- Use arrange mode for those changes.
+
+## 0.95.5, October 14, 2026
+
+Put panes in the sidebar, read your stats in a new pane, and copy a trigger, alias or macro.
+
+### New
+
+- The sidebar across from the panel holds panes too, under your sessions or alone when you have one session.
+- Drag a pane by its header to move it, or choose Move to sidebar in its menu.
+- Add a pane has Add to the sidebar at the bottom.
+- Panel layout, on the Characters page of Settings, shows the sidebar next to the panel.
+- Drag panes there to arrange any character, also a character that you do not play now.
+- A new Stats pane shows your stats, luck, hitroll, damroll, armor and saves as the game sends them.
+- Pick Score sheet, Rows or Ledger from its menu, or under Stats on the Layout page of Settings.
+- Duplicate alias, Duplicate trigger and Duplicate macro make a copy that you can change and save.
+- The name of the copy ends in copy, so no two names are the same.
+- A copied macro has no key until you give it one.
+
+### Fixed
+
+- The status bar styles fit in a narrow window, and Vosh removes whole parts before it cuts a name.
+- The Dashboard style aligns its captions.
 - A profile that never picked a status bar style shows Compact again, the quiet line from before 0.95.3.
-- Find says No matches when the text isn't in the scrollback, instead of Found.
-- Stop on a snoop tab closes it when the game says you aren't snooping anyone by that name, with your prompt off too. A tab for a player who left the game no longer stays open for good.
+- Find says No matches when the text is not in the scrollback. Before, it said Found.
+- Stop on a snoop tab closes the tab when the game says that you snoop nobody with that name, also when your prompt is off.
+- A snoop tab closes when its player leaves the game. Before, the tab stayed open.
 
-## v0.95.4 - 2026-10-12
+## 0.95.4, October 12, 2026
 
-Letters hold still when you switch sessions.
+The letters stay in place when you change sessions.
 
-- On macOS, the game text no longer stretches to the right for a moment as you switch sessions, and it no longer stays stretched until you switch away and back.
+### Fixed
 
-## v0.95.3 - 2026-10-10
+- On macOS, the game text stays in place when you change sessions. Before, the text stretched to the right for a moment, and sometimes it stayed stretched.
+
+## 0.95.3, October 10, 2026
 
 Choose how your status bar looks, put the panel on the left, and keep spell check on.
 
-- The status bar has four styles. Meters, the new default, fills the bar with your vitals, your opponent and the tick so you can read them at a glance. Compact is the old quiet line. Strip adds small gauges, and Dashboard puts a caption over each value. Pick one in Settings › Layout › Status line.
-- Put the panel on the left in Settings › Layout › Panel. Your sessions move to the right, and the title band buttons go with them.
-- Spell check on chat lines no longer turns itself off every other time you open Vosh.
-- Select all and copy keep your selection in the prompt design text, and a Copy design button copies the whole design.
-- A snoop window closes when you stop snooping after the game's hot reboot.
+### New
 
-## v0.95.2 - 2026-10-09
+- The status bar has four styles, and you pick one under Status line on the Layout page of Settings.
+- Meters is the new default and fills the bar with your vitals, your opponent and the tick.
+- Compact is the old quiet line, Strip adds small gauges, and Dashboard puts a caption over each value.
+- Put the panel on the left under Panel on the Layout page of Settings.
+- When the panel is on the left, your sessions and the title band buttons move to the right.
+- Copy design copies your whole prompt design.
+
+### Fixed
+
+- Spell check on chat lines stays on. Before, it turned off every second time that you opened Vosh.
+- Select all and Copy keep your selection in the text of your prompt design.
+- A snoop window closes when you stop a snoop after a hot reboot of the game.
+
+## 0.95.2, October 9, 2026
 
 Pick text sizes in half steps, and give each character its own aliases and triggers with the same names.
 
-- Terminal text, panel text, and the command line take half sizes, such as 13.5. A font that only comes in fixed sizes keeps to them and says so.
-- Two groups can each hold an alias with the same name. While both groups are on, the group listed first wins, and Settings shows which one fires. Use a loadout for each character so each one fires for its own character.
-- Two groups can each hold a trigger with the same name, and both fire while both groups are on.
-- When Settings can't save your aliases, triggers, macros, or timers, it says why beside Save and marks the rows to fix.
-- Alias and trigger names lose stray spaces at either end. An alias name with a space inside is refused, with the reason.
-- A new group that a loadout doesn't list says so before it turns off at your next launch.
-- An alias that calls itself is named in the error.
-- #unalias and #untrigger ask which group you mean when two groups hold the name.
+### New
 
-## v0.95.1 - 2026-10-09
+- Terminal text, panel text and the command line take half sizes, such as 13.5.
+- A font that has fixed sizes only keeps to those sizes and tells you.
+- Two groups can each hold an alias with the same name, and while both groups are on, the first group in the list wins.
+- Settings shows which alias fires.
+- Use a loadout for each character, so that each alias fires only for its character.
+- Two groups can each hold a trigger with the same name, and both triggers fire while both groups are on.
 
-Write your descriptions, notes and history in a card built for it, save a scene to share, and shape the command line your way. This is the test build before 1.0.
+### Changed
 
-- The writing card edits your description, history, personality, purpose, notes and the other board kinds. Open it from the Write menu, the command palette, or the notice that shows when the game's editor opens.
-- Drag the writing card anywhere, size its text box from the corner, or pin it into a Writing pane in the panel. Vosh keeps where you put it for each profile.
-- The card reads your note back from the game before it posts, says which line differs when one does, and finds a post again after a dropped connection.
-- Send for approval and Send for review sit in the card's menu. Vosh remembers a check that waits and reminds you when you send newer text.
-- Save a scene picks a stretch of your log and saves it as text, ANSI or a web page in your theme. Open it from Session logs or the right click menu.
-- Save as file can add times and save a web page. Copy as text leaves out password lines, as a saved file does.
-- Log search stays quick on long logs and opens on the last 7 days. Choose how long Vosh keeps logs, and turn logging off for one profile.
-- Your scrollback survives a quit or a crash. Set its size in Settings › General.
-- Pick the mark before the commands you send. Use ›, >, your own text or no mark, give it a color, and dim your commands if you like.
-- Shape the command line. Pick its background, size, caret blink and color, and the color of what you type.
+- When Settings cannot save your aliases, triggers, macros or timers, it tells you why next to Save and marks the rows to fix.
+- Vosh removes spaces at the start and end of alias and trigger names.
+- Vosh refuses an alias name with a space in it, and tells you why.
+- Vosh tells you about a new group that no loadout lists, before the group turns off at your next launch.
+- An error names the alias that calls itself.
+- `#unalias` and `#untrigger` ask which group you mean when two groups hold the name.
+
+## 0.95.1, October 9, 2026
+
+Write your description in the writing card, save a scene to share, and change the look of the command line.
+
+### New
+
+- The writing card edits your description, history, personality, purpose, notes and the other kinds of board.
+- Open the writing card from the Write menu, the command palette, or the notice when the game editor opens.
+- Drag the writing card to any place, or pin it into a Writing pane in the panel.
+- Drag the corner of its text box to change the size.
+- Vosh keeps the position of the writing card for each profile.
+- Before it posts, the card compares your note with the copy in the game and tells you which line is different.
+- The card also finds a post again after you lose the connection.
+- Send for approval and Send for review are in the menu of the card.
+- Vosh remembers a check that waits, and reminds you when you send newer text.
+- Save a scene saves a part of your log as text, ANSI or a web page in your theme.
+- Open Save a scene from Session logs or the right click menu.
+- Choose how long Vosh keeps logs, and turn off the log of one profile.
+- Vosh keeps your scrollback after you quit or after a crash.
+- Set the size of the scrollback on the General page of Settings.
+- Pick the mark before the commands that you send, such as ›, >, your own text or no mark.
+- Give the mark a color, and dim your commands if you want.
+- Pick the background, text size, caret blink and caret color of the command line, and the color of your text.
 - Color commands as you type shows aliases, Vosh commands and chat in their own colors before you send them.
-- A pill at the start of the command line shows when you are in the game's editor, with the line you are on, and at a password prompt, in the pager or on a walk.
-- Snoop a player and a split shows their screen above yours, with a tab for each player.
-- See how long the game takes to answer on the status line, and type #lag to list each stall.
-- Your prompt can show how much your health, mana and moves changed since your last prompt and over the last tick, with a gain in green and a loss in red. Find them under Insert value as Health change and Health this tick, and pick how a zero shows.
-- Show each hit keeps the part of a vital a hit takes pale for a moment before it drains.
-- Settings has eleven tabs, with Logs, Accessibility, Vitals and Prompt on their own. Old links still land on the right row.
-- Tab follows the screen in every window, and a screen reader hears the names, keys and regions. Turn on the Screen reader section in Settings › Accessibility to hear new lines, and press Cmd+Shift+P to hear your prompt.
-- High Contrast is rebuilt and High Contrast Light joins it. Increase contrast on macOS picks the pair.
+- A pill at the start of the command line shows when you are in the game editor, with the line that you are on.
+- The pill also shows at a password prompt, in the pager and on a walk.
+- Snoop a player, and a split shows their screen above yours, with a tab for each player.
+- The status line shows how long the game takes to answer, and `#lag` lists each stall.
+- Your prompt can show the change in your health, mana and moves since your last prompt and over the last tick.
+- A gain shows in green, and a loss shows in red.
+- Find these values under Insert value as Health change and Health this tick, and pick how a zero shows.
+- Show each hit keeps the part of a vital that a hit takes pale for a moment before it drains.
+- Tab follows the screen in every window, and a screen reader hears the names, keys and regions.
+- Turn on the Screen reader section on the Accessibility page of Settings to hear new lines.
+- Press Cmd+Shift+P to hear your prompt.
+
+### Changed
+
+- This version is the test build before 1.0.
+- Save as file can add times and save a web page.
+- Copy as text does not copy password lines, the same as a saved file.
+- Log search stays fast on long logs and opens on the last 7 days.
+- Settings has eleven pages, and Logs, Accessibility, Vitals and Prompt are now pages of their own.
+- Old links to Settings still go to the right row.
+- High Contrast has a new design, and High Contrast Light is new.
+- On macOS, the Increase contrast setting of your system picks those two themes.
 - Menus, buttons and keys look the same in every window.
-- One sessions toggle sits beside the window buttons. Press Ctrl+Cmd+S on macOS or Ctrl+Shift+S on Windows and Linux.
-- On macOS the Settings pages open with Cmd+Option and a number, since Cmd+Shift+3 and 4 take screenshots.
-- Things and people in a room take their colors after a walk or a goto, not only after a look, and your target colors on the first look.
+- A sessions button is next to the window buttons, or press Ctrl+Cmd+S on macOS or Ctrl+Shift+S on Windows and Linux.
+- On macOS, Cmd+Option and a number open the Settings pages, because Cmd+Shift+3 and Cmd+Shift+4 take screenshots.
+- Help has new text in short, plain sentences.
+- Berkeley Mono is not in Vosh now, and a setting that named it uses the bundled JetBrains Mono.
+- If an error occurs, its notice stays in the corner, counts repeats and closes with Close or Escape, so you can continue to play.
+- On Windows, if SmartScreen warns you about the unsigned build, choose More info and then Run anyway.
+
+### Fixed
+
+- Things and people in a room take their colors after a walk or a goto, not only after a look.
+- Your target takes its color on the first look.
 - A right aligned part of a pinned prompt stays whole.
-- A line Vosh prints after a prompt starts on its own row.
+- A line that Vosh prints after a prompt starts on its own row.
 - Submenus stay open while the pointer moves into them.
-- A reconnect from the account menu now knows which character you play.
-- Help is rewritten in short, plain sentences.
-- Vosh no longer offers Berkeley Mono. A setting that named it draws in the bundled JetBrains Mono.
-- Scrolling back down fast to close the scrollback split no longer stops Vosh with an error. If something does go wrong, the notice sits in the corner, counts repeats, and closes with Close or Escape, so you can keep playing.
-- Windows builds are not signed yet. If SmartScreen warns you, choose More info and then Run anyway.
+- A reconnect from the account menu knows which character you play.
+- Vosh does not stop with an error when a fast scroll to the bottom closes the scrollback split.
 
-## v0.9.0 - 2026-10-06
+## 0.9.0, October 6, 2026
 
-Play several characters in one window, write plugins that draw their own panes, pick a vitals style, and get alerts when something needs you.
+Play several characters in one window, write plugins that draw panes, pick a vitals style, and get alerts.
 
-- Open more than one session in the same window. Each session keeps its own terminal, command line, history and scrollback, and Vosh brings them all back the next time you launch.
-- A sessions sidebar lists your sessions while two or more are open. Each row shows where that character stands, their room or fight and health, and a count of tells and mentions you missed.
-- Rest the pointer on a session row to see its character, world, room, vitals and time online.
-- Rename a session in place. Double click its name, or press Return or F2.
-- Fold the sidebar away and the session button in the title band lists the same rows, with the total of what waits on the others.
-- Step between sessions from the keyboard, and pick a session to land straight on its command line.
+### New
+
+- You can open more than one session in a window, and each session keeps its own terminal, command line, history and scrollback.
+- Vosh opens all your sessions again the next time that you start it.
+- A sessions sidebar lists your sessions while two or more are open.
+- Each row shows the room or fight of that character, their health, and a count of the tells and mentions that you missed.
+- Put the pointer on a session row to see its character, world, room, vitals and time online.
+- Double click the name of a session, or press Return or F2, to rename it.
+- When you fold the sidebar, the session button in the title band shows the same rows.
+- The session button also shows the total of what waits in your other sessions.
+- Move between sessions from the keyboard, and pick a session to go directly to its command line.
 - Vosh asks before you close a session or quit while you are connected.
-- Vosh can dial again on its own when your link drops. A notice counts down to each try, with Cancel and Reconnect now. Turn it on or off in Settings › General › Connection.
-- Triggers can raise alerts. Add an Alert row to a trigger to post a system banner, play a tone, or both.
-- Five alert presets cover tells, your name, an attack on you, low health and your connection, under Settings › Automation › Presets.
-- Choose a vitals style. Rows, One line, Ledger, Gauges, Pips and Text each draw your health, mana and moves their own way, in the panel or the status line.
-- Customize vitals sets the colors, the order and the low marks. Right click the vitals for quick changes.
-- Write your own vitals text, or keep the template you used before.
-- Settings has a Scripts page. Install, export, turn on and off, and reload your Lua plugins there, and read what they print in the console.
-- A plugin can draw its own pane with mud.pane, with rows, meters, lines and rules. Add it from Add a pane like any other pane.
-- A plugin can raise an alert with mud.alert.
-- Each session runs its own Lua. A plugin that runs too long or uses too much memory stops on its own instead of freezing Vosh.
-- Open up to four Chat panes. A second pane starts on tells, and your first pane turns to Everything else.
-- Pick one or more channels for each Chat pane. One pane can show Everything else, the channels no other pane picks.
-- Import a profile someone exported from Vosh, as a new profile or over one you have.
-- Triggers match in three ways. Pick Text, Starts with or Regex for each pattern.
-- Turn a whole group of triggers, aliases or timers on or off from the switch on its heading.
-- Timers can live in groups.
-- The Numpad movement preset walks with your number pad.
-- Type #walk with a string of directions and Vosh walks it one step at a time. Esc stops it.
-- Color vision in Settings › Appearance swaps the colors your eyes confuse, the way color blind modes in games do, for Deuteranopia, Protanopia and Tritanopia.
-- Fit game colors keeps the game's colors readable on any theme.
-- New themes join the gallery, among them Triad, Rubric, Harbor Dark, Iceberg Dark, Srcery, Nightfly, Melange Dark, Melange Light and Modus Vivendi. A new install starts on Triad, with Rubric as its light theme. One Dark, Vellum and Everforest Light give way to the themes that replace them, and your pick moves over on its own.
-- The panes can use their own font and size, set under Panel text in Settings › Appearance.
-- Collapse repeated lines can fold fight lines and attack lines too.
+- Vosh can connect again when you lose the connection, and a notice shows the seconds to each try.
+- The notice has Cancel and Reconnect now.
+- Turn reconnect on or off under Connection on the General page of Settings.
+- Add an Alert row to a trigger to post a system banner, play a tone, or do both.
+- Five alert presets cover tells, your name, an attack on you, low health and your connection.
+- The alert presets are under Presets on the Automation page of Settings.
+- Choose a vitals style for your health, mana and moves, in the panel or the status line.
+- The vitals styles are Rows, One line, Ledger, Gauges, Pips and Text.
+- Customize vitals sets the colors, the order and the low marks, and a right click on the vitals gives quick changes.
+- Write your own vitals text, or keep the template that you used before.
+- The Scripts page of Settings installs, exports, turns on and off, and reloads your Lua plugins, and shows their output.
+- A plugin can draw its own pane with `mud.pane`, with rows, meters, lines and rules.
+- Add a plugin pane from Add a pane, as you add any other pane.
+- A plugin can send an alert with `mud.alert`.
+- Each session runs its own Lua, and a plugin that runs too long or uses too much memory stops before it can freeze Vosh.
+- Open up to four Chat panes, and a second pane starts on tells while your first pane shows Everything else.
+- Pick one or more channels for each Chat pane.
+- One Chat pane can show Everything else, which is the channels that no other pane picks.
+- Import a profile that another player exported from Vosh, as a new profile or over one that you have.
+- Each pattern of a trigger can match as Text, Starts with or Regex.
+- Turn a whole group of triggers, aliases or timers on or off with the switch on its heading.
+- Timers can be in groups.
+- The Numpad movement preset moves you with your number pad.
+- Type `#walk` and a string of directions, and Vosh walks them one step at a time.
+- Press Esc to stop a walk.
+- Color vision on the Appearance page of Settings changes the colors that your eyes confuse, for Deuteranopia, Protanopia and Tritanopia.
+- Fit game colors keeps the colors of the game readable on any theme.
+- New themes are in the gallery, such as Triad, Rubric, Harbor Dark, Iceberg Dark, Srcery, Nightfly, Melange Dark, Melange Light and Modus Vivendi.
+- The panes can use their own font and size, under Panel text on the Appearance page of Settings.
 - The status line can show the game time on a 12 hour clock.
-- Before your first prompt, the pinned prompt no longer leaves empty rows under the login menu.
-- A blank Enter with your prompt pinned no longer leaves an extra empty row.
-- Saving your aliases no longer turns back on an alias a plugin stopped.
+
+### Changed
+
+- A new install starts on Triad, with Rubric as its light theme.
+- One Dark, Vellum and Everforest Light are gone, and Vosh moves your choice to the theme that replaces each one.
+- Collapse repeated lines can also fold fight lines and attack lines.
+
+### Fixed
+
+- The pinned prompt does not leave empty rows under the login menu before your first prompt.
+- A blank Enter with your prompt pinned does not leave an extra empty row.
+- When you save your aliases, an alias that a plugin stopped stays off.
 - The switches on trigger and alias groups work again.
 
-## v0.8.1 - 2026-10-03
+## 0.8.1, October 3, 2026
 
-Five new themes, blinking text, new prompt forms, room colors, and a 3D map.
+Use five new themes, a 3D map, room colors, text that blinks and new prompt forms.
 
-- Five new themes bring the gallery to 20. You get Solarized Dark and Light, Everforest Dark and Light, and Green Screen, the old school look of green text on black.
-- Text the game sets to blink now blinks with either renderer. Turn off Blinking text in Settings › Appearance › Advanced to keep it still, and Vosh turns it off by default when your system reduces motion.
-- Your prompt design can blink too. More styles in Customize prompt now lists blink and every underline kind.
-- Customize prompt has new number forms. Gold and other numbers can group by thousands, and a percent can round down as the game does.
-- Customize prompt has new time forms. The game hour fits a short 12 hour form, and the tick can count up from the last tick.
-- A value in your prompt can step through ten colors by how full it is.
-- A prompt row can push the rest of its text to the right edge.
-- The new Room, time and weather colors preset colors the room you look at, the clock, and the weather. Exits turn green, things and people yellow, day and night blue, and your target bright red.
-- Triggers can now match what a room lists, or the line of your target.
-- Keep highlight colors readable, new in Settings › Appearance and on by default, lightens or darkens a trigger color that would read faint on your theme.
-- Each command you send now echoes after a grey ›. Turn off Mark your commands in Settings › Input › Command line to echo them bare.
-- Turn on Collapse repeated lines in Settings › Appearance and a line the game sends again and again takes one row with its count, on screen and in the scrollback.
-- The map has a 3D style that stacks the floors around you. Drag to turn and tilt it, and scroll or pinch to zoom.
+### New
+
+- Five new themes make 20 in the gallery, with Solarized Dark and Light, Everforest Dark and Light, and Green Screen.
+- Green Screen shows green text on black, as old terminals did.
+- Text that the game sets to blink now blinks with both renderers.
+- Turn off Blinking text on the Appearance page of Settings, under Advanced, to keep the text still.
+- Vosh turns off Blinking text when your system reduces motion.
+- Your prompt design can blink too, and More styles in Customize prompt lists blink and every kind of underline.
+- Customize prompt has new forms for numbers, so gold can show in groups of thousands.
+- A percent in your prompt can cut its decimals, as the game does.
+- Customize prompt has new time forms, with a short 12 hour form for the game hour.
+- The tick in your prompt can count the seconds from the last tick.
+- A value in your prompt can change through ten colors as it fills.
+- A prompt row can move the rest of its text to the right edge.
+- The new Room, time and weather colors preset colors the room around you, the clock and the weather.
+- With that preset, exits are green, things and people are yellow, day and night are blue, and your target is bright red.
+- Triggers can match what a room lists, or the line of your target.
+- Keep highlight colors readable, on the Appearance page of Settings and on by default, makes a faint trigger color lighter or darker.
+- Turn on Collapse repeated lines on the Appearance page of Settings.
+- A line that the game sends again and again then takes one row with its count, also in the scrollback.
+- The map has a 3D style that stacks the floors around you.
+- Drag to turn and tilt the 3D map, and scroll or pinch to zoom.
+- Set Running out at and Almost gone at for each character to choose when affects warn you.
+- Affects have a new style, Draining chips.
+- The right click menu of the terminal opens any Settings page.
+- A gear at the right of the title band opens Settings on all systems.
+
+### Changed
+
+- Each command that you send now shows after a grey ›.
+- Turn off Mark your commands, under Command line on the Input page of Settings, to show them with no mark.
 - The map pane shows the room name in its terminal color, with its terrain and region.
-- You choose when affects warn. Set Running out at and Almost gone at for each character.
-- Affects have a new Draining chips style.
-- A tracked affect you are missing now shows a soft dotted edge, so you spot it at a glance.
-- The terminal's right click menu opens any Settings page.
-- A gear at the right of the title band opens Settings on every platform.
-- The groups in each Automation list fold away, and Vosh remembers which ones you folded.
-- Text in the panes now follows your terminal font size.
-- Faint chat colors now lift so you can read them on the panel.
-- Enter on an empty line now echoes the bare line it sends, as a telnet client does.
-- Drawing your own prompt now stays off until you turn it on.
-- A trigger highlight now keeps the game's colors on the text around it.
-- The map no longer draws false corridors or drops its top row and left column.
-- Affect chip hours now stay readable on light themes.
-- A selection you drag in the scrollback history keeps scrolling with you, and never copies the divider or the live text below it.
-- Room contents now count armies and things correctly.
-- Clicking through Help search results no longer shifts the window.
+- A tracked affect that you do not have shows a soft dotted edge, so you can see it quickly.
 
-## v0.8.0 - 2026-10-01
+## 0.8.0, October 1, 2026
 
-A new main window with a panel of panes, rebuilt Settings, and a prompt you design.
+Use a new main window with a panel of panes, a new Settings window and a prompt that you design.
 
-- Vosh has a new main window. The terminal fills the left with a flat command line and a status line under it, and a panel of panes sits on the right.
-- A slim title band holds the session button. It connects to your saved world, edits it, sets up a new one, or disconnects.
-- The window title names your character and world, so your taskbar tells your characters apart.
-- The panel holds Map, Affects, Group, Chat, and Staff queues panes. Split them right or down from a pane's menu, and drag the lines between them.
-- Each profile keeps its own panel arrangement. Your old dock layout carries over, and Reset panel layout in the View menu puts back the default.
-- Health, Mana, and Moves sit at the foot of the panel with a thin meter each, and your opponent gets a row on top in a fight.
-- In Settings › Layout › Vitals, choose rows or one line, how the numbers read, and the meter. Turn on Warn before you run low for yellow and red warnings.
-- While lamented tears hides your values, your vitals read ? in dim text.
-- The status line shows your target, the tick, the game time, and each moon as a phase icon in its own color.
-- Vosh plays a soft tone on each tick by default. Turn it off with `#tick sound off` or in Settings › Automation › Timers.
-- Vosh reads your prompt. On The Forsaken Lands it learns your prompt codes from the game at login or when you type `prompt`.
-- Settings › Input › Prompt shows where your prompt codes came from, and warns when something is off.
-- On other games, point at your prompt line in Customize prompt or type `#prompt {regex}`.
-- Customize prompt opens a card right over your prompt line. Open it from the terminal's right click menu, the palette, or Settings › Input › Prompt.
-- In Customize prompt, start from a ready design and click any part to change what it shows, its color, its background, and its style, curly and dotted underlines included.
-- Customize prompt works fully by keyboard and with a screen reader.
-- Choose where your prompt shows with `#prompt show` or in Settings › Input › Prompt. In the text leaves it where the game sends it, and Lifted raises every prompt onto a band.
-- Pinned shows only your latest prompt, on a band above the command line, and still logs it.
-- Vosh ships a default prompt design. It shows your vitals colored by how full they are, your exits and gold, and the tank's health in a fight.
-- Turn on Draw your own prompt or type `#prompt draw on` to draw your design. Your custom prompt from 0.7 carries over.
-- A rebuilt Settings has six pages in a sidebar, named General, Appearance, Layout, Input, Automation, and Characters. Cmd+comma opens it.
-- Search in Settings jumps straight to a setting. Outside Automation, every change saves as you make it.
-- Automation is one editor for triggers, aliases, macros, timers, presets, and loadouts, with folders, a filter, and a Save bar.
-- Characters lets you edit any profile without switching, tie a profile to the character you log in as, and track affects as chips.
-- The Affects pane comes in three styles, Timers first, Countdown, and Grouped chips. Pick one per profile in Settings › Layout › Affects.
-- Your tracked affects lead the Affects pane and harmful ones show in red. You can tint what needs recasting.
-- The Chat pane prints one line per message in each channel's game color. Recolor any channel from the pane's menu.
-- The Map pane lists your room, exits, and people under the drawing, and keeps the last map after you disconnect.
-- Help opens in its own window with a sidebar, a ranked search, and every topic rewritten for the new layout. Open it with Cmd+/ or type `#help` and a few words.
-- Two new themes join the gallery, Rosé Pine and Vellum, a warm light theme like paper.
-- In Settings › Appearance you can import Ghostty, iTerm2, Kitty, and Alacritty themes.
-- You can also follow your system's light and dark appearance and pick a line height in Settings › Appearance.
-- The rebuilt command palette opens on your last three commands and finds every command, setting, and alias as you type.
-- New shortcuts connect, open Settings and Help, and show the panel and the scrollback split. On macOS they answer to Cmd only, so Ctrl belongs to your macros.
-- On macOS, Vosh has its own menu bar, the native title bar, and a frame that follows your theme.
-- Vosh has a new icon, Moonpath, on every platform.
-- Passwords stay out of your session log. Vosh logs a line you type at a password prompt as > (hidden).
-- `#logs forget-passwords` counts the passwords older versions saved in your log, and `#logs forget-passwords now` blanks them.
-- Lua from `#lua`, `#script load`, timers, and plugins can now start timers, send input, and set prompt values.
-- The top bar, the bottom status bar, the panel strips, the room strip, the affects bar, and the panes you could split the terminal into are gone. The scrollback split stays.
-- You turn loadouts on and off in Settings › Automation › Loadouts.
-- The tick now follows the game. It lands when the game hour moves on The Forsaken Lands, or on any line that matches your Reset on pattern.
-- The prompt trigger that `#prompt` made in Vosh 0.7 moves into your profiles on its own.
-- Only triggers set to match Prompts see your prompt now. If one of your triggers should switch to Prompts, Vosh names it once.
-- Every theme now paints the whole window from its own terminal colors. Use the theme's colors for MUD text is on unless you turned it off.
-- JetBrains Mono is now the font Vosh ships, and Vosh no longer bundles Berkeley Mono. If you have Berkeley Mono installed, Vosh keeps using it.
-- Both renderers always draw the same font face.
-- On macOS, menus and dialogs now open on top of the fast native renderer.
-- The fast native renderer takes your theme's colors for selection and find, and draws every underline style.
-- Searching your logs moved to Settings › General › Session logs.
-- Your command now reaches the game before Vosh logs it.
-- A game reply that arrives in several pieces now draws all at once.
-- Every Vosh window now opens already in your theme.
-- Saving in Automation no longer deletes what you made with `#trigger` or `#alias` in the meantime.
-- Opening Settings › Appearance no longer freezes the app for two to three seconds.
-- Cmd+K then Enter in the command palette can no longer drop your session.
-- Aliases set to run Lua now work, where before they sent nothing.
-- `#script reload` no longer makes a script answer game data twice.
-- `#profile save`, `#profile load`, and `#script load` now work on Windows and Linux.
-- TinTin++ and CMUD imports now keep accented letters.
-- Vosh never saves over a profile it could not read.
-- Switching profiles in loadout mode now keeps that profile's own automation.
-- A macro group you turn off now stops at once.
-- Typing after the game hangs up now says [not connected].
+### New
 
-## v0.7.2 - 2026-09-14
+- The new main window has the terminal on the left and a panel of panes on the right.
+- A flat command line and a status line are under the terminal.
+- A slim title band holds the session button, which connects to your saved world, edits it, makes a new one or disconnects.
+- The window title names your character and world, so your taskbar shows which character is which.
+- The panel holds the Map, Affects, Group, Chat and Staff queues panes.
+- Split the panes right or down from the menu of a pane, and drag the lines between them.
+- Each profile keeps its own panel arrangement, and Reset panel layout in the View menu restores the default.
+- Health, Mana and Moves are at the foot of the panel, each with a thin meter.
+- In a fight, your opponent gets a row above them.
+- Under Vitals on the Layout page of Settings, choose rows or one line, how the numbers read, and the meter.
+- Turn on Warn before you run low to see yellow and then red when a vital is low.
+- While lamented tears hides your values, your vitals show ? in dim text.
+- The status line shows your target, the tick, the game time and each moon as a phase icon in its own color.
+- Vosh plays a soft tone on each tick, and you can turn it off with `#tick sound off` or under Timers in Settings.
+- Vosh reads your prompt, and on The Forsaken Lands it learns your prompt codes from the game at login or when you type `prompt`.
+- The Prompt section of the Input page of Settings shows where your prompt codes came from, and warns you when something is wrong.
+- On other games, select your prompt line in Customize prompt, or type `#prompt {regex}`.
+- Customize prompt opens a card over your prompt line, from the right click menu, the palette or the Prompt section of Settings.
+- In Customize prompt, start from a ready design and click any part to change its content, color, background and style.
+- Curly and dotted underlines are among the styles.
+- Customize prompt works fully with the keyboard and with a screen reader.
+- Choose where your prompt shows with `#prompt show` or in the Prompt section of Settings.
+- In the text keeps the prompt where the game sends it, and Lifted moves every prompt to a band.
+- Pinned shows only your latest prompt, on a band above the command line, and the log still keeps it.
+- The default prompt design shows your vitals, colored by how full they are, with your exits and gold.
+- In a fight, the default prompt design also shows the health of the tank.
+- Turn on Draw your own prompt, or type `#prompt draw on`, to draw your design.
+- A new Settings window has six pages in a sidebar, General, Appearance, Layout, Input, Automation and Characters, and Cmd+comma opens it.
+- Search in Settings goes directly to a setting.
+- Outside Automation, each change in Settings saves when you make it.
+- Automation is one editor for triggers, aliases, macros, timers, presets and loadouts, with folders, a filter and a Save bar.
+- On Characters, you can edit any profile without a switch, link a profile to a character, and track affects as chips.
+- The Affects pane has three styles, Timers, Countdown and Grouped chips, and you pick one for each profile on the Layout page of Settings.
+- Your tracked affects are first in the Affects pane, harmful affects show in red, and you can tint the affects that you must cast again.
+- The Chat pane shows one line for each message, in the game color of each channel.
+- Give any channel a new color from the menu of the Chat pane.
+- The Map pane lists your room, exits and people under the map, and keeps the last map after you disconnect.
+- Help opens in its own window with a sidebar, a ranked search and every topic written again for the new layout.
+- Open Help with Cmd+/ or type `#help` and a few words.
+- Two new themes are in the gallery, Rosé Pine and Vellum, a warm light theme like paper.
+- On the Appearance page of Settings, you can import Ghostty, iTerm2, Kitty and Alacritty themes.
+- You can also follow the light and dark appearance of your system, and pick a line height.
+- The new command palette opens on your last three commands and finds each command, setting and alias as you type.
+- New shortcuts connect, open Settings and Help, and show the panel and the scrollback split.
+- On macOS, Vosh has its own menu bar, the native title bar and a frame in the colors of your theme.
+- Vosh has a new icon, Moonpath, on all systems.
+- `#logs forget-passwords` counts the passwords that older versions saved in your log, and `#logs forget-passwords now` removes them.
+- Lua from `#lua`, `#script load`, timers and plugins can start timers, send input and set prompt values.
 
-Seven caret shapes, a vitals layout that stays put, and themed trigger washes.
+### Changed
 
-- The command line caret comes in seven shapes. Pick block, outline, half block, underline, thick underline, pipe, or thick pipe in Settings › General.
-- Every caret shape takes the same space, so switching never nudges the input row by a pixel.
-- A washed trigger line takes its colors from your theme. The dim field behind it and its left accent bar follow your active palette instead of a fixed chart.
-- The text of a washed line takes the mark color too, so the wash reads as a marked line rather than a slab of color laid over it.
-- Your vitals layout now sticks. Gauges, pips, or strip no longer snap back to the ledger when you open Settings, move the bar between panels, or restart.
-- Pick your vitals layout once more after this update, because the old fault had already saved the ledger into your profile.
+- Your old dock layout moves to the new panel.
+- Your custom prompt from 0.7 moves to the new design.
+- On macOS, the shortcuts use Cmd only, so Ctrl stays free for your macros.
+- Your session log does not keep passwords, and a line that you type at a password prompt shows as > (hidden).
+- The top bar, the bottom status bar, the panel strips, the room strip and the affects bar are gone.
+- Of the panes that split the terminal, only the scrollback split stays.
+- Turn loadouts on and off under Loadouts on the Automation page of Settings.
+- The tick follows the game hour on The Forsaken Lands, or a line that matches your Reset on pattern.
+- The prompt trigger that `#prompt` made in Vosh 0.7 moves into your profiles automatically.
+- Only triggers that match Prompts see your prompt now, and Vosh names each trigger that should change to Prompts one time.
+- Each theme paints the whole window from its terminal colors, and Use the theme's colors for MUD text is on unless you turned it off.
+- Vosh ships JetBrains Mono and not Berkeley Mono, but if you have Berkeley Mono on your computer, Vosh still uses it.
+- Both renderers always use the same font face.
+- The fast native renderer uses the colors of your theme for selection and find, and draws every underline style.
+- Log search is under Session logs on the General page of Settings now.
+- Your command goes to the game before Vosh logs it.
 
-## v0.7.1 - 2026-09-11
+### Fixed
 
-Timers that repeat a command, and a way to print notes to your screen.
+- A reply from the game that arrives in several parts shows all at once.
+- Each Vosh window opens in your theme.
+- A save in Automation does not delete what you made with `#trigger` or `#alias` in the meantime.
+- The Appearance page of Settings opens without a freeze. Before, the app froze for two to three seconds.
+- Cmd+K and then Enter in the command palette does not disconnect your session.
+- Aliases that run Lua work. Before, they sent nothing.
+- `#script reload` does not make a script answer game data two times.
+- On Windows and Linux, `#profile save`, `#profile load` and `#script load` work.
+- TinTin++ and CMUD imports keep accented letters.
+- Vosh never writes to a profile that it could not read.
+- In loadout mode, a change of profile keeps the automation of that profile.
+- A macro group that you turn off stops immediately.
+- On macOS, menus and dialogs open over the fast native renderer.
+- When you type after the game disconnects, Vosh shows [not connected].
 
-- Timers repeat a command on an interval while you are connected. Add one in Settings › Automation › Timers with a name, an interval in seconds, and a command, then tick it on or off.
+## 0.7.2, September 14, 2026
+
+Pick a caret shape, keep the vitals layout that you choose, and see trigger washes in your theme colors.
+
+### New
+
+- Pick one of seven caret shapes on the General page of Settings, such as block, outline or pipe.
+
+### Changed
+
+- Each caret shape uses the same space, so the input row does not move when you change the shape.
+- A trigger wash uses your theme colors for its background, accent bar and text, so the line looks marked and not covered.
+
+### Fixed
+
+- Your vitals layout stays as you set it when you open Settings, move the bar to a different panel or restart. Before, it changed back to ledger.
+- Pick your vitals layout again after this update, because the old fault saved ledger in your profile.
+
+## 0.7.1, September 11, 2026
+
+Repeat a command on a timer, and show notes on your screen.
+
+### New
+
+- A timer sends a command at an interval while you are connected, and you add it on the Timers tab of Automation in Settings.
+- Each timer has a name, an interval in seconds, a command and a box that turns it on or off.
 - Timers save with your profile, next to your aliases and triggers.
-- A timer command can be a Lua script of several lines, written in the same highlighted code editor that triggers use.
-- Aliases and `#lua` run from a timer exactly as they do when you type them.
-- If Vosh stalls, a timer skips the slots it missed instead of firing them all at once.
-- `#echo` prints text to your screen without sending it to the game. It fills in your `$variables`, so a timer or trigger can show you live state.
-- `#showme` does the same thing as `#echo`.
+- A timer command can be a Lua script of more than one line, in the same code editor that triggers use.
+- An alias or a `#lua` command in a timer runs as it does when you type it.
+- When Vosh stops for a moment, a timer skips the times that it missed and does not send them all together.
+- `#echo` shows text on your screen but does not send it to the game. It replaces each `$variable` with its value, so a timer or a trigger can show you the current state.
+- `#showme` does the same as `#echo`.
 
-## v0.7.0 - 2026-08-28
+## 0.7.0, August 28, 2026
 
-The Obsidian Ember redesign, a command palette, and a rebuilt Settings window.
+Use the new Obsidian Ember design, open the command palette, and find each setting in the new Settings window.
 
-- Vosh has a whole new look. Obsidian Ember is the new default theme, a near black warm palette with a single ember accent.
-- The new look brings bundled fonts and a mark of three moons.
-- The top bar folds the old connect row into a session chip that shows your character.
-- The side panels are cards floating on carved channels. Drag the channel between the terminal and a column to resize it.
-- The vitals readout has four layouts to pick from in Settings › Vitals.
-- Ledger leads with the numbers in a column per vital, gauges fills one bar per vital, pips draws ten cells each, and strip packs everything into one compact row.
-- When the vitals sit along the top or bottom of the window, you can set their width in pixels and place them on the left, center, or right.
-- A vital under 20 percent turns red and pulses. It holds that state until it climbs back over 25 percent, so a regen tick does not make it flicker.
-- A rebuilt Settings groups every tab in a rail on the left, under Appearance, HUD, Automation, Characters, Session, and Tools, each with its own icon.
-- Every control in Settings shares one clean style of underlined fields and boxed dropdowns.
-- Typography and Tick & chips are tabs of their own now.
-- A search box at the top of Settings jumps straight to any control.
-- A command palette opens on Cmd+K, or Ctrl+K on Windows and Linux. From the keyboard it runs commands, shows or hides any panel, opens a settings tab, or fires an alias.
-- You can split the terminal area into panes for the session, a chat feed, and a log. The status bar lists what is open.
-- Right click the terminal for a menu of its actions.
-- Steps that used to happen with no feedback now ask you to confirm first or show a small note in the corner. Deleting a theme asks before it goes.
-- Triggers can wash a whole matched line with a color and mark it with an accent bar on the left. An important line reads at a glance instead of one recolored word.
-- The chat pane gives each channel its own pastel color, so tells, gossip, clan, and the rest stay distinct as they scroll.
-- Edit the terminal base palette, the sixteen ANSI colors Vosh uses when theme tint is off, in Settings › Themes. Reset it to the standard chart whenever you like.
-- The rebuilt in app help works by task, and each topic is a short set of steps. A reference lists every slash command, the `#` commands Vosh runs itself.
-- Terminal tint now follows each theme by default, and Obsidian Ember ships with its pastel ANSI colors on.
-- The prompt on the command line is a single chevron.
-- The input row stays steady. It no longer shifts by a pixel or flips its font as you type.
-- The password prompt and the command prompt now share exactly the same size and spacing.
-- The command line takes focus back after you copy terminal text or middle click to snap the scrollback to the bottom. You can keep typing without reaching for the mouse.
-- PageUp and PageDown scroll the scrollback without shrinking the terminal.
+### New
 
-## v0.6.5 - 2026-08-10
+- Obsidian Ember is the new default theme, a warm palette that is almost black, with one ember accent.
+- The new design has its own fonts and a mark of three moons.
+- A session chip in the top bar shows your character, in place of the old connect row.
+- The side panels are cards on carved channels, and you drag a channel to change the width of a column.
+- The vitals readout has four layouts on the Vitals page of Settings. Ledger puts the numbers in columns, gauges fills a bar, pips shows ten cells, and strip puts every vital in one row.
+- At the top or bottom of the window, the vitals take a width in pixels and a place at the left, center or right.
+- A vital below 20 percent turns red and pulses. It stays red until it is above 25 percent, so a small gain does not make it flash.
+- A search box at the top of Settings takes you directly to any control.
+- The command palette opens with Cmd+K, or Ctrl+K on Windows and Linux, and runs commands, shows or hides panels, opens Settings tabs and runs aliases.
+- You can show the session, a log and a chat feed in panes of the terminal area, and the status bar lists them.
+- Right click the terminal to open a menu of its actions.
+- A trigger can wash a line with a color and add an accent bar at its left, so an important line is easy to see.
+- The chat pane gives each channel its own pastel color, so tells, gossip, clan and the other channels look different as they scroll.
+- On the Themes page of Settings, you can change the terminal base palette and reset it to the standard chart. This palette holds the sixteen ANSI colors that Vosh uses when theme tint is off.
+- The new help in the app has short steps for each task, and its reference lists every slash command.
 
-A staff panel that shows immortals the work waiting for them.
+### Changed
 
-- Turn on imm (staff queues) in Settings › Panels to see the work queues the game sends you, such as description checks, applications, journals, notes, bugs, and votes.
-- Only the queues that need something appear, and the most urgent sit at the top.
-- A count turns red when work is past its deadline, and amber when the deadline is getting close.
-- Mortals never receive staff data, so the panel stays quiet for them.
+- The new Settings window puts every tab in a rail at the left, in groups with their own icons. The groups are Appearance, HUD, Automation, Characters, Session and Tools.
+- Every control in Settings has the same style, with underlined fields and boxed lists, and Typography and Tick & chips are tabs of their own.
+- Steps that gave no feedback now ask you to confirm or show a small note in the corner. Vosh asks before it deletes a theme.
+- Terminal tint follows each theme by default, and Obsidian Ember has its pastel ANSI colors on.
+- The prompt on the command line is one chevron.
+- The command line gets the focus again after you copy terminal text, or after a middle click moves the scrollback to the bottom.
+- PageUp and PageDown scroll the scrollback, and the terminal keeps its size.
 
-## v0.6.4 - 2026-08-06
+### Fixed
 
-Triggers and aliases that save themselves, and macro keys that echo as you press them.
+- The input row stays in place and keeps its font as you type. Before, it moved by one pixel or changed its font.
+- The password prompt and the command prompt have the same size and spacing.
 
-- Macro keys now echo their command in the terminal the moment you press them. Under lag you can tell the key registered before the world answers.
-- Turn off Echo macro commands in Settings › General if stacked macros get too noisy.
-- Triggers, aliases, and group toggles now save on their own. Vosh writes your changes to disk a couple of seconds after you make them, and again when you quit.
-- In loadout mode, `#profile save`, `#profile load`, and `#profile reset` now explain that saving is automatic. They no longer write files that could bring back items you had deleted.
-- New triggers and aliases no longer vanish after a restart.
-- Unticking a group now silences everything inside it, even items whose own box stays ticked.
-- Saving from the editor no longer quietly turns back on every group you had turned off.
-- Deactivating all loadouts now keeps your catalog dormant, as the button promises. It stays dormant across restarts and profile switches.
-- The group pane no longer fills with duplicate "someone" rows when you fight blinded characters. It keeps one row per name, however many copies the server sends.
-- The map no longer slows your commands down. It redraws once per move instead of five times, so you can keep the pane open without the delay players traced to it.
-- Middle clicking to open or close the scrollback split keeps your command line focused. Enter still resends the highlighted command, and your macro keys keep working.
+## 0.6.5, August 10, 2026
 
-## v0.6.3 - 2026-07-05
+Immortals can see the work in their staff queues in a new panel.
 
-A smoother scrollback split, a scrollbar, and a custom prompt that no longer flickers.
+### New
 
-- A slim scrollbar returns to the right edge of the terminal and shows where you are while you scroll back. Drag its thumb to scrub or click the track to jump.
-- Middle click toggles the scrollback split. Click once to open the scrollback, and again to snap back to live.
-- Selecting text shows a brief "copied N chars" note in the bottom corner, so you know the selection landed on your clipboard.
-- The divider of the scrollback split glides with your mouse pixel by pixel instead of ratcheting row by row.
-- You can grab the divider everywhere it shows the resize cursor, and that cursor now stays on the divider instead of covering the whole terminal.
-- Your typed command now sits beside the custom prompt on the same row, the way a MUD prompt reads.
-- Long lines on the native renderer now wrap between words, as they did on the previous renderer. They used to break in the middle of a word at the right edge.
-- The content no longer jumps when the scrollback split first opens.
-- The split divider color setting now works on the native renderer, and applies the moment you change it.
-- Clicking the terminal focuses the command line again, like clicking anywhere else in the window.
-- The custom prompt redraws in place with no flicker. It no longer flashes a blank row, shifts the content up for a frame, or leaves a stray blank line above itself.
-- Your typed commands no longer overwrite the prompt on servers that end their lines in an unusual way.
+- Turn on imm (staff queues) on the Panels page of Settings to see the work queues of the game. The queues include description checks, applications, journals, notes, bugs and votes.
+- Only the queues that need work show, and the most urgent queues are at the top.
+- A count turns red when work is past its deadline, and amber when the deadline is near.
+- The game sends no staff data to mortals, so the panel stays empty for them.
 
-## v0.6.2 - 2026-07-04
+## 0.6.4, August 6, 2026
 
-Color fields that wait for a whole color, and tidier macro and trigger lists.
+Triggers and aliases save themselves, and each macro key shows its command when you press it.
 
-- The tick warning color accepts hex like `#ff8800`, short hex like `#f80`, and 256 color palette numbers like `196`, as well as the color names it already took.
-- Preset triggers collect in their own section, which you can collapse.
-- Type a group name into a preset trigger's group field to file the preset into one of your own groups.
-- The row for a new macro now sits at the top of the macros panel, so a long list never makes you scroll to add a binding.
-- Macro and trigger groups stay collapsed the way you left them, across tab switches and restarts.
-- The group you set on a preset trigger now sticks across restarts. It used to be silently undone at the next launch.
-- Settings no longer blanks the window while you type a color. A half typed color used to turn parts of the window transparent.
-- The theme editor, split divider color, and sent command color fields now apply only a complete color. If you leave a typo behind, the field snaps back to the last good color.
+### New
 
-## v0.6.1 - 2026-07-02
+- A macro key shows its command in the terminal when you press it, so you can see that the key works before the game answers.
+- Turn off Echo macro commands on the General page of Settings if your macros show too much text.
 
-A way to try the native renderer on Windows and Linux.
+### Changed
 
-- Type `#nativesurface on` and restart Vosh to switch the terminal to the native GPU renderer on Windows and Linux.
-- `#nativesurface off` forces the previous renderer on any platform, and `#nativesurface default` goes back to the platform default.
-- The default stays native on macOS and the previous renderer elsewhere, because no one has tested the native renderer on real Windows and Linux hardware yet.
-- If something looks wrong after you turn it on, `#nativesurface off` and a restart put everything back. A report of what you saw helps a lot.
-- `#help` and the in app help list the new command.
+- Triggers, aliases and the on or off state of each group save themselves a few seconds after you change them, and again when you quit.
+- In loadout mode, `#profile save`, `#profile load` and `#profile reset` tell you that saves are automatic. They do not write files that can restore items that you deleted.
 
-## v0.6.0 - 2026-07-02
+### Fixed
 
-A smoother terminal on macOS, clickable links, and a richer custom prompt.
+- New triggers and aliases stay after a restart. Before, they disappeared.
+- When you turn off a group, every item in it stops, and this includes the items that are on.
+- A save from the editor keeps the groups that you turned off. Before, it turned them all on again.
+- When you turn off all loadouts, your catalog stays dormant through restarts and profile changes.
+- When you fight blinded characters, the group pane shows one row for each name. Before, it filled with copies of "someone".
+- The map draws one time for each move, not five times, so an open map pane does not make your commands slow.
+- A middle click that opens or closes the scrollback split keeps the focus on your command line, so Enter and your macro keys still work.
 
-- The terminal on macOS now draws on a native GPU surface, on by default. Scrolling and heavy combat output are far smoother, and text keeps the same size and weight.
-- Hover a URL in the terminal and it turns blue and underlined. Cmd+click opens it in your browser.
-- The custom prompt can color anything with color names, 256 color palette numbers, RGB values, or hex codes. Backgrounds take the same color forms.
-- A number in your prompt can color itself by its stat percent, so your health shifts from green to yellow to red on its own.
-- Bold, italic, underline, inverse, and strikethrough work inline in the prompt, and time, date, and percent tokens round it out. The hint in Settings lists the syntax.
-- A new Bright text as bold setting in Settings › General draws bright colored text in the heavier bold font, as most MUDs mark it. Leave it off for the normal weight.
-- The scrollback split with its draggable divider, and your saved scrollback from last session, carry over to the new surface.
-- Selection and find work on the new surface too. Drag to select copies when you let go, Cmd+C copies, and find takes regex and highlights each match.
-- Your theme colors and the tint toggle, your font at its exact size, and the echo of sent commands all carry over as well.
-- If anything looks wrong, set `vosh.nativesurface` to `0` in the DevTools local storage and reload to go back to the previous renderer.
-- Windows and Linux keep the previous renderer for now. The native renderer builds for both and waits on testing with real hardware.
-- Menus and dialogs that open over the terminal now show in full instead of clipping behind it.
-- The content under a menu or dialog no longer shifts while it is open.
-- Selecting text in the live half of an open scrollback split now grabs the right characters.
+## 0.6.3, July 5, 2026
 
-## v0.5.3 - 2026-06-25
+Use a scrollbar, drag the scrollback split smoothly, and see a custom prompt that does not flash.
 
-A scrollback split that opens with your history in place and no delay.
+### New
 
-- The history pane of the scrollback split shows your scrollback the moment it loads, so it never comes up blank and never lags.
-- The pause an earlier fix added before the content appeared is gone, and GPU rendering stays on by default.
+- A thin scrollbar at the right edge of the terminal shows your position in the scrollback. Drag its thumb to move through the text, or click the track to go to a point.
+- A middle click opens the scrollback split, and a second middle click returns you to the live text.
+- When you select text, a short note "copied N chars" shows in the bottom corner, so you know that the text is on your clipboard.
 
-## v0.5.2 - 2026-06-23
+### Changed
 
-Another fix for the history pane of the scrollback split.
+- The divider of the scrollback split moves with your mouse one pixel at a time, not one row at a time.
+- You can grab the divider anywhere that it shows the resize cursor, and that cursor stays on the divider. Before, the cursor showed over the whole terminal.
+- Your typed command is on the same row as the custom prompt, as in a MUD.
 
-- The history pane shows content on your very first scroll again. Since v0.5.0, opening the split with the mouse wheel or PageUp could leave it blank until you scrolled a second time.
+### Fixed
 
-## v0.5.1 - 2026-06-23
+- On the native renderer, long lines wrap between words. Before, they broke in the middle of a word at the right edge.
+- The text does not jump when the scrollback split opens for the first time.
+- The split divider color setting works on the native renderer, and a change shows at once.
+- A click in the terminal puts the focus on the command line again, as a click in any other part of the window does.
+- The custom prompt draws again in place and does not flash. Before, it showed a blank row, moved the text higher for a frame or left a blank line above it.
+- On a server that ends its lines in an unusual way, your typed commands do not cover the prompt.
 
-A fix for the scrollback split after GPU rendering became the default.
+## 0.6.2, July 4, 2026
 
-- The history pane of the scrollback split no longer comes up blank when the split opens. It used to show nothing while the scroll depth counter kept climbing.
-- The history pane now draws with the standard renderer so it paints every time, while the live pane keeps GPU rendering.
+Color fields wait until you type a full color, and the macro and trigger lists are easier to use.
 
-## v0.5.0 - 2026-06-23
+### New
 
-A command line that takes several lines, GPU rendering by default, and a tidier Settings.
+- The tick warning color takes hex such as `#ff8800`, short hex such as `#f80` and 256 color numbers such as `196`, and also color names.
+- Preset triggers are in their own section, which you can collapse.
+- Type a group name in the group field of a preset trigger to move it to one of your groups.
 
-- The command line takes more than one line. Press Shift+Enter to start another, and the prompt numbers each line down the left edge.
-- When you press Enter, Vosh sends each line as its own command, so you can stack a whole sequence and fire it at once. A single line works exactly as before.
-- The vitals readout and the tick timer each get a tab of their own in Settings.
-- The Vitals tab has a live preview. Drag it to scrub the fill and watch your glyph, color, layout, and percent choices update.
-- GPU rendering is on by default, for smoother scrolling and bursts of output. If the GPU drops out, the terminal falls back to software rendering on its own and never goes blank.
-- If you prefer the old renderer, turn off GPU rendering in Settings › General and reload.
-- The Settings window now groups its tabs under clear section headers.
-- Many labels and hints across Settings are shorter and plainer.
-- New profiles start on the Kanso Zen theme.
-- Vosh is faster under load. Output reaches the screen with less overhead, log writes come in batches, and triggers do less repeated work on each line.
-- Pasting several lines no longer clears what you already typed. The paste still sends each line, and whatever sat in the command line stays put, selected or not.
-- The game's parting text when you quit now lands in the terminal, the scrollback, and the session log. Those last lines used to vanish, and now they survive into your next launch like every other line.
-- The window stays smooth during heavy output and no longer loses frames on each combat round.
-- The match counter in the find toolbar holds steady while output streams, instead of jumping around as new lines arrive.
+### Changed
 
-## v0.4.3 - 2026-06-07
+- The row for a new macro is at the top of the macros panel, so you do not need to scroll to add a key.
+- Macro and trigger groups stay collapsed as you left them, after you change tabs or restart.
 
-A scrollback split that drags like a curtain, the way CMUD does it.
+### Fixed
 
-- As you move the divider, the top pane grows or shrinks over the live pane in real time.
-- Text stays put while you drag. The rows the top pane uncovers match what was at the top of the live pane, because both panes share one scrollback.
-- The jitter at each snap and the refresh after you let go are gone. Each snap now redraws in one go.
-- Closing the split by scrolling to the bottom, pressing Esc or middle clicking no longer makes the text visibly reflow.
+- The group that you set on a preset trigger stays after a restart. Before, the next launch removed it.
+- Settings does not make the window blank while you type a color. Before, half a color made parts of the window transparent.
+- The theme editor and the color fields for the split divider and sent commands use only a full color. If you leave a typo, the field returns to the last good color.
 
-## v0.4.2 - 2026-06-07
+## 0.6.1, July 2, 2026
 
-A smoother scrollback split that feels like the one in CMUD.
+Try the native renderer on Windows and Linux.
 
-- The live pane now stays in place in the background, and the history pane sits on top of it with its height set by the divider.
-- As you drag, the divider slides over the live output in real time and both panes hold their place.
-- The divider snaps to whole rows, so it always lands between lines and never cuts off half a line at the bottom of the history pane.
-- Letting go of the divider no longer reflows anything. The row by row jitter and the jump after release from the last version are gone.
+### New
 
-## v0.4.1 - 2026-06-06
+- On Windows and Linux, type `#nativesurface on` to use the native GPU renderer for the terminal. Then restart Vosh.
+- `#nativesurface off` uses the previous renderer on any system, and `#nativesurface default` uses the default of your system.
+- The native renderer stays the default on macOS only, because nobody has tested it yet on real Windows and Linux computers.
+- If the terminal looks wrong, `#nativesurface off` and a restart return it to the previous renderer. A report of what you saw is a big help.
+- `#help` and the help in the app list the new command.
 
-Five new themes, a target variable, group switching, and a few fixes.
+## 0.6.0, July 2, 2026
 
-- Five new themes join Settings › General › Theme. Dracula at Night puts the classic Dracula purple, green, and pink on darker window colors for late sessions.
-- Monokai brings the classic Sublime colors with their signature magenta accent.
-- One Dark is the cool slate look of the Atom editor, with a blue accent and soft pastel colors.
-- One Half Dark takes One Dark and gives it brighter text and cooler surfaces.
-- Tango Dark is the GNOME Terminal classic, with saturated primary colors on a warm dark background.
-- A new `${target}` variable holds whoever you last set with `tar`. Use it in alias templates like `kill ${target}`, trigger Send templates like `bash ${target}`, or Lua with `mud.var("target")`.
-- `${target}` clears when you disconnect or type `tarclear`. Trigger patterns and highlight matches do not expand it.
-- New `#group <name> on` and `#group <name> off` commands switch a group's triggers, aliases, and macros together. Turn a highlight or gag group on for one fight, then off again.
-- `#group <name>` with nothing after it shows whether the group is on for triggers, aliases, and macros. `#groups` lists every group in your profile.
+On macOS, see a smoother terminal, click links in the game text, and color more of your custom prompt.
+
+### New
+
+- On macOS, the terminal draws on a native GPU surface by default, so it scrolls more smoothly in heavy fights.
+- Move the pointer over a URL in the terminal, and it turns blue with an underline. Cmd+click the URL to open it in your browser.
+- The custom prompt can color any part with color names, 256 color numbers, RGB values or hex codes, for the text and the background.
+- A number in your prompt can take its color from its percent, so your health changes from green to yellow to red.
+- Bold, italic, underline, inverse and strikethrough work inside the prompt, and new tokens show the time, the date and percents. The hint in Settings shows how to write them.
+- Turn on Bright text as bold on the General page of Settings to show bright text in the bold font. With it off, bright text has the normal weight.
+
+### Changed
+
+- On macOS, the scrollback split, your saved scrollback, selection and find all work on the new surface.
+- On macOS, a drag selects text and copies it when you release the mouse, Cmd+C copies, and find takes a regex and marks each match.
+- On macOS, the new surface keeps your theme colors, the tint switch, your exact font size and weight, and the echo of your commands.
+- If the terminal looks wrong on macOS, set `vosh.nativesurface` to `0` in the local storage of DevTools. Then reload to use the previous renderer.
+- Windows and Linux keep the previous renderer for now, because the native renderer needs tests on real computers first.
+
+### Fixed
+
+- Menus and dialogs over the terminal show in full. Before, part of them was behind the terminal.
+- The text under a menu or a dialog does not move while it is open.
+- When you select text in the live part of an open scrollback split, you get the correct characters.
+
+## 0.5.3, June 25, 2026
+
+Open the scrollback split, and your history shows at once.
+
+### Fixed
+
+- The history pane of the scrollback split shows your scrollback when it loads, so it is never blank and never slow.
+- The pause that an earlier fix added before the text showed is gone, and the GPU renderer stays the default.
+
+## 0.5.2, June 23, 2026
+
+See your history the first time that you open the scrollback split.
+
+### Fixed
+
+- The history pane shows text on your first scroll again. Before, from 0.5.0, a split that you opened with the mouse wheel or PageUp could stay blank until a second scroll.
+
+## 0.5.1, June 23, 2026
+
+See your history when you open the scrollback split.
+
+### Changed
+
+- The history pane draws with the standard renderer, so it shows every time, and the live pane keeps the GPU renderer.
+
+### Fixed
+
+- The history pane of the scrollback split is not blank when the split opens. Before, it showed nothing while the scroll depth counter increased.
+
+## 0.5.0, June 23, 2026
+
+Send many lines from the command line at once, use the GPU renderer, and find your way in a simpler Settings.
+
+### New
+
+- The command line takes more than one line, with a number for each line at the left. Press Shift+Enter to start a new line.
+- When you press Enter, each line goes to the game as a separate command, so you can send a full sequence at one time. One line works as before.
+- The Vitals tab has a live preview, and you drag it to change the fill and see your glyph, color, layout and percent choices.
+
+### Changed
+
+- The vitals readout and the tick timer each have a tab of their own in Settings.
+- The GPU renderer is the default, so the terminal scrolls more smoothly in a burst of output. If the GPU stops, the terminal changes to the software renderer and does not become blank.
+- To use the old renderer, turn off GPU rendering on the General page of Settings. Then reload.
+- The Settings window has clear section headers over its tabs, and many labels and hints are shorter and plainer.
+- New profiles start with the Kanso Zen theme.
+- Vosh is faster under load, because output gets to the screen with less work. Logs save in batches, and triggers repeat less work on each line.
+
+### Fixed
+
+- A paste of more than one line does not clear the text that you typed. The paste sends each line, and your typed text stays, selected or not.
+- The last text that the game sends when you quit goes to the terminal, the scrollback and the session log. Before, those lines disappeared, so your next launch did not show them.
+- The window stays smooth in heavy output and does not lose frames on each round of a fight.
+- The match counter in the find toolbar stays steady while output arrives. Before, it changed as each new line arrived.
+
+## 0.4.3, June 7, 2026
+
+Drag the divider of the scrollback split, and the top pane moves over the live pane as in CMUD.
+
+### Changed
+
+- As you move the divider, the top pane becomes larger or smaller over the live pane.
+- The text stays in place while you drag. Both panes use one scrollback, so the rows that the top pane shows match the top of the live pane.
+
+### Fixed
+
+- Each snap draws in one step, so the shake at each snap and the refresh after you release the divider are gone.
+- When you close the split with a scroll to the bottom, Esc or a middle click, the text does not visibly reflow.
+
+## 0.4.2, June 7, 2026
+
+Drag the divider of the scrollback split smoothly, as in CMUD.
+
+### Changed
+
+- The live pane stays in place in the background, and the history pane is on top of it, with a height that the divider sets.
+- As you drag, the divider moves over the live output, and both panes stay in place.
+- The divider snaps to full rows, so it stops between lines and never cuts a line in half at the bottom of the history pane.
+
+### Fixed
+
+- When you release the divider, nothing reflows. Before, the rows shook one at a time and jumped when you released it.
+
+## 0.4.1, June 6, 2026
+
+Pick one of five new themes, use a target variable, and turn a group on or off with one command.
+
+### New
+
+- Five new themes are in the Theme list on the General page of Settings.
+- Dracula at Night puts the purple, green and pink of Dracula on darker window colors, and Monokai has the Sublime colors with their magenta accent.
+- One Dark has the cool slate look of the Atom editor, and One Half Dark gives it brighter text and cooler surfaces.
+- Tango Dark is the GNOME Terminal theme, with strong primary colors on a warm dark background.
+- A new `${target}` variable holds the name that you last set with `tar`. Use it in an alias such as `kill ${target}`, or in the Send of a trigger such as `bash ${target}`.
+- In Lua, read the target with `mud.var("target")`.
+- `${target}` clears when you disconnect or type `tarclear`, and trigger patterns and highlights do not expand it.
+- Type `#group <name> on` or `#group <name> off` to turn the triggers, aliases and macros of a group on or off together. For example, turn on a highlight group for one fight, and then turn it off.
+- `#group <name>` alone shows if the group is on for triggers, aliases and macros, and `#groups` lists every group in your profile.
 - In Lua, `mud.set_group_enabled(name, enabled)` does the same as `#group`.
-- The percent chip in the template vitals layout now sits level with the text around it. That text no longer looks taller and looser than in the plain inline layout.
-- Game output now starts at the bottom of the terminal when your saved scrollback is short, not only when it is empty. It no longer piles into the middle with a big gap on connect.
 
-## v0.4.0 - 2026-06-05
+### Fixed
 
-Lua scripting, vitals from your prompt, door states on the map, and new vitals styles.
+- The percent chip in the template vitals layout is level with the text around it. Before, that text looked taller and looser than in the plain inline layout.
+- When your saved scrollback is short, game output starts at the bottom of the terminal, as it does when the scrollback is empty. Before, it collected in the middle with a large gap when you connected.
 
-- Aliases and trigger actions can now run Lua. Switch an alias from template to lua mode, or give a trigger a Script effect, and write the code in a new code editor in Settings.
-- Your Lua runs in a sandbox and reads the match's capture groups from a `captures` table.
-- The new TinTin style `#prompt {regex}` command feeds your vitals bar from any server prompt. Each named capture, like `(?<hp>\d+)`, sets the bar value of the same name ahead of GMCP.
-- Values from your prompt use the same chip styling you picked in Settings. Vosh gags the matching line, and `#unprompt` removes the rule.
-- `#prompt` works without GMCP, so a MUD that sends no vitals over GMCP can still drive your bar from its prompt text.
-- The trigger editor gains a target dropdown. Prompt fires on the unfinished prompt the server sends at GA or EOR, and line, the default, fires on completed lines.
-- The map now shows doors by state. Hidden doors draw as pink dashed lines, closed doors in amber, and closed and locked doors in solid red.
-- Door states come from the game's GMCP map data. A hidden door with no room beyond it shows as a short stub.
-- Your own commands now go into session log files with a `>` in front, so `#log` search finds both sides of the transcript.
-- Spell check now works in the input line on macOS. It only checks chat lines that start with `say`, `tell`, `gossip`, `emote`, and the like, so game commands do not light up red.
-- Spell check starts off. Turn it on or off with the spell check chat lines toggle in Settings › General.
-- A new drain style shows each vital as a chip with caption and percent in the top corners and the number below. Its fill tracks the value and glows at the edge in the vital's color.
-- A new badge style shows each vital as a compact chip with the value and a small percent pill on its upper right corner.
-- Pick drain or badge from the new inline style dropdown in Settings › Panels › Panes › Vitals. Plain, the old look of the value followed by its percent in parentheses, stays the default.
-- A new % mode dropdown colors the percent in the drain and badge styles. Its default, drain to red as low, fades from the vital's color through gold and orange to red as the value drops.
-- The other % mode choices are match stat color, which keeps the vital's color, and accent, which paints the percent pink.
-- The percent in the inline and template vitals layouts can now sit in a styled chip. Pick pill, soft tint, glow ring, or drain fill from the new % chip dropdown in Settings › Panels › Panes › Vitals.
-- The % chip works for the plain inline layout and for the `%pct_hp`, `%pct_mn`, and `%pct_mv` template tokens. It stays plain by default, so your layouts look the same until you pick one.
-- Commands joined with `;` or a line break now reach the game as separate lines. The escapes `\\`, `\;`, and `\\\n` still work.
-- Trackpad scrolling in the terminal is calmer. Small jittery movements no longer set off a runaway scroll.
-- Commands you type now show in the history pane of the scrollback split, next to the game's output, with no added delay. Scrollback restored at your next launch still holds only game output.
-- Triggers such as a disarm chain no longer send `get 1.;wield 1.` to the game as one broken line.
-- A trigger that gags a line and echoes text from Lua now shows the echo where the gagged line was. Before, you saw a blank row and then the echo on a new line.
-- A fresh session with no scrollback now starts output at the bottom of the terminal, even after a resize. The big gap between your latest prompt and the room strip and vitals chip is gone.
-- `#profile load` and `#profile save` now use your active profile, not the old single settings file they still pointed at. Setups from before multiple profiles still fall back to that file.
-- Triggers, aliases, and macros saved in your profile now layer on top of the shared catalog instead of the shared catalog silently replacing them at launch. Your version wins when names match.
-- A trigger you make in your profile or with `#prompt` now survives the next launch.
+## 0.4.0, June 5, 2026
 
-## v0.3.15 - 2026-06-04
+Write Lua in aliases and triggers, get vitals from your prompt, and see doors and new vitals styles.
 
-A vitals trend grid, a movable combat panel, and calmer trackpad scrolling.
+### New
 
-- A new history layout draws a braille trend grid under your vitals bar. Recent drops in health, mana, and moves read as a falling shape beside the current fill.
-- Each grid cell holds two samples across four rows of dots, drawn in the vital's color over a dim base.
-- Pick the layout from the new layout dropdown in Settings › Panels › Panes › Vitals. Bar style and layout are now separate, so solid, track, or ramped bars all pair with the trend grid.
-- The live preview in Settings shows both your bar style and your layout.
-- The combat target chip can now live in its own panel. Place it in the top, bottom, left, or right zone in Settings › Panels › Combat.
-- The default, hidden, keeps the combat chip inline next to vitals as before.
-- When combat and vitals both sit in the bottom zone, the combat chip joins the vitals bar with no border between them, so the two read as one block.
-- In any other zone, combat gets a full pane and centers vertically, so a one line chip never sits stuck to the top edge.
-- Drag the chat pane's inner edge to resize it, the top edge when chat sits at the bottom or the bottom edge when it sits at the top. Vosh remembers each zone's height between launches.
-- The combat target's health bar now uses the bar style and bar font you picked for vitals, so combat and vitals match.
-- The combat bar uses a single red that runs bright at full health and darkens to nearly black as your opponent dies.
-- The combat chip now fits on one line with swords, the target's name, the bar, and the percent. The condition word is gone.
-- The low health vignette has a name that says what it does, and keeps your choice.
-- Trackpad scrolling on macOS is much calmer, and the terminal no longer runs away when you swipe.
-- The live terminal and the history pane of the scrollback split now scroll by how far your fingers move, not by how many tiny events macOS sends.
-- Selecting text in one pane of the scrollback split now clears the selection in the other, so copy always takes your latest selection.
-- Switching chat channels such as all, chat, or tell now jumps to the latest message instead of keeping the last channel's scroll position.
-- Selected text no longer leaves a gray ghost highlight behind when new output scrolls it off the top. The selection clears as soon as it leaves view.
+- Aliases and triggers can run Lua in a sandbox, with the capture groups of the match in a `captures` table. You write the code in a new code editor in Settings, in lua mode for an alias or a Script effect for a trigger.
+- The new `#prompt {regex}` command, as in TinTin, takes your vitals from any prompt that the server sends. Each named capture, such as `(?<hp>\d+)`, sets the value of the same name and has priority over GMCP.
+- Values from your prompt use the chip style that you picked in Settings. Vosh gags the line that matches, and `#unprompt` removes the rule.
+- `#prompt` works with no GMCP, so your bar can show vitals from the prompt of a MUD that sends none over GMCP.
+- The trigger editor has a new target list. Prompt matches the open prompt that the server sends at GA or EOR, and line, the default, matches full lines.
+- The map shows hidden doors in pink dashes, closed doors in amber and locked doors in red. These states come from the GMCP map data, and a hidden door with no room after it shows as a short line.
+- Your own commands go into session log files with a `>` in front, so `#log` search finds both sides of the session.
+- On macOS, spell check works in the input line, but it checks only chat lines that start with `say`, `tell`, `gossip`, `emote` and similar commands. Game commands do not get a red line.
+- On macOS, spell check is off at first, and the spell check chat lines switch on the General page of Settings controls it.
+- Two new vitals styles, drain and badge, show each vital as a chip, and drain fills and glows in the color of the vital.
+- Pick drain or badge in the new inline style list in Settings, then Panels, then Panes, then Vitals. Plain stays the default.
+- The new % mode list colors the percent in drain and badge, from the color of the vital to red as the value decreases. Its other choices keep the color of the vital or make the percent pink.
+- The new % chip list puts the percent of the inline and template layouts in a pill, soft tint, glow ring or drain fill. It also works with the `%pct_hp`, `%pct_mn` and `%pct_mv` tokens, and it is plain until you pick a chip.
 
-## v0.3.14 - 2026-06-03
+### Changed
 
-A two column vitals console, a low health vignette, and more bar fonts.
+- Commands that you type show in the history pane of the scrollback split, next to the game output, with no delay. The scrollback that Vosh restores at your next launch holds only game output.
+- Commands joined with `;` or a line break go to the game as separate lines, and the escapes `\\`, `\;` and `\\\n` still work.
 
-- The vitals console has a new low health vignette. Turn it on and a soft red glow pulses at the window edges while your health is below 30 percent.
-- The vignette sits on top of the window. Your bar, template, or inline layout keeps showing as normal underneath it.
-- The bar font picker adds MonoLisa, Menlo, Consolas, and Courier New.
-- MonoLisa comes under several names, such as regular, Variable, and Trial. A status line under the dropdown tells you which one your system has, or warns you when it finds none.
-- The vitals settings panel is now a two column console. Controls for mode, show, appearance, layout, colors, and template sit on the left, and a live preview of your real bar fills the right.
-- The preview footer shows your current layout, style, width, and font, so you can check them at a glance without scrolling.
-- When the Settings window is narrower than 820 pixels, the console folds into one column, so it still works at half width.
+### Fixed
 
-## v0.3.12 - 2026-06-03
+- The terminal scroll is calmer with a trackpad, and small, unsteady movements do not start a long scroll.
+- A trigger such as a disarm chain does not send `get 1.;wield 1.` to the game as one broken line.
+- A trigger that gags a line and echoes text from Lua puts the echo where the gagged line was. Before, you saw a blank row and then the echo on a new line.
+- A new session with no scrollback starts output at the bottom of the terminal, also after you resize the window. Before, a large gap showed between your last prompt and the room strip and vitals chip.
+- `#profile load` and `#profile save` use your active profile, not the old single settings file. Setups from before Vosh had many profiles still use that file.
+- Triggers, aliases and macros in your profile are on top of the shared catalog, and your version has priority when names are the same. Before, the shared catalog replaced them at launch.
+- A trigger that you make in your profile or with `#prompt` is still there after the next launch.
 
-A simpler vitals style picker and a font just for your bar.
+## 0.3.15, June 4, 2026
 
-- A new bar font picker changes only the bar glyphs. Labels, percent, numbers, deltas, and the panel frames keep your app font.
-- Pick the bundled Berkeley Mono or JetBrains Mono for clean partial block and braille glyphs.
-- You can also name any monospace font installed on your computer. Vosh loads it itself so it shows up on macOS, which blocks fonts asked for only by name, for privacy.
-- A font family field, always shown below the dropdown, takes any custom list of fonts.
-- The top of the vitals settings is simpler. One style dropdown and a small width field beside it replace the crowded row of style, filled, empty, and width.
-- Each style entry sets the bar style and its glyph pair together. Choices include solid with block glyphs, ramped with full braille, and track for a smooth bar with no glyphs.
-- If you edited custom glyphs by hand, the dropdown shows a custom entry and reveals the filled and empty fields when you need them.
+See the trend of your vitals, put the combat chip in its own panel, and scroll calmly with a trackpad.
 
-## v0.3.11 - 2026-06-03
+### New
 
-New glyph sets for your vitals bars and the return of the smooth ramped style.
+- A new history layout draws a braille trend grid under your vitals bar, so you can see each drop in health, mana and moves.
+- Pick the history layout in Settings, then Panels, then Panes, then Vitals.
+- Give the combat chip its own panel in any zone from Settings, then Panels, then Combat.
+- You can drag the inner edge of the chat pane to set its height, and Vosh keeps that height between launches.
 
-- Five new glyph presets for your vitals bars follow the look of btop. They are dark and light shade (▓ ░), block and medium shade (█ ▒), braille full (⣿ ⣀), braille mid (⠿ ⠤), and braille thin (⠶ ␣).
-- The ramped bar style is back. Pick ramped in the style dropdown, next to solid and track.
-- Ramped draws the end of the bar in eighths of a character (▏▎▍▌▋▊▉), so the bar moves smoothly instead of snapping a whole cell at a time.
-- At a bar width of 20, a solid bar moves in 5 percent jumps and a ramped bar moves in 0.625 percent jumps.
-- Ramped looks best in Berkeley Mono or JetBrains Mono, the fonts that ship with Vosh.
+### Changed
 
-## v0.3.10 - 2026-06-02
+- Bar style and layout are now two separate choices, so solid, track and ramped bars all work with the trend grid.
+- The live preview in Settings shows your bar style and your layout.
+- The default zone, hidden, keeps the combat chip next to your vitals.
+- In the bottom zone, the combat chip joins your vitals bar as one block, and in other zones it gets a full pane, centered vertically.
+- The bar of the combat target uses your vitals bar style and bar font, in one red that becomes darker as your opponent dies.
+- The combat chip fits on one line with swords, the target name, the bar and the percent, and no condition word.
+- The low health vignette has a name that tells you what it does, and it keeps your choice.
+- A selection in one pane of the scrollback split clears the selection in the other, so a copy always takes your latest selection.
 
-A vitals preview you drag to test your colors at every fill level.
+### Fixed
 
-- Click and drag the health, mana, or moves bar in the vitals preview in Settings to scrub it from 0 to 100 percent. The colors change through the ramp as you drag.
-- The header above the preview shows the percent each bar sits at, so you can check a custom color at every fill level before you keep it.
+- On macOS, the terminal and the history pane of the scrollback split scroll as far as your fingers move, so a swipe stays calm.
+- When you change to another chat channel, such as all, chat or tell, the pane shows the latest message. Before, it kept the scroll position of the last channel.
+- A selection clears when new output moves it off the top. Before, a gray ghost highlight stayed on the screen.
 
-## v0.3.7 - 2026-06-02
+## 0.3.14, June 3, 2026
 
-Your own colors for each vital, and vitals that fit narrow panels.
+See your vitals settings in two columns, add a red glow for low health, and pick from more bar fonts.
 
-- Each vital can now have its own color. Pick it from a swatch in the colors section of Settings › Panels › Panes › Vitals.
-- Leave a color blank to keep the default green, blue, and orange ramps.
-- With the "drain through red as the bar empties" toggle on, the bar drains from your color to red in its bottom half, so a 75 percent bar keeps your color.
-- With that toggle on, dark colors stay true. A dark green you pick shows as green instead of turning muddy olive.
-- Turn that toggle off, and the bar stays your color at every fill level.
-- The preview in Settings shows your color picks, so what you see while you set them up is what you get on the live bar.
-- Bar width in Settings now sets the widest the bar gets instead of a fixed width. In a narrow panel the bar gives up width first.
-- The vitals bar no longer hides your current and max values or your change per tick in a narrow panel. The percent, numbers, and change stay in view.
-- A narrowed bar keeps its fill true in both the track and solid styles. A 50 percent bar always shows half full, however narrow the panel.
-- Custom vitals templates with bar tokens now break only at the line breaks you typed. Each line becomes its own row, and the bar fills the space the text leaves.
-- Templates without bar tokens draw as before, so your exact spacing stays put.
+### New
 
-## v0.3.6 - 2026-06-02
+- The low health vignette makes a soft red glow pulse at the edges of the window while your health is below 30 percent.
+- The vignette is over the window, so your bar, template or inline layout shows as usual under it.
+- The bar font picker adds MonoLisa, Menlo, Consolas and Courier New.
+- A line under the font list tells you which name of MonoLisa your system has, or warns you when it finds none.
 
-Scrollback search, profile settings that now save, steadier color, and a cleaner quit.
+### Changed
 
-- Search your scrollback. Press Cmd+F on macOS or Ctrl+F on Windows and Linux to open a search bar at the top of the terminal.
-- Type a search and press Enter to find matches across the whole live session, not just what is on screen. A count such as 3 / 12 shows next to the box.
-- Shift+Enter or the Up arrow steps back through matches. The case, word, and regex toggles work as labeled, and Esc closes the bar.
-- When a match sits above the live view, the scrollback split opens and highlights it in the history pane while live output keeps streaming below.
-- Settings › Panels › Chips drops the moons position dropdown, and moons always show on the right side of the status bar.
-- The dropdown placed the moons beside the tick and MUD time chip, which moved to the input row in v0.3.5. Profiles that used it now show the moons at the right edge.
-- Profile settings now save when you use the global catalog. Before, they stayed in memory and vanished when you quit or switched profiles.
-- The settings that now save are tracked affects, the "tint server output with theme palette" toggle, panel layout when its scope is profile, the vitals shape, custom themes, paste pacing, moon glyph position, chip style, and the enabled presets list.
-- Each loadout now saves its own profile file. Switching loadouts puts the shared catalog back on top, so your aliases and triggers stay in step.
-- 256 colors now stay on for Forsaken Lands and other servers that decide color from the first TTYPE answer. Vosh now names itself a 256 color terminal in that first answer.
-- Servers that speak MTTS still get the full three part answer with Vosh's capability flags.
-- Servers that check environment variables instead of, or as well as, TTYPE now get an answer too. Vosh tells them it supports 256 colors and true color.
-- `quit` no longer ends in a raw error on MUDs that slam the connection shut, such as Forsaken Lands. Vosh reads everything the server sent before the close, so its goodbye line has a chance to show.
-- The disconnect message now reads [connection reset by server] or [server closed connection] instead of a raw system error.
+- The vitals settings are a two column console, with the controls on the left and a live preview of your real bar on the right.
+- The footer of the preview shows your layout, style, width and font, so you can check them without a scroll.
+- When the Settings window is narrower than 820 pixels, the console changes to one column.
 
-## v0.3.5 - 2026-06-02
+## 0.3.12, June 3, 2026
 
-Help inside Vosh, one tick and time chip, and a Panels tab in three parts.
+Pick a vitals style from one list, and give your bar its own font.
 
-- Click [help] in the top bar to open a full help window that explains every feature in plain language.
-- The help window has a search bar that filters topics and highlights matches as you type. Press Esc or click outside the window to close it.
-- The same help text sits in the Vosh repository as a file you can read offline.
-- Click anywhere in the main window outside a button or a text selection to put the cursor back in the command input. Bringing Vosh to the front from another app does the same.
-- The tick countdown and MUD time clock now share one chip on the top border of the input row. Choose value only, caption plus value, or icon plus value in Settings › Panels › Chips.
-- Settings › Panels › Chips also holds tick interval, the auto fire command, regex reset, sound, and warnings, so you no longer need the command line to set up the tick.
-- Settings › Panels now splits into Layout, Panes, and Chips. Layout places zones, Panes sets up panel content like vitals shape and tracked affects, and Chips holds the tick, MUD time, and moons chips.
-- The chat pane stays at the bottom while you read the latest messages and stops following when you scroll up. Scroll back within 24 pixels of the bottom and it follows again.
-- Opening the chat pane jumps to the latest message instead of the oldest.
-- In a left or right side panel, the room strip wraps onto several lines and reads top to bottom instead of running past the edge. You can resize that panel too.
-- The top bar drops the chat toggle button. Show the chat pane from Settings › Panels by setting its zone to top, bottom, left, or right, like every other panel.
-- The group pane drops its unpin button. It shows whenever its zone is not hidden, like every other panel.
-- Deleting a profile, alias, or trigger now works. Click [delete], then [confirm delete] on the same row, in place of a confirm dialog that never appeared.
+### New
 
-## v0.3.1 - 2026-05-31
+- A new bar font picker changes only the bar glyphs, so labels, numbers and panel frames keep your app font.
+- Pick the bundled Berkeley Mono or JetBrains Mono for clean block and braille glyphs.
+- You can also name any monospace font on your computer, and Vosh loads it itself so that macOS shows it.
+- A font family field under the list takes any list of fonts that you type.
 
-Profiles that load for your character on their own, and settings that survive a bad save.
+### Changed
 
-- Profile auto match now reads your character name from the MUD. When you log in, the MUD sends your name over GMCP and Vosh switches to the matching profile quietly.
-- You no longer type your character name into the Connect form, and forgetting it no longer loads the wrong profile.
-- One profile can now claim several characters. List the names, separated by commas, in Settings › Profiles › Auto match, and the profile loads for any of them.
-- Use one profile for every warrior you play, or for every alt on one shared host.
-- Every save of your profile and global settings files now completes whole or not at all, and Vosh keeps the previous version as a dated backup.
-- Vosh keeps up to ten backups, so a crashed save or an overwrite from stale settings can no longer wipe your custom themes or tracked affects.
-- The protection covers saves from this release on. One user reported losing custom themes and tracked affects after installing v0.3.0.
+- One style list and a small width field replace the crowded row of style, filled, empty and width at the top of the vitals settings.
+- Each style sets the bar style and its glyph pair, such as solid with block glyphs, ramped with full braille, or track with no glyphs.
+- If you edited your glyphs by hand, the list shows a custom entry with the filled and empty fields.
 
-## v0.3.0 - 2026-05-31
+## 0.3.11, June 3, 2026
 
-Vitals you write as a template, folders for your automation, and a much faster client.
+Pick from five new glyph sets for your vitals bars, and use the smooth ramped style again.
 
-- The vitals row is now a template you write. Use tokens like `%hp`, `%mana`, and `%sp` for common stats, or pull any GMCP Char.Vitals or Char.Worth field with the long form `%{Char.Worth.gold}`.
-- Each bar can use the new track style, which replaces the old ramped glyph bars.
-- Vitals can show an optional percent gradient and sit inline or stacked.
-- The center of the status bar now always shows a tick countdown and the MUD time, both driven by the MUD clock. The time changes color with the time of day.
-- Each trigger can now hold several pattern rows, as in Mudlet. Each row has its own on and off toggle, so you can switch mob names or events on and off without editing one long regex.
-- Triggers you made with a single pattern still load.
-- Aliases gain `%N-` for N from 0 to 9, which means word N and the rest of the input with its spacing kept. `%1-` is the same as `%0`.
-- `%N-` expands to nothing when fewer than N words are present.
-- Group your aliases, triggers, and macros into folders. Each item takes an optional group tag, and one checkbox in Settings turns the whole group on or off without losing each item's own toggle.
-- In a group you turn off, aliases pass through as typed, triggers do not fire, and macros fall through to an alias or to the MUD.
-- Tracked affects gain up and down arrows on every chip to reorder them.
+### New
+
+- Five new glyph sets in the style of btop are dark and light shade (▓ ░), block and medium shade (█ ▒), braille full (⣿ ⣀), braille mid (⠿ ⠤) and braille thin (⠶ ␣).
+- The ramped bar style is back, next to solid and track in the style list.
+- Ramped draws the end of the bar in eighths of a character (▏▎▍▌▋▊▉), so the bar moves smoothly and not a whole cell at a time.
+- At a bar width of 20, a solid bar moves in steps of 5 percent and a ramped bar in steps of 0.625 percent.
+- Ramped shows most clearly in Berkeley Mono or JetBrains Mono, the fonts that come with Vosh.
+
+## 0.3.10, June 2, 2026
+
+Drag a vitals bar in the preview to test your colors at each fill level.
+
+### New
+
+- Drag the health, mana or moves bar in the vitals preview to move it from 0 to 100 percent.
+- The colors change through the ramp as you drag.
+- The header above the preview shows the percent of each bar, so you can check a custom color at each fill level.
+
+## 0.3.7, June 2, 2026
+
+Give each vital its own color, and keep your vitals readable in a narrow panel.
+
+### New
+
+- Pick a color for each vital from a swatch in Settings, then Panels, then Panes, then Vitals.
+- Leave a color blank to keep the default green, blue and orange ramps.
+- With drain through red as the bar empties on, the bar becomes red only in its bottom half.
+- With that setting on, a dark color stays true, so a dark green does not become a muddy olive.
+- With that setting off, the bar keeps your color at each fill level.
+- The preview in Settings shows the colors that you pick, so the live bar looks the same.
+
+### Changed
+
+- Bar width in Settings now sets the largest width of the bar, so in a narrow panel the bar becomes narrower first.
+- A narrow bar shows its true fill with the track and solid styles, so a bar at 50 percent always shows half full.
+- A custom vitals template with bar tokens breaks only at the line breaks that you typed.
+- Each line of such a template is its own row, and the bar fills the space that the text leaves.
+- A template without bar tokens shows as before, so the spaces that you typed stay the same.
+
+### Fixed
+
+- In a narrow panel, the vitals bar keeps your current and maximum values, the percent and the change per tick in view. Before, it hid them.
+
+## 0.3.6, June 2, 2026
+
+Search your scrollback, keep the settings of each profile, and get steady color from more MUDs.
+
+### New
+
+- Press Cmd+F on macOS or Ctrl+F on Windows and Linux to open a search bar.
+- The search bar opens at the top of the terminal.
+- Press Enter to find each match in the whole live session, not only the text on the screen.
+- A count such as 3 / 12 shows next to the search box.
+- Shift+Enter or the Up arrow moves to the previous match, and Esc closes the bar.
+- The case, word and regex switches work as their names say.
+- When a match is above the live view, the scrollback split opens and highlights it in the history pane, and the live output continues below.
+- Servers that check environment variables now get an answer too, which says that Vosh supports 256 colors and true color.
+
+### Changed
+
+- The moons always show on the right side of the status bar, and the moons position list is gone from Settings, then Panels, then Chips.
+- A profile that put the moons beside the tick and MUD time chip now shows them at the right edge.
+- Servers that use MTTS still get the full answer, with the full list of what Vosh supports.
+- Each loadout saves its own profile file.
+- When you change loadouts, the shared catalog goes on top again, so your aliases and triggers stay the same.
+- The disconnect message reads [connection reset by server] or [server closed connection], and not a raw system error.
+
+### Fixed
+
+- Profile settings now save when you use the global catalog. Before, Vosh kept them in memory only, and you lost them when you quit or changed profiles.
+- The fix covers tracked affects, the panel layout, the vitals shape, custom themes, paste pacing, the chip style and the presets that are on.
+- It also covers the switch that tints server output with your theme, and the position of the moon glyph.
+- Vosh now names itself a 256 color terminal in its first answer to the server, so Forsaken Lands and similar servers keep 256 colors on.
+- `quit` no longer ends in a raw error on MUDs that close the connection hard, such as Forsaken Lands, so the goodbye line shows.
+
+## 0.3.5, June 2, 2026
+
+Read Help inside Vosh, see the tick and the time in one chip, and find panel settings on three tabs.
+
+### New
+
+- Click [help] in the top bar to open a help window that explains each feature in plain words.
+- The help window has a search bar that filters the topics and highlights each match as you type.
+- Press Esc or click outside the help window to close it.
+- The same help text is in the Vosh repository as a file that you can read offline.
+- Click outside a button or a selection in the main window to put the cursor in the command input.
+- When you bring Vosh to the front from another app, the cursor goes to the command input too.
+- Choose value only, caption plus value, or icon plus value for the tick chip in Settings, then Panels, then Chips.
+- The Chips tab also holds the tick interval, the command that the tick sends, the regex reset, sound and warnings.
+
+### Changed
+
+- The tick countdown and the MUD time clock share one chip on the top border of the input row.
+- The Panels page of Settings now has three tabs, Layout, Panes and Chips.
+- Layout places the zones, Panes holds what each panel shows, and Chips holds the tick, MUD time and moons chips.
+- The chat pane follows new messages while you are at the bottom, and it stops when you scroll up.
+- The chat pane follows again when you scroll to within 24 pixels of the bottom.
+- When you open the chat pane, it shows the latest message and not the oldest.
+- In a left or right panel, the room strip wraps to several lines and stays inside the edge.
+- You can resize a left or right panel.
+- The top bar no longer has a chat button, so you show the chat pane with its zone in Settings, then Panels.
+- The group pane no longer has an unpin button, and it shows when its zone is not hidden.
+
+### Fixed
+
+- You can now delete a profile, alias or trigger with [delete] and then [confirm delete] on the same row. Before, a confirm dialog that never showed stopped the delete.
+
+## 0.3.1, May 31, 2026
+
+Let the profile of your character load when you enter the game, and keep your settings safe from a bad save.
+
+### New
+
+- List several character names with commas in Settings, then Profiles, then Auto match, and the profile loads for each.
+- You can use one profile for all your warriors, or for all the alts on one host.
+- Each save of your settings files now completes in full or not at all.
+- Vosh keeps a maximum of ten dated backups, so a failed save or old settings cannot remove your custom themes or tracked affects.
+- This protection starts with this version, after a player lost custom themes and tracked affects in 0.3.0.
+
+### Changed
+
+- When you enter the game, the MUD sends your character name over GMCP, and Vosh changes to the profile that matches it.
+- You no longer type your character name in the Connect form, so a name that you forget cannot load the wrong profile.
+
+## 0.3.0, May 31, 2026
+
+Write your vitals as a template, put your automation in folders, and use a much faster client.
+
+### New
+
+- Your vitals row is a template that you write, with tokens such as `%hp`, `%mana` and `%sp`, or any GMCP field such as `%{Char.Worth.gold}`.
+- Vitals can show a percent gradient, inline or stacked.
+- The center of the status bar always shows a tick countdown and the MUD time from the MUD clock.
+- The time in the status bar changes color with the time of day.
+- A trigger can hold several pattern rows, as in Mudlet, and each row has its own switch.
+- Turn a mob name or an event on or off without an edit to one long regex.
+- Triggers that you made with one pattern still load.
+- Aliases have `%N-` for N from 0 to 9, which means word N and the rest of the input with its spaces.
+- `%1-` is the same as `%0`, and `%N-` gives nothing when the input has fewer than N words.
+- Put your aliases, triggers and macros in folders with an optional group tag.
+- One checkbox in Settings turns a whole group on or off, and each item keeps its own switch.
+- In a group that is off, aliases send what you typed, triggers do not fire, and macros go to an alias or the MUD.
+- Each tracked affect chip has up and down arrows to change the order.
 - Give any tracked affect its own label, so Field of Discord can show as Shroud.
-- Every Settings form shows a saved mark that fades after 1.5 seconds when your changes land.
-- Forms you save by hand, like triggers, aliases, and the JSON tabs, show a dot for unsaved changes. Closing the window with unsaved edits asks you first.
-- The combat target chip stacks to the right of mana and shows your target's name and condition, wrapping when it needs to.
-- Settings › Panels lets you place each panel by zone and alignment, with a live preview at the top of the tab.
-- The map label moves into the map's existing subheading row, which gives you back a row of height.
-- Moon phase placement gains right edge, before time, and after time options.
-- The Kanso Zen theme's accent moves from pink to a cool blue that matches the Aabahran site.
-- Log writes are about 18 times faster in benchmarks and about 3 times faster against a full, indexed log database.
+- Each Settings form shows a saved mark that disappears after 1.5 seconds when your changes save.
+- A form that you save by hand, such as triggers, aliases and the JSON tabs, shows a dot for unsaved changes.
+- When you close a window with unsaved edits, Vosh asks you first.
+- Place each panel by zone and alignment in Settings, then Panels, with a live preview at the top.
+- The moon phase has three more places, at the right edge, before the time and after the time.
+
+### Changed
+
+- Each bar can use the new track style, which replaces the old ramped glyph bars.
+- The combat target chip is to the right of mana and shows the name and condition of your target, and it wraps when necessary.
+- The map label moves into the header row that the map already has, so the map has one more row.
+- The accent of the Kanso Zen theme is a cool blue that matches the Aabahran site, and not pink.
+- Log writes are about 18 times faster in tests, and about 3 times faster with a full log database.
 - Map updates are about 21 times faster.
-- Each panel now listens only for the GMCP packages it uses, so panels in the background stop redrawing on every message.
-- The tick countdown no longer redraws the vitals template four times a second.
-- Saving in Settings sends nothing to your other windows when nothing changed, and one update for each field you change instead of ten at a time.
-- Output lines with no ANSI codes take a fast path that is about 7 times faster.
-- The vitals bar can no longer spill into the right sidebar at wide widths.
-- The Duplicate button on a profile row works again. It now opens a text box on the row, like Rename, where before a click did nothing.
-- Dragging the scrollback split divider no longer leaves the live pane stuck above the newest output. The live pane snaps back to the bottom when you let go.
-- Scrollbars on Windows now match the rest of Vosh. A thin scrollbar in your theme replaces the chunky white default in the terminal, the panels, and the Settings forms.
-- Window corners on Windows no longer show white at the rounded edges. Windows now gets square corners, and macOS keeps its rounded ones.
-- The first `who` and the message of the day no longer wrap at 80 columns. Vosh now remembers your window size between connects, so the MUD knows it from the first byte.
+- Each panel listens only for the GMCP data that it uses, so a panel in the background does not draw again for each message.
+- The tick countdown no longer draws the vitals template again four times a second.
+- A save in Settings sends nothing to your other windows when nothing changed, and one update for each field that you change.
+- Vosh shows output lines with no ANSI codes about 7 times faster.
 
-## v0.2.11 - 2026-05-30
+### Fixed
 
-A fix for Settings opening slowly.
+- The vitals bar no longer goes into the right sidebar when the window is wide.
+- The Duplicate button on a profile row works again and opens a text box on the row, like Rename. Before, a click did nothing.
+- After you drag the scrollback split divider, the live pane returns to the newest output. Before, it stayed above the newest output.
+- On Windows, the scrollbars in the terminal, the panels and the Settings forms are thin and in your theme. Before, they were wide and white.
+- On Windows, window corners are square and show no white at the edges, and macOS keeps its round corners.
+- The first `who` and the message of the day no longer wrap at 80 columns, because Vosh keeps your window size between connections.
 
-- Settings › General now opens at once. Vosh reads your installed fonts only when you focus the font filter or hover the list, and remembers them until you quit.
+## 0.2.11, May 30, 2026
 
-## v0.2.10 - 2026-05-30
+Open Settings with no wait.
 
-A map that lines up like a terminal, and server output that arrives all at once.
+### Fixed
 
-- Map glyph mode now draws as text in the app font. Each cell is a true terminal cell, like the character grid map in TinTin++, instead of the loose square cells before.
-- The map keeps the same sector glyphs, colors, and dimming, and the same @ marker for you.
-- Server output no longer types itself out line by line. Each batch the MUD sends now draws at once, so a 50 line reply paints in one go, and Windows gains the most.
+- The General page of Settings opens at once, because Vosh reads your fonts only when you need the font list.
+- Vosh keeps the font list until you quit.
 
-## v0.2.9 - 2026-05-30
+## 0.2.10, May 30, 2026
 
-Safe pasting of several lines, and a vitals panel you set up your way.
+See the map as a grid of text, and see each block of server output at once.
 
-- Pasting several lines into the input now sends each line as its own command instead of joining them into one. A single line still pastes at the cursor, and a paste at a password prompt works as before.
-- Paste pacing keeps the MUD from kicking you for flooding. Set the delay between lines in Settings › General › Paste pacing, from 0 to 10000 ms, 500 by default.
-- A chip such as [paste 7/50 esc cancels] shows progress next to the prompt. Press Esc to stop the queue and leave the remaining lines unsent.
-- Settings › Panels › Vitals has separate toggles for the bar, the percent, the numbers, and the change per tick. A live preview shows the result.
-- Pick the filled and empty glyphs from a row of quick picks (parallelogram, block, heavy and light, circle, square, vertical bar), or type your own Unicode characters.
-- Set the bar width anywhere from 4 to 60 cells.
-- Preset chips switch the whole layout to bars, compact, numeric, or percent in one click.
+### Changed
 
-## v0.2.7 - 2026-05-30
+- In glyph mode, the map draws as text in the app font, with each cell a true terminal cell, like the map in TinTin++.
+- The map keeps the same sector glyphs, colors, dim cells and @ marker for you.
 
-Panels you reorder, a tick that tucks into another bar, and quiet unset quick keys.
+### Fixed
 
-- Reorder panels within a zone in Settings › Panels. The up and down arrows on each chip in the live preview move it through the stack, and Vosh keeps the order.
-- Four new choices in the tick's zone dropdown tuck the tick countdown into the right edge of the vitals bar, room strip, affects bar, or status bar, instead of its own panel.
-- The preview shows a tick placed this way as "+ tick" on the panel that holds it.
-- Quick keys you have not set now pass through to your aliases or the MUD quietly, instead of showing the error "no verb is set".
+- Each block of output from the MUD now shows at once, so a reply of 50 lines appears in one step. Before, output appeared one line at a time, most of all on Windows.
 
-## v0.2.6 - 2026-05-30
+## 0.2.9, May 30, 2026
 
-A quick way back to live output and a tidier close.
+Paste several lines safely, and choose what your vitals panel shows.
 
-- Click the scroll wheel on the terminal to close the scrollback split and snap back to the live output.
-- Closing the main window now closes the Settings window too, instead of leaving it open on its own.
+### New
 
-## v0.2.5 - 2026-05-30
+- Paste pacing puts a delay between the lines that you paste, so the MUD does not disconnect you because the lines come too fast.
+- Set the delay in Settings, then General, then Paste pacing, from 0 to 10000 ms, with 500 as the default.
+- A chip such as [paste 7/50 esc cancels] shows the progress next to the prompt, and Esc stops the rest of the lines.
+- Settings, then Panels, then Vitals has separate switches for the bar, the percent, the numbers and the change per tick, with a live preview.
+- Pick the filled and empty glyphs from a row of quick picks, such as parallelogram, block, circle or square.
+- You can also type your own Unicode characters for the glyphs.
+- Set the bar width from 4 to 60 cells.
+- Four chips change the whole layout to bars, compact, numeric or percent with one click.
 
-A scrollback split you can resize and a smaller, steadier chat panel.
+### Changed
 
-- Drag the divider of the scrollback split to resize the history pane, down to grow it and up to shrink it. Vosh remembers the size between sessions.
-- The chat panel is shorter, 160 pixels by default, so it no longer takes over the window when pinned to the bottom.
-- Chat now opens on the most recent message instead of the oldest.
-- Scrolling over chat stays inside the chat panel and no longer scrolls the terminal.
+- When you paste several lines into the input, Vosh sends each line as a command of its own. Before, it joined them into one.
+- One line still goes in at the cursor, and a paste at a password prompt works as before.
 
-## v0.2.4 - 2026-05-29
+## 0.2.7, May 30, 2026
 
-Tab completion, words that stay whole, and a status bar that wraps.
+Change the order of your panels, put the tick in another bar, and leave quick keys empty with no error.
 
-- Tab completes the word you are typing. The first Tab fills the most recent match from your typed history, more Tabs cycle forward, and Shift+Tab cycles back.
-- Tab also completes the names of characters in your room, your combat targets, so a few letters fill in a whole name. Matches from your history come first.
-- Vosh now wraps long lines such as tells and channels itself, so words no longer split in the middle. The server still wraps most lines through NAWS, and Vosh catches the rest.
-- The status bar no longer cuts off the target name or quick keys. It wraps to a second row when they do not all fit.
-- The chat panel now has a default height of 240 pixels, capped at half the window, so it stops taking over and its contents scroll properly.
-- Chat scrolls to the newest message again when new ones arrive.
-- The terminal now refits when the panel layout changes, so hiding chat no longer leaves a strip of padding at the bottom.
+### New
 
-## v0.2.3 - 2026-05-29
+- Use the arrows in the Panels preview of Settings to change the order of panels in a zone.
+- Vosh keeps the order of your panels.
+- The tick countdown can go at the right edge of the vitals bar, room strip, affects bar or status bar, with four new zone choices.
+- The preview shows such a tick as + tick on the panel that holds it.
 
-Mouse scrolling into history, a tick panel of its own, and an update check.
+### Fixed
 
-- The mouse wheel and trackpad now open the scrollback split and page through the history pane, the same as PageUp or Fn+Up. The live pane stays at the bottom wherever your pointer is.
-- Settings › General gains a [check now] button for updates. It shows checking, up to date, install and restart, or the error right beside it.
-- The tick countdown is now its own panel you can move, so hiding vitals no longer hides the tick.
-- Esc now also snaps the live pane back to the bottom, as well as closing the split.
+- A quick key that you did not set now goes to your aliases or the MUD with no message. Before, it showed the error no verb is set.
+
+## 0.2.6, May 30, 2026
+
+Return to the live output with one click, and close Settings with the main window.
+
+### New
+
+- Click the scroll wheel on the terminal to close the scrollback split and go to the live output.
+
+### Changed
+
+- When you close the main window, the Settings window closes too.
+
+## 0.2.5, May 30, 2026
+
+Change the size of the scrollback split, and use a smaller chat panel that stays in place.
+
+### New
+
+- Drag the divider of the scrollback split down to make the history pane larger, or up to make it smaller.
+- Vosh keeps the size of the history pane between sessions.
+
+### Changed
+
+- The chat panel is 160 pixels high by default, so it does not fill the window at the bottom.
+- Chat opens on the most recent message, not the oldest.
+
+### Fixed
+
+- A scroll over chat stays in the chat panel and does not move the terminal.
+
+## 0.2.4, May 29, 2026
+
+Complete words with Tab, keep words whole, and see a status bar that wraps.
+
+### New
+
+- Press Tab to complete the word that you type.
+- The first Tab gives the most recent match from your history, each next Tab gives the next match, and Shift+Tab gives the previous match.
+- Tab also completes the names of the characters in your room and of your combat targets, after the matches from your history.
+
+### Changed
+
+- Vosh now wraps long lines such as tells and channels itself, so no word breaks in the middle.
+- The server still wraps most lines through NAWS, and Vosh wraps the rest.
+- The chat panel is 240 pixels high by default and at most half the window, so its messages scroll correctly.
+
+### Fixed
+
+- The status bar wraps to a second row when the target name and quick keys do not fit. Before, it cut them off.
+- Chat goes to the newest message again when new ones arrive.
+- The terminal fits itself again when the panel layout changes, so a hidden chat leaves no empty strip at the bottom.
+
+## 0.2.3, May 29, 2026
+
+Scroll into history with the mouse, move the tick as its own panel, and check for updates.
+
+### New
+
+- The mouse wheel and trackpad open the scrollback split and move through the history pane, as PageUp or Fn+Up does.
+- The live pane stays at the bottom, wherever your pointer is.
+- Settings, then General has a [check now] button for updates, which shows the status or the error next to it.
+- The tick countdown is a panel of its own that you can move, so it stays when you hide your vitals.
+
+### Changed
+
+- Esc also returns the live pane to the bottom, and it closes the split.
 - The scrollback divider is thicker and easier to see.
 
-## v0.2.2 - 2026-05-29
+## 0.2.2, May 29, 2026
 
-Word wrap that follows the size of your window.
+Get game text that wraps to the size of your window.
 
-- Vosh now tells the MUD your terminal's columns and rows through telnet NAWS, and the MUD wraps its output between words before sending it. Words stay whole, with no added delay.
-- Resizing the window sends the new size to the MUD at once, so output rewraps as you drag.
+### New
 
-## v0.2.1 - 2026-05-29
+- Vosh tells the MUD the columns and rows of your terminal through telnet NAWS, so the MUD wraps its output between words with no delay.
+- When you resize the window, Vosh sends the new size at once, so the output wraps again as you drag.
 
-Copy keys, selection keys, and an input that works while you are disconnected.
+## 0.2.1, May 29, 2026
 
-- Ctrl+C and Ctrl+X copy the text you selected in the terminal on Windows and Linux. Cmd+C and Cmd+X do the same on macOS.
-- Shift+Home and Shift+End extend the selection to the start or end of the input line.
-- The input bar stays editable while you are disconnected, so you can write commands ahead of a reconnect.
-- Home and End on a long input now scroll the cursor into view.
+Copy and select text with the keyboard, and type commands while you are disconnected.
 
-## v0.2.0 - 2026-05-28
+### New
 
-Panels you can move anywhere, placed from a layout map in Settings.
+- On Windows and Linux, Ctrl+C and Ctrl+X copy the terminal text that you select.
+- On macOS, Cmd+C and Cmd+X do the same.
+- Shift+Home and Shift+End extend the selection to the start or the end of the input line.
 
-- A new Panels tab in Settings shows a visual map of your layout.
-- Move each panel to the top, bottom, left, or right, or hide it. In a left or right zone, align it to the top or bottom.
-- The six panels you can move are map, group, vitals, room strip, chat, and affects.
-- A new option lets the left and right zones run the full height of the window, with the input and status bar under the terminal only.
-- Resize handles sit on the side of a panel that faces the terminal.
-- The map fills its column, and other panels stack above or below it at their natural size without overlapping.
-- Chat is now its own panel, apart from group, and its header has a close button.
-- Switching tabs in Settings now clears error banners that used to get stuck.
+### Changed
 
-## v0.1.0 - 2026-05-28
+- The input bar stays open for edits while you are disconnected, so you can write commands before you connect again.
 
-The scrollback split, full color from more MUDs, and a CMUD importer.
+### Fixed
 
-- Press PageUp to open the scrollback split. Read older output above while combat keeps streaming below, then press PageDown or Esc to close it.
-- The history pane shows how far back you have scrolled.
-- Choose your own color for the scrollback split divider.
-- Import CMUD and zMUD XML files, with their wildcards translated.
-- Vosh now tells MUDs through MTTS that it supports 256 colors and true color, so MUDs that held back full color now send it.
-- You can now bind a single printable key, such as backslash, as a macro.
+- Home and End on a long input now move the view to the cursor.
 
-## v0.0.9 - 2026-05-28
+## 0.2.0, May 28, 2026
 
-Version info at a glance, copy that works from the input, and macros that update live.
+Put your panels anywhere with a layout map in Settings.
 
-- Hover the [vosh] label in the top bar to see the app version. The Settings footer shows it too.
-- Every release now ships signed updates for the auto updater.
-- Cmd+C copies the text you selected in the terminal even while the input box has focus.
+### New
+
+- A new Panels tab in Settings shows a map of your layout.
+- Move each panel to the top, bottom, left or right, or hide it.
+- In a left or right zone, align a panel to the top or the bottom.
+- You can move six panels, the map, group, vitals, room strip, chat and affects.
+- An option lets the left and right zones use the full height of the window, with the input and status bar under the terminal only.
+- Resize handles are on the side of a panel that is near the terminal.
+
+### Changed
+
+- The map fills its column, and other panels stack above or below it at their natural size with no overlap.
+- Chat is a panel of its own, apart from group, with a close button in its header.
+
+### Fixed
+
+- A change of tab in Settings now clears error banners. Before, they stayed on the screen.
+
+## 0.1.0, May 28, 2026
+
+Read older output in the scrollback split, get full color from more MUDs, and import from CMUD.
+
+### New
+
+- Press PageUp to open the scrollback split, with older output above and the live combat below.
+- Press PageDown or Esc to close the scrollback split.
+- The history pane shows how far back you scrolled.
+- Choose your own color for the divider of the scrollback split.
+- Import CMUD and zMUD XML files with their wildcards translated.
+- Bind one printable key, such as backslash, as a macro.
+
+### Changed
+
+- Vosh tells MUDs through MTTS that it supports 256 colors and true color, so MUDs that held back full color now send it.
+
+## 0.0.9, May 28, 2026
+
+See the version of the app, copy while the input has focus, and see macro changes at once.
+
+### New
+
+- Put the pointer on the [vosh] label in the top bar to see the version.
+- The Settings footer shows the version too.
+- Each release now has signed updates for the auto updater.
+
+### Changed
+
+- On macOS, Cmd+C copies the terminal text that you select, also while the input box has focus.
 - Macro changes in Settings reach the main window without a relaunch.
+
+### Fixed
+
 - Macros that use Shift with one other key, such as Shift+F1, now fire from the input.
 
-## v0.0.8 - 2026-05-28
+## 0.0.8, May 28, 2026
 
-Fixes for custom themes and a smaller label in the top bar.
+Keep your theme changes, and see a smaller label in the top bar.
 
-- Theme changes save on their own, so the live preview becomes your saved theme.
-- The [vosh] label in the top bar is smaller and sits inside the bar instead of filling it.
-- Deleting a custom theme now works.
-- Creating a theme from the active theme now starts from the one you just clicked.
-- Custom themes stay in sync between the Settings and main windows.
+### Changed
 
-## v0.0.7 - 2026-05-28
+- Theme changes save automatically, so the live preview becomes your saved theme.
+- The [vosh] label in the top bar is smaller and sits inside the bar.
 
-A custom theme editor, plus keys for scrolling, moving the cursor, and copying.
+### Fixed
 
-- Settings has a custom theme editor. Copy any theme and change every color in it.
-- Fn+Up and Fn+Down scroll the terminal history by a page.
-- Fn+Left and Fn+Right, or Home and End, move the input cursor to the start or end of the line.
-- Cmd+C copies the text you selected in the terminal.
+- You can now delete a custom theme.
+- A theme that you create from the active theme now starts from the theme that you clicked.
+- Custom themes stay the same in the Settings window and the main window.
 
-## v0.0.6 - 2026-05-28
+## 0.0.7, May 28, 2026
 
-A change to the default colors of game output.
+Make your own themes, and use keys to scroll, move the cursor and copy.
 
-- Server output now uses the standard 256 color palette by default. Tinting it with your theme is a choice you turn on.
+### New
 
-## v0.0.5 - 2026-05-28
+- The custom theme editor in Settings lets you copy any theme and change each color in it.
+- Fn+Up and Fn+Down scroll the terminal history by one page.
+- Fn+Left and Fn+Right, or Home and End, move the input cursor to the start or the end of the line.
+- On macOS, Cmd+C copies the terminal text that you select.
 
-Native full screen and signed builds on macOS.
+## 0.0.6, May 28, 2026
 
-- The maximize button enters native full screen on macOS.
-- macOS builds are signed and notarized.
+See the game output in the standard colors.
 
-## v0.0.4 - 2026-05-28
+### Changed
 
-Profiles for each character, with settings you share or keep apart.
+- Server output uses the standard 256 color palette by default, and a tint with your theme is a choice that you turn on.
 
-- A named profile catalog gives each character or MUD its own aliases, triggers, macros, and variables.
-- Connecting switches to the matching profile on its own.
-- Each category of settings has a scope toggle, so you choose whether it is global or belongs to one profile.
-- With the Keep last command setting on, press Enter to send your last line again.
+## 0.0.5, May 28, 2026
 
-## v0.0.3 - 2026-05-27
+Use full screen on macOS, and open builds that Apple notarized.
 
-Themes you switch on the fly, map zoom, and automatic updates if you want them.
+### New
 
-- Vosh ships with a catalog of themes, and you can switch between them while it runs.
-- The map gains zoom controls.
-- An auto updater keeps Vosh current once you turn it on.
+- On macOS, the maximize button opens native full screen.
+- On macOS, the builds have a signature and Apple notarization.
 
-## v0.0.2 - 2026-05-06
+## 0.0.4, May 28, 2026
 
-The first tagged release of Vosh, with the whole foundation of the client.
+Give each character its own profile, and choose which settings each profile keeps.
 
-- Vosh speaks telnet and draws ANSI color, both tested against recorded game output.
+### New
+
+- A catalog of named profiles gives each character or MUD its own aliases, triggers, macros and variables.
+- When you connect, Vosh changes to the profile that matches.
+- Each category of settings has a scope switch, so you choose if it is global or for one profile.
+- With Keep last command on, press Enter to send your last line again.
+
+## 0.0.3, May 27, 2026
+
+Change themes while you play, zoom the map, and get updates automatically if you want them.
+
+### New
+
+- Vosh has a catalog of themes, and you can change themes while it runs.
+- The map has zoom controls.
+- An auto updater installs each new version after you turn it on.
+
+## 0.0.2, May 6, 2026
+
+Connect to a MUD and play with aliases, triggers, a map, logs and Lua in the first version of Vosh.
+
+### New
+
+- Vosh reads telnet and draws ANSI color, with tests against recorded game output.
 - Connect to a MUD over plain TCP or encrypted TLS.
 - The game shows in a full terminal view, with a command input that keeps your history.
-- Set up aliases, regex triggers, and macros on keys.
-- Variables last with your profile or only for the session.
-- Lua scripting runs inside Vosh, alongside a plugin manager.
-- An automapper draws rooms as you go and keeps the view on you.
-- Session logs save to a local database, and regex search finds lines in your scrollback.
-- Import from MUSHclient, Mudlet, GMUD, and TinTin++.
-- A status bar in the TinTin++ style shows your hp, sp, and mv vitals, a tick countdown, and tracked affects.
-- A chat pane collects channel messages the game sends over GMCP.
-- A Settings drawer holds triggers, aliases, profiles, plugins, themes, and fonts.
-- The window is frameless in the style of tmux, with Kanso Zen as the default theme.
-- Vosh builds for macOS, Linux, and Windows.
+- Make aliases, regex triggers and macros on keys.
+- Variables stay with your profile or last only for the session.
+- Lua scripts run inside Vosh, with a plugin manager.
+- An automapper draws the rooms as you walk and keeps you in the center of the view.
+- Session logs save to a local database, and a regex search finds lines in your scrollback.
+- Import from MUSHclient, Mudlet, GMUD and TinTin++.
+- A status bar in the TinTin++ style shows your hp, sp and mv vitals, a tick countdown and your tracked affects.
+- A chat pane collects the channel messages that the game sends over GMCP.
+- A Settings drawer holds triggers, aliases, profiles, plugins, themes and fonts.
+- The window has no frame, in the style of tmux, with Kanso Zen as the default theme.
+- Vosh runs on macOS, Linux and Windows.
