@@ -281,7 +281,10 @@ no longer reads or writes the file. It stays on disk untouched.
 
 The window state file keeps the size, position, maximized and full
 screen state of each window. On macOS and Windows the app config folder
-is the app data folder.
+is the app data folder. On Linux Vosh also reads it as a window first
+opens in a run, since the window reports the size the plugin restored
+only once it shows, and a window too big for its screen has to shrink
+before then.
 
 An export never replaces a file. `export_path` in
 `src-tauri/src/disk/paths.rs` adds ` (2)`, ` (3)` and on, and an import
