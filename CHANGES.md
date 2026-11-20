@@ -2,6 +2,14 @@
 
 What changed in each version of Vosh, with the newest version first.
 
+## 0.96.5, November 20, 2026
+
+A window that is too large for your screen opens at a size that fits.
+
+### Fixed
+
+- When a window is larger than your screen, it opens at the size of the screen. Before, the edges of the window could be off the screen, and on Windows and Linux you could not resize the window.
+
 ## 0.96.4, November 2, 2026
 
 Drag a selection above the scrollback, and the selection continues.
