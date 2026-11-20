@@ -99,6 +99,21 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
             let _ = crate::app::windows::enable_macos_spellcheck(&window);
         }
     }
+    // A saved size too big for the screen would open the main window
+    // with its edges out of reach. See windows::fit_restored.
+    if let (Some(main), Some(config)) = (
+        app.get_webview_window("main"),
+        app.config().app.windows.iter().find(|w| w.label == "main"),
+    ) {
+        crate::app::windows::fit_restored(
+            &main,
+            (config.width, config.height),
+            (
+                config.min_width.unwrap_or_default(),
+                config.min_height.unwrap_or_default(),
+            ),
+        );
+    }
     // The native terminal surface goes under the main window's webview.
     // See native/surface.rs.
     #[cfg(native_surface)]

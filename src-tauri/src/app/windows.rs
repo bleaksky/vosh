@@ -427,29 +427,218 @@ fn snoop_window_placed(window: &Window, state: &SharedState) {
     });
 }
 
-/// The logical size a window should take when the window state plugin
-/// restored it at `restored`, or None when it already fits. A side under
-/// the minimum, saved by an older and smaller window, goes back to the
-/// default. The system does not apply the minimum to a size set from
-/// code, so this has to.
-fn window_fit(window: &AuxWindow, restored: (f64, f64)) -> Option<(f64, f64)> {
+/// The logical size a window of default `size` and smallest `min` should
+/// take when the window state plugin restored it at `restored`, or None
+/// when it already fits. A side under the minimum, saved by an older and
+/// smaller window, goes back to the default. The system does not apply
+/// the minimum to a size set from code, so this has to.
+fn window_fit(size: (f64, f64), min: (f64, f64), restored: (f64, f64)) -> Option<(f64, f64)> {
     let (width, height) = restored;
-    let (min_width, min_height) = window.min_size;
+    let (min_width, min_height) = min;
     if width >= min_width && height >= min_height {
         return None;
     }
     Some((
-        if width < min_width {
-            window.size.0
-        } else {
-            width
-        },
-        if height < min_height {
-            window.size.1
-        } else {
-            height
-        },
+        if width < min_width { size.0 } else { width },
+        if height < min_height { size.1 } else { height },
     ))
+}
+
+/// `place` shrunk to fit `screen`, the logical work area of the screen
+/// it opens on, or None when it fits there already. A window wider or
+/// taller than its screen has an edge you cannot reach, and on Windows
+/// and Linux, where the window has no frame, its edges are where you
+/// resize it. A side too long for the screen takes the screen's length,
+/// though never under `min`, and the window then moves in so its far
+/// edges are on the screen as well.
+fn fit_on_screen(place: WindowPlace, screen: WindowPlace, min: (f64, f64)) -> Option<WindowPlace> {
+    if place.width <= screen.width && place.height <= screen.height {
+        return None;
+    }
+    let width = place.width.min(screen.width).max(min.0);
+    let height = place.height.min(screen.height).max(min.1);
+    Some(WindowPlace {
+        left: place
+            .left
+            .min(screen.left + screen.width - width)
+            .max(screen.left),
+        top: place
+            .top
+            .min(screen.top + screen.height - height)
+            .max(screen.top),
+        width,
+        height,
+    })
+}
+
+/// The screen of `screens` that holds the most of `place`, or None when
+/// it is on none of them.
+fn screen_under(place: WindowPlace, screens: &[WindowPlace]) -> Option<WindowPlace> {
+    let overlap =
+        |a: f64, a_len: f64, b: f64, b_len: f64| ((a + a_len).min(b + b_len) - a.max(b)).max(0.0);
+    screens
+        .iter()
+        .map(|screen| {
+            let area = overlap(place.left, place.width, screen.left, screen.width)
+                * overlap(place.top, place.height, screen.top, screen.height);
+            (area, *screen)
+        })
+        .filter(|(area, _)| *area > 0.0)
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, screen)| screen)
+}
+
+/// The logical work area of `monitor`, the part of the screen outside
+/// the system's bars and docks.
+fn work_area(monitor: &tauri::Monitor) -> WindowPlace {
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let position = area.position.to_logical::<f64>(scale);
+    let size = area.size.to_logical::<f64>(scale);
+    WindowPlace {
+        left: position.x,
+        top: position.y,
+        width: size.width,
+        height: size.height,
+    }
+}
+
+/// A window's size and place as the window state plugin saved them in
+/// its file at the last exit, in physical pixels.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Deserialize)]
+#[serde(default)]
+struct SavedWindow {
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    maximized: bool,
+    fullscreen: bool,
+}
+
+impl SavedWindow {
+    /// The place the plugin restored, in logical pixels at the window's
+    /// `scale`, the one the plugin restored it at.
+    fn place(self, scale: f64) -> WindowPlace {
+        WindowPlace {
+            left: f64::from(self.x) / scale,
+            top: f64::from(self.y) / scale,
+            width: f64::from(self.width) / scale,
+            height: f64::from(self.height) / scale,
+        }
+    }
+}
+
+/// The window `label` in the plugin's file `text`, or None when the file
+/// does not read or holds no size for it.
+fn parse_saved_window(text: &str, label: &str) -> Option<SavedWindow> {
+    let mut windows: std::collections::HashMap<String, SavedWindow> =
+        serde_json::from_str(text).ok()?;
+    windows
+        .remove(label)
+        .filter(|saved| saved.width > 0 && saved.height > 0)
+}
+
+/// The windows opened in this run, by label.
+static OPENED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// Whether the window `label` opens for the first time in this run, the
+/// one time the plugin restores it from its file. Later it restores the
+/// size the window had as it closed, which only the plugin holds.
+fn first_open(label: &str) -> bool {
+    let mut opened = OPENED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if opened.iter().any(|open| open == label) {
+        return false;
+    }
+    opened.push(label.to_owned());
+    true
+}
+
+/// Fit `window`, of default `size` and smallest `min`, right after it
+/// opens and the window state plugin restored its size and place. A side
+/// under the minimum goes back to the default, see [`window_fit`], and a
+/// window too big for the screen it opens on shrinks to fit there, see
+/// [`fit_on_screen`]. Without that, a size saved on a larger screen, or
+/// at another display scale, opens the window with its edges out of
+/// reach, and on Windows and Linux you could not resize it.
+///
+/// On Linux the window reports the restored size only once it shows, so
+/// the first open in a run reads it from the plugin's file instead. A
+/// maximized or full screen window keeps its state on macOS and Windows,
+/// since a new size there takes the window out of it. GTK keeps the size
+/// for when you restore the window, so on Linux it fits that size too.
+pub(crate) fn fit_restored<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    size: (f64, f64),
+    min: (f64, f64),
+) {
+    let linux = cfg!(target_os = "linux");
+    let Ok(scale) = window.scale_factor() else {
+        return;
+    };
+    let app = window.app_handle();
+    let saved = if linux && first_open(window.label()) {
+        use tauri_plugin_window_state::AppHandleExt;
+        app.path()
+            .app_config_dir()
+            .ok()
+            .and_then(|dir| std::fs::read_to_string(dir.join(app.filename())).ok())
+            .and_then(|text| parse_saved_window(&text, window.label()))
+    } else {
+        None
+    };
+    let (place, held) = match saved {
+        Some(saved) => (saved.place(scale), saved.maximized || saved.fullscreen),
+        None => {
+            let (Ok(inner), Ok(outer)) = (window.inner_size(), window.outer_position()) else {
+                return;
+            };
+            let inner = inner.to_logical::<f64>(scale);
+            let outer = outer.to_logical::<f64>(scale);
+            let place = WindowPlace {
+                left: outer.x,
+                top: outer.y,
+                width: inner.width,
+                height: inner.height,
+            };
+            let held =
+                window.is_maximized().unwrap_or(true) || window.is_fullscreen().unwrap_or(true);
+            (place, held)
+        }
+    };
+    if held && !linux {
+        return;
+    }
+    let (width, height) =
+        window_fit(size, min, (place.width, place.height)).unwrap_or((place.width, place.height));
+    let sized = WindowPlace {
+        width,
+        height,
+        ..place
+    };
+    let screens: Vec<WindowPlace> = app
+        .available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(work_area)
+        .collect();
+    let screen = screen_under(sized, &screens).or_else(|| {
+        app.primary_monitor()
+            .ok()
+            .flatten()
+            .map(|monitor| work_area(&monitor))
+    });
+    let fit = screen
+        .and_then(|screen| fit_on_screen(sized, screen, min))
+        .unwrap_or(sized);
+    if (fit.width, fit.height) != (place.width, place.height) {
+        let _ = window.set_size(tauri::LogicalSize::new(fit.width, fit.height));
+    }
+    if !held && (fit.left, fit.top) != (place.left, place.top) {
+        let _ = window.set_position(tauri::LogicalPosition::new(fit.left, fit.top));
+    }
 }
 
 /// Whether opening a window again brings the open one forward now. A
@@ -541,12 +730,7 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
     let builder = builder.decorations(false);
     let window = builder.build().map_err(|e| e.to_string())?;
     show_backstop(window.clone());
-    if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
-        let current = size.to_logical::<f64>(scale);
-        if let Some((width, height)) = window_fit(spec, (current.width, current.height)) {
-            let _ = window.set_size(tauri::LogicalSize::new(width, height));
-        }
-    }
+    fit_restored(&window, spec.size, spec.min_size);
     Ok(())
 }
 
@@ -702,9 +886,10 @@ fn saved_continuous_spellcheck() -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_dressed, keeps_place, place_on_screen, record_snoop_place, shows_on_reopen, snoop_label,
-        snoop_session, snoop_window, snoop_window_closed, window_fit, Backdrop, WindowPlace,
-        HELP_WINDOW, PAINTS_WINDOW, SETTINGS_WINDOW,
+        first_open, fit_on_screen, is_dressed, keeps_place, parse_saved_window, place_on_screen,
+        record_snoop_place, screen_under, shows_on_reopen, snoop_label, snoop_session,
+        snoop_window, snoop_window_closed, window_fit, Backdrop, WindowPlace, HELP_WINDOW,
+        PAINTS_WINDOW, SETTINGS_WINDOW,
     };
     use crate::sessions::SessionId;
     use tauri::{window::Color, Theme};
@@ -838,10 +1023,161 @@ mod tests {
 
     #[test]
     fn settings_window_keeps_a_size_that_fits() {
-        let fit = |size| window_fit(&SETTINGS_WINDOW, size);
+        let fit = |size| window_fit(SETTINGS_WINDOW.size, SETTINGS_WINDOW.min_size, size);
         assert_eq!(fit((880.0, 600.0)), None);
         assert_eq!(fit((820.0, 560.0)), None);
         assert_eq!(fit((1200.0, 900.0)), None);
+    }
+
+    /// A laptop screen's work area, under a 25 px menu bar.
+    const LAPTOP: WindowPlace = WindowPlace {
+        left: 0.0,
+        top: 25.0,
+        width: 1440.0,
+        height: 875.0,
+    };
+
+    /// The main window's smallest size.
+    const MAIN_MIN: (f64, f64) = (640.0, 360.0);
+
+    #[test]
+    fn a_window_that_fits_its_screen_keeps_its_size_and_place() {
+        let place = WindowPlace {
+            left: 100.0,
+            top: 80.0,
+            width: 1280.0,
+            height: 800.0,
+        };
+        assert_eq!(fit_on_screen(place, LAPTOP, MAIN_MIN), None);
+        assert_eq!(fit_on_screen(LAPTOP, LAPTOP, MAIN_MIN), None);
+    }
+
+    #[test]
+    fn a_window_bigger_than_its_screen_shrinks_and_moves_onto_it() {
+        // Twice the size, as a size saved at another display scale
+        // comes back.
+        let huge = WindowPlace {
+            left: 0.0,
+            top: 25.0,
+            width: 2560.0,
+            height: 1600.0,
+        };
+        assert_eq!(fit_on_screen(huge, LAPTOP, MAIN_MIN), Some(LAPTOP));
+        // Too tall alone. The width stays, and the window moves up to
+        // keep its bottom edge on the screen.
+        let tall = WindowPlace {
+            left: 200.0,
+            top: 300.0,
+            width: 1000.0,
+            height: 1200.0,
+        };
+        assert_eq!(
+            fit_on_screen(tall, LAPTOP, MAIN_MIN),
+            Some(WindowPlace {
+                top: 25.0,
+                height: 875.0,
+                ..tall
+            })
+        );
+        // Too wide and right of the middle. It moves left to keep its
+        // right edge on the screen.
+        let wide = WindowPlace {
+            left: 600.0,
+            top: 100.0,
+            width: 1600.0,
+            height: 700.0,
+        };
+        assert_eq!(
+            fit_on_screen(wide, LAPTOP, MAIN_MIN),
+            Some(WindowPlace {
+                left: 0.0,
+                width: 1440.0,
+                ..wide
+            })
+        );
+    }
+
+    #[test]
+    fn a_screen_under_the_minimum_gets_the_minimum() {
+        let small = WindowPlace {
+            left: 0.0,
+            top: 0.0,
+            width: 600.0,
+            height: 340.0,
+        };
+        let place = WindowPlace {
+            width: 1280.0,
+            height: 800.0,
+            ..small
+        };
+        assert_eq!(
+            fit_on_screen(place, small, MAIN_MIN),
+            Some(WindowPlace {
+                width: 640.0,
+                height: 360.0,
+                ..small
+            })
+        );
+    }
+
+    #[test]
+    fn a_window_fits_the_screen_that_holds_most_of_it() {
+        let right = WindowPlace {
+            left: 1440.0,
+            top: 0.0,
+            width: 2560.0,
+            height: 1415.0,
+        };
+        let mostly_right = WindowPlace {
+            left: 1200.0,
+            top: 100.0,
+            width: 1280.0,
+            height: 800.0,
+        };
+        assert_eq!(screen_under(mostly_right, &[LAPTOP, right]), Some(right));
+        let mostly_left = WindowPlace {
+            left: 400.0,
+            ..mostly_right
+        };
+        assert_eq!(screen_under(mostly_left, &[LAPTOP, right]), Some(LAPTOP));
+        // On neither screen. The window then fits the primary one.
+        let gone = WindowPlace {
+            left: -3000.0,
+            ..mostly_right
+        };
+        assert_eq!(screen_under(gone, &[LAPTOP, right]), None);
+    }
+
+    #[test]
+    fn the_restored_size_reads_from_the_window_state_file() {
+        // The plugin's file as it writes it.
+        let text = r#"{
+          "main": {"width": 5120, "height": 3200, "x": 0, "y": 50, "prev_x": 0, "prev_y": 0,
+                   "maximized": false, "visible": true, "decorated": false, "fullscreen": false},
+          "help": {"width": 0, "height": 0, "x": 0, "y": 0, "prev_x": 0, "prev_y": 0,
+                   "maximized": false, "visible": true, "decorated": true, "fullscreen": false}
+        }"#;
+        let main = parse_saved_window(text, "main").unwrap();
+        assert_eq!(
+            main.place(2.0),
+            WindowPlace {
+                left: 0.0,
+                top: 25.0,
+                width: 2560.0,
+                height: 1600.0,
+            }
+        );
+        assert!(!main.maximized && !main.fullscreen);
+        // A window the plugin holds no size for, or never saw.
+        assert_eq!(parse_saved_window(text, "help"), None);
+        assert_eq!(parse_saved_window(text, "settings"), None);
+        assert_eq!(parse_saved_window("{", "main"), None);
+    }
+
+    #[test]
+    fn only_the_first_open_in_a_run_is_restored_from_the_file() {
+        assert!(first_open("test-first-open"));
+        assert!(!first_open("test-first-open"));
     }
 
     #[test]
@@ -857,7 +1193,7 @@ mod tests {
 
     #[test]
     fn settings_window_grows_a_side_left_under_the_minimum() {
-        let fit = |size| window_fit(&SETTINGS_WINDOW, size);
+        let fit = |size| window_fit(SETTINGS_WINDOW.size, SETTINGS_WINDOW.min_size, size);
         // The old Settings window opened at 780×640.
         assert_eq!(fit((780.0, 640.0)), Some((880.0, 640.0)));
         assert_eq!(fit((900.0, 420.0)), Some((900.0, 600.0)));
@@ -869,7 +1205,7 @@ mod tests {
         assert_eq!(HELP_WINDOW.label, "help");
         assert_eq!(HELP_WINDOW.url, "index.html?view=help");
         assert_eq!(HELP_WINDOW.size, (1040.0, 700.0));
-        let fit = |size| window_fit(&HELP_WINDOW, size);
+        let fit = |size| window_fit(HELP_WINDOW.size, HELP_WINDOW.min_size, size);
         assert_eq!(fit((1040.0, 700.0)), None);
         assert_eq!(fit((860.0, 560.0)), None);
         // A side under the minimum goes back to the default size.
@@ -885,8 +1221,14 @@ mod tests {
         assert_eq!(window.url, "index.html?view=snoop&session=3");
         assert_eq!(window.title, "Snoop, Staff");
         assert_eq!(window.size, (760.0, 480.0));
-        assert_eq!(window_fit(&window, (760.0, 480.0)), None);
-        assert_eq!(window_fit(&window, (300.0, 600.0)), Some((760.0, 600.0)));
+        assert_eq!(
+            window_fit(window.size, window.min_size, (760.0, 480.0)),
+            None
+        );
+        assert_eq!(
+            window_fit(window.size, window.min_size, (300.0, 600.0)),
+            Some((760.0, 600.0))
+        );
         assert_eq!(window.place, None);
         // A session with nothing to go by yet.
         assert_eq!(snoop_window(id, None, None).title, "Snoop");
